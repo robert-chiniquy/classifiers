@@ -1,0 +1,9 @@
+[package]
+name = "classifiers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+once_cell = "1.13.1"
+tracing = "0.1.36"
+tracing-subscriber = "0.3.15"
