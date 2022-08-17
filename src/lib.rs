@@ -51,19 +51,29 @@ where
     #[tracing::instrument(skip_all)]
     fn compile<E>(&self) -> Nfa<NfaNode<()>, NfaEdge<E>>
     where
-        E: std::fmt::Debug + Clone + Universal,
+        E: std::fmt::Debug + Clone + Universal + BranchProduct<E> + Eq,
         L: Into<Nfa<NfaNode<()>, NfaEdge<E>>>,
     {
         match self {
             Classifier::Universal => Nfa::universal(),
             Classifier::Literal(l) => l.clone().into(),
             Classifier::Not(c) => c.compile().negate(),
-            Classifier::Any(v) => v
-                .iter()
-                .fold(Nfa::universal(), |acc, cur| acc.union(&cur.compile())),
-            Classifier::And(v) => v.iter().fold(Nfa::universal(), |acc, cur| {
-                acc.intersection(&cur.compile())
-            }),
+            Classifier::Any(v) => {
+                let mut items = v.iter();
+                if let Some(acc) = items.next() {
+                    items.fold(acc.compile(), |acc, cur| acc.union(&cur.compile()))
+                } else {
+                    Nfa::universal().negate()
+                }
+            }
+            Classifier::And(v) => {
+                let mut items = v.iter();
+                if let Some(acc) = items.next() {
+                    items.fold(acc.compile(), |acc, cur| acc.intersection(&cur.compile()))
+                } else {
+                    Nfa::universal().negate()
+                }
+            }
         }
     }
 }

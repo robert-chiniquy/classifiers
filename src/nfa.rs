@@ -2,11 +2,11 @@ use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
 pub type NfaIndex = usize;
 
-#[derive(Debug, Clone)]
-pub struct Nfa<N, E> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Nfa<N, E: Eq> {
     count: usize,
     // Convenience for now, later switch to only a single initial node
-    initial: BTreeSet<NfaIndex>,
+    entry: BTreeSet<NfaIndex>,
     nodes: BTreeMap<NfaIndex, N>,
     edges: BTreeMap<NfaIndex, E>,
     /// source node index -> Vec<(target node index, edge index)>
@@ -22,8 +22,8 @@ impl From<&str> for Nfa<NfaNode<()>, NfaEdge<Element>> {
 
 impl<M, E> Nfa<NfaNode<M>, E>
 where
-    M: std::fmt::Debug + Clone,
-    E: std::fmt::Debug + Clone,
+    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq,
+    E: std::fmt::Debug + Clone + Eq,
 {
     #[tracing::instrument]
     pub fn negate(&self) -> Self {
@@ -39,16 +39,16 @@ where
 
 impl<E> Nfa<NfaNode<()>, NfaEdge<E>>
 where
-    E: std::fmt::Debug + Clone + Universal,
+    E: std::fmt::Debug + Clone + Universal + Eq,
 {
     #[tracing::instrument(skip_all)]
     pub fn universal() -> Self {
         let mut nfa: Self = Default::default();
         let prior = nfa.add_node(NfaNode {
-            state: Terminal::Not,
+            state: [Terminal::Not].into(),
         });
         let target = nfa.add_node(NfaNode {
-            state: Terminal::Accept(()),
+            state: [Terminal::Accept(())].into(),
         });
         let _ = nfa.add_edge(
             NfaEdge {
@@ -57,7 +57,7 @@ where
             prior,
             target,
         );
-        nfa.initial.insert(prior);
+        nfa.entry.insert(prior);
         nfa
     }
 }
@@ -67,17 +67,17 @@ impl Nfa<NfaNode<()>, NfaEdge<Element>> {
     pub fn from_str(s: &str) -> Self {
         let mut nfa: Self = Default::default();
         let mut prior = nfa.add_node(NfaNode {
-            state: Terminal::Not,
+            state: [Terminal::Not].into(),
         });
-        nfa.initial.insert(prior);
+        nfa.entry.insert(prior);
         for c in s.chars() {
             let target = nfa.add_node(NfaNode {
-                state: Terminal::Not,
+                state: [Terminal::Not].into(),
             });
             let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
             prior = target;
         }
-        nfa.node_mut(prior).state = Terminal::Accept(());
+        nfa.node_mut(prior).state = [Terminal::Accept(())].into();
         nfa
     }
 
@@ -85,7 +85,7 @@ impl Nfa<NfaNode<()>, NfaEdge<Element>> {
     /// input is incorrect. This should be changed to visit all possible nodes.
     #[tracing::instrument]
     pub fn accepts(&self, s: &str) -> bool {
-        for i in &self.initial {
+        for i in &self.entry {
             let i: NfaIndex = *i as NfaIndex;
             let mut stack: Vec<_> = Default::default();
             stack.push((i, s));
@@ -102,11 +102,14 @@ impl Nfa<NfaNode<()>, NfaEdge<Element>> {
                             }
                         }
                     }
-                    None => match self.node(i).state {
-                        Terminal::Not => (),
-                        Terminal::Accept(_) => return true,
-                        Terminal::Reject(_) => return false,
-                    },
+                    // Could just push these results onto a return stack instead
+                    None => {
+                        if self.node(i).state.contains(&Terminal::Reject(())) {
+                            return false;
+                        } else if self.node(i).state.contains(&Terminal::Accept(())) {
+                            return true;
+                        }
+                    }
                 }
             }
         }
@@ -114,10 +117,28 @@ impl Nfa<NfaNode<()>, NfaEdge<Element>> {
     }
 }
 
-impl<N, E> Nfa<N, E>
+pub enum EdgeTransition {
+    Advance,
+    Stay,
+    Drop,
+}
+
+pub struct NfaBranch<El> {
+    kind: El,
+    left: EdgeTransition,
+    right: EdgeTransition,
+}
+
+impl<E: Clone> NfaBranch<E> {
+    pub fn new(kind: E, left: EdgeTransition, right: EdgeTransition) -> Self {
+        Self { kind, left, right }
+    }
+}
+
+impl<N, E> Nfa<N, NfaEdge<E>>
 where
-    N: std::fmt::Debug + Clone,
-    E: std::fmt::Debug + Clone,
+    N: std::fmt::Debug + Clone + Default + NodeSum,
+    E: std::fmt::Debug + Clone + BranchProduct<E> + Eq,
 {
     /// An intersection NFA only has accepting states where both input NFAs have accepting states
     #[tracing::instrument(skip_all)]
@@ -130,43 +151,131 @@ where
     /// either of the two input NFAs.
     /// For now can just merge structs adjusting indices for uniqueness,
     // TODO: combine trees starting from self's initial nodes
+    // Whatever invariant is trying to be enforced, assume that the inputs have
+    // that invariant
+    // 2 methods:
+    // - one for a single graph with multiple enter states
+    // - one for two distinct graphs
     #[tracing::instrument(skip_all)]
     pub fn union(&self, other: &Self) -> Self {
-        let mut union: Nfa<N, E> = self.clone();
-        union.count += other.count;
-        union.count += 1;
-        union
-            .initial
-            .extend(other.initial.iter().map(|i| i + self.count));
-        union.nodes.extend(
-            other
-                .nodes
-                .iter()
-                .map(|(i, n)| ((i + self.count), n.clone())),
-        );
-        union.edges.extend(
-            other
-                .edges
-                .iter()
-                .map(|(i, e)| ((i + self.count), e.clone())),
-        );
-        union
-            .transitions
-            .extend(other.transitions.iter().map(|(i, v)| {
-                (
-                    (i + self.count),
-                    v.iter()
-                        .map(|(t, e)| ((t + self.count), (e + self.count)))
-                        .collect(),
-                )
-            }));
-        union
+        if self.entry.is_empty() {
+            return other.clone();
+        } else if other.entry.is_empty() {
+            return self.clone();
+        }
+        let mut union: Nfa<N, NfaEdge<E>> = Default::default();
+        let _entry = union.add_node(Default::default());
+        union.entry.insert(_entry);
+        // for every edge on every node in self.enter,
+        // for every edge on every node in other.enter,
+        // now a 3-tuple, self node id, other node id, union node id
+        let mut stack: Vec<(&NfaIndex, &NfaIndex, &NfaIndex)> = Default::default();
+        for self_id in &self.entry {
+            for other_id in &other.entry {
+                stack.push((self_id, other_id, &_entry));
+            }
+        }
+        while let Some((self_id, other_id, working_union_node_id)) = stack.pop() {
+            let self_node = self.node(*self_id);
+            let other_node = other.node(*other_id);
+            // handle empty edges from a node?
+
+            for (self_target_node_id, self_edge_id) in self.edges_from(*self_id).unwrap() {
+                let self_edge = self.edge(self_edge_id);
+                for (other_target_node_id, other_edge_id) in other.edges_from(*other_id).unwrap() {
+                    let other_edge = other.edge(other_edge_id);
+                    let product = E::product(&self_edge.criteria, &other_edge.criteria);
+                    for NfaBranch { kind, left, right } in product {
+                        let left_node_id = match left {
+                            EdgeTransition::Advance => Some(self_target_node_id),
+                            EdgeTransition::Stay => Some(self_id),
+                            EdgeTransition::Drop => None,
+                        };
+                        let right_node_id = match right {
+                            EdgeTransition::Advance => Some(other_target_node_id),
+                            EdgeTransition::Stay => Some(other_id),
+                            EdgeTransition::Drop => None,
+                        };
+                        let new_node = match (left_node_id, right_node_id) {
+                            (None, None) => unreachable!(),
+                            (None, Some(right_node_id)) => other.node(*right_node_id).clone(),
+                            (Some(left_node_id), None) => self.node(*left_node_id).clone(),
+                            (Some(left_node_id), Some(right_node_id)) => {
+                                self.node(*left_node_id).sum(other.node(*right_node_id))
+                            }
+                        };
+                        union.branch(working_union_node_id, kind, new_node);
+                    }
+                    // rationalization: there should only be 1 branch of a given kind from a given node
+                    //
+                    // rationalize the potential branches against each other
+                    // rationalize the branches against the actual branches from self and other
+                    // rationalize the branches against the actual branches present in union already
+                    // if one side is dropped, the other side just copies in from there
+                    // either create a branch and recur to construct the union from that point
+                    // or visit a next node along a branch and recur to union with that node
+
+                    todo!()
+                }
+            }
+        }
+        todo!()
+    }
+
+    /// - working_node_id: union node edges are being compared from
+    /// - new_node: the node to be either put at the end of a new edge, or
+    ///   combined with the target node of an existing edge from the working_node_id node
+    ///
+    /// returns the index of the new node if an edge is created, or the pre-existing node
+    /// which was rationalized to if not.
+    fn branch(&mut self, working_node_id: &NfaIndex, kind: E, new_node: N) -> NfaIndex {
+        // assume only one - this is an Nfa.
+        // Could do it to all of them to be even more Nfa-y but this is simpler.
+        match self.edge_by_kind(*working_node_id, &kind).pop() {
+            Some((target_node_id, edge_id)) => {
+                // smash the new node with the existing node
+
+                todo!()
+            }
+            None => {
+                // new node
+                let new_node = self.add_node(new_node);
+                let _edge = self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node);
+                new_node
+            }
+        }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct NfaNode<M: std::fmt::Debug + Clone> {
-    state: Terminal<M>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NfaNode<M>
+where
+    M: std::fmt::Debug + Clone,
+{
+    state: BTreeSet<Terminal<M>>,
+}
+
+impl<N> Default for NfaNode<N>
+where
+    N: Default + std::fmt::Debug + Clone,
+{
+    fn default() -> Self {
+        Self {
+            state: Default::default(),
+        }
+    }
+}
+
+pub trait NodeSum {
+    fn sum(&self, other: &Self) -> Self;
+}
+
+impl<M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq> NodeSum for NfaNode<M> {
+    fn sum(&self, other: &Self) -> Self {
+        NfaNode {
+            state: self.state.union(&other.state).cloned().collect(),
+        }
+    }
 }
 
 impl<N: std::fmt::Debug + Clone> std::fmt::Display for NfaNode<N> {
@@ -175,17 +284,17 @@ impl<N: std::fmt::Debug + Clone> std::fmt::Display for NfaNode<N> {
     }
 }
 
-impl<M: std::fmt::Debug + Clone> NfaNode<M> {
+impl<M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq> NfaNode<M> {
     #[tracing::instrument(ret)]
     fn negate(&self) -> Self {
         let mut node = self.clone();
-        node.state = node.state.negate();
+        node.state = node.state.iter().map(|s| s.negate()).collect();
         node
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct NfaEdge<E> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NfaEdge<E: Eq> {
     criteria: E,
 }
 
@@ -195,7 +304,7 @@ pub trait Accepts<L> {
 
 impl<L, E> Accepts<L> for NfaEdge<E>
 where
-    E: Accepts<L>,
+    E: Accepts<L> + Eq,
 {
     #[tracing::instrument(skip_all)]
     fn accepts(&self, l: L) -> bool {
@@ -203,13 +312,13 @@ where
     }
 }
 
-impl<E: std::fmt::Display> std::fmt::Display for NfaEdge<E> {
+impl<E: std::fmt::Display + Eq> std::fmt::Display for NfaEdge<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.criteria.to_string())
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Element {
     Token(char),
     Question,
@@ -236,6 +345,85 @@ impl Accepts<&char> for Element {
             Element::Token(c) => c == l,
             Element::Question => true,
             Element::Star => true,
+        }
+    }
+}
+
+pub trait BranchProduct<E> {
+    fn product(a: &Self, b: &Self) -> Vec<NfaBranch<E>>;
+}
+
+impl BranchProduct<Element> for Element {
+    fn product(a: &Self, b: &Self) -> Vec<NfaBranch<Element>> {
+        use EdgeTransition::*;
+        use Element::*;
+
+        match (a, b) {
+            (Star, Star) => {
+                // three edges, L, R, L+R
+                vec![
+                    NfaBranch::new(Star, Advance, Stay),
+                    NfaBranch::new(Star, Stay, Advance),
+                    NfaBranch::new(Star, Advance, Advance),
+                ]
+            }
+            (Question, Question) => vec![NfaBranch::new(Question, Advance, Advance)],
+            (Token(c1), Token(c2)) => {
+                if c1 == c2 {
+                    // advance both
+                    vec![NfaBranch::new(*a, Advance, Advance)]
+                } else {
+                    // disjoint
+                    vec![
+                        NfaBranch::new(*a, Advance, Drop),
+                        NfaBranch::new(*b, Drop, Advance),
+                    ]
+                }
+            }
+            (Star, Token(_)) => {
+                // consume lr, consume left, or drop right...
+                vec![
+                    NfaBranch::new(Star, Advance, Drop),
+                    NfaBranch::new(*b, Stay, Advance),
+                    NfaBranch::new(*b, Advance, Advance),
+                ]
+            }
+            (Star, Question) => {
+                vec![
+                    NfaBranch::new(Star, Advance, Drop),
+                    NfaBranch::new(Question, Stay, Advance),
+                    NfaBranch::new(Question, Advance, Advance),
+                ]
+            }
+            (Token(_), Star) => {
+                vec![
+                    NfaBranch::new(Star, Drop, Advance),
+                    NfaBranch::new(*a, Advance, Stay),
+                    NfaBranch::new(*a, Advance, Advance),
+                ]
+            }
+            (Question, Star) => {
+                // The union path is ?
+                // the star path is * minus ?
+                vec![
+                    NfaBranch::new(Star, Drop, Advance),
+                    NfaBranch::new(Question, Advance, Stay),
+                    NfaBranch::new(Question, Advance, Advance),
+                ]
+            }
+            (Token(_), Question) => {
+                vec![
+                    NfaBranch::new(Question, Drop, Advance),
+                    NfaBranch::new(*a, Advance, Advance),
+                ]
+            }
+
+            (Question, Token(_)) => {
+                vec![
+                    NfaBranch::new(Question, Advance, Drop),
+                    NfaBranch::new(*b, Advance, Advance),
+                ]
+            }
         }
     }
 }
@@ -267,6 +455,12 @@ pub enum Terminal<M> {
     Reject(M),
 }
 
+impl<M> Default for Terminal<M> {
+    fn default() -> Self {
+        Terminal::Not
+    }
+}
+
 impl<M> std::fmt::Debug for Terminal<M> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -288,11 +482,11 @@ impl<M: std::fmt::Debug + Clone> Terminal<M> {
     }
 }
 
-impl<N, E> Default for Nfa<N, E> {
+impl<N, E: Eq> Default for Nfa<N, E> {
     fn default() -> Self {
         Self {
             count: Default::default(),
-            initial: Default::default(),
+            entry: Default::default(),
             nodes: Default::default(),
             edges: Default::default(),
             transitions: Default::default(),
@@ -300,7 +494,7 @@ impl<N, E> Default for Nfa<N, E> {
     }
 }
 
-impl<N, E> Nfa<N, E> {
+impl<N, E: Eq + Clone> Nfa<N, E> {
     #[tracing::instrument(skip_all)]
     fn index(&mut self) -> NfaIndex {
         self.count += 1;
@@ -331,6 +525,7 @@ impl<N, E> Nfa<N, E> {
     }
 
     #[tracing::instrument(skip_all)]
+    /// E is the edge weight, usually NfaEdge
     fn add_edge(&mut self, edge: E, source: NfaIndex, target: NfaIndex) -> NfaIndex {
         let i = self.index();
         self.edges.insert(i, edge);
@@ -342,7 +537,9 @@ impl<N, E> Nfa<N, E> {
         i
     }
 
-    /// node index -> (target index, edge index)
+    /// Returns the edges from a given node in tuple format
+    ///
+    /// source node index -> (target node index, edge index)
     #[inline]
     #[tracing::instrument(skip_all)]
     fn edges_from(&self, i: NfaIndex) -> Option<&Vec<(NfaIndex, NfaIndex)>> {
@@ -350,10 +547,22 @@ impl<N, E> Nfa<N, E> {
     }
 }
 
+impl<N, E: Eq + Clone> Nfa<N, NfaEdge<E>> {
+    fn edge_by_kind<'a>(&self, i: NfaIndex, kind: &E) -> Vec<(NfaIndex, NfaIndex)> {
+        self.transitions
+            .get(&i)
+            .unwrap_or(&vec![])
+            .iter()
+            .filter(|(_target_node_id, edge_id)| self.edge(edge_id).criteria == *kind)
+            .cloned()
+            .collect()
+    }
+}
+
 impl<N, E> Nfa<N, E>
 where
     N: std::fmt::Display,
-    E: std::fmt::Display,
+    E: std::fmt::Display + Eq + Clone,
 {
     pub(crate) fn graphviz(&self) -> String {
         let mut ret = "".to_string();
@@ -369,7 +578,7 @@ where
             }
         }
         for (id, node) in &self.nodes {
-            let nodelabel = if self.initial.contains(id) {
+            let nodelabel = if self.entry.contains(id) {
                 "enter".to_string()
             } else {
                 node.to_string()
