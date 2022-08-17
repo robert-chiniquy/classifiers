@@ -11,17 +11,27 @@ fn test_accepts() {
 }
 
 #[test]
-fn test_one() {
+fn test_graphviz_one() {
+    use std::io::Write;
+
+    test_setup();
+
     let lhs = Classifier::Any(BTreeSet::from_iter([
-        Classifier::Literal("ABC".to_string()),
-        Classifier::Literal("XYZ".to_string()),
+        Classifier::Literal("ABC"),
+        Classifier::Literal("XYZ"),
     ]));
 
     // not ABC and not XYZ
     let rhs = Classifier::And(BTreeSet::from_iter([
-        Classifier::not(Classifier::Literal("ABC".to_string())),
-        Classifier::not(Classifier::Literal("XYZ".to_string())),
+        Classifier::not(Classifier::Literal("ABC")),
+        Classifier::not(Classifier::Literal("XYZ")),
     ]));
+
+    let c = lhs.compile();
+
+    let g = graphviz_wrap(c.graphviz(), "");
+    let mut output = std::fs::File::create("./one.dot").unwrap();
+    assert!(output.write_all(g.as_bytes()).is_ok());
 
     assert_eq!(Relation::Disjoint, lhs.relation(&rhs));
 }
@@ -44,7 +54,11 @@ fn test_negate() {
     assert!(!d.accepts("P"));
 }
 
-pub static TEST_SETUP: once_cell::sync::Lazy<bool> = once_cell::sync::Lazy::new(|| {
+pub fn test_setup() {
+    assert!(*TEST_SETUP);
+}
+
+static TEST_SETUP: once_cell::sync::Lazy<bool> = once_cell::sync::Lazy::new(|| {
     setup();
     true
 });
