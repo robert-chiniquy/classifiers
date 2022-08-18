@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn test_accepts() {
-    let d1 = Nfa::from_str("abc");
+    let d1: Nfa<NfaNode<()>, _> = Nfa::from_str("abc");
     assert!(d1.accepts("abc"));
     assert!(!d1.accepts("ab"));
     assert!(!d1.accepts("a"));
@@ -27,13 +27,13 @@ fn test_graphviz_one() {
         Classifier::not(Classifier::Literal("XYZ")),
     ]));
 
-    let c = lhs.compile();
+    let c: Nfa<NfaNode<()>, _> = lhs.compile();
 
     let g = graphviz_wrap(c.graphviz(), "");
     let mut output = std::fs::File::create("./one.dot").unwrap();
     assert!(output.write_all(g.as_bytes()).is_ok());
 
-    assert_eq!(Relation::Disjoint, lhs.relation(&rhs));
+    assert_eq!(Relation::Disjoint, lhs.relation::<(), Element>(&rhs));
 }
 
 #[test]

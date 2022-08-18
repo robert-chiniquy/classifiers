@@ -14,7 +14,10 @@ pub struct Nfa<N, E: Eq> {
     transitions: BTreeMap<NfaIndex, Vec<(NfaIndex, NfaIndex)>>,
 }
 
-impl From<&str> for Nfa<NfaNode<()>, NfaEdge<Element>> {
+impl<M> From<&str> for Nfa<NfaNode<M>, NfaEdge<Element>>
+where
+    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
+{
     fn from(s: &str) -> Self {
         Nfa::from_str(s)
     }
@@ -22,7 +25,7 @@ impl From<&str> for Nfa<NfaNode<()>, NfaEdge<Element>> {
 
 impl<M, E> Nfa<NfaNode<M>, E>
 where
-    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq,
+    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + Default,
     E: std::fmt::Debug + Clone + Eq,
 {
     #[tracing::instrument]
@@ -37,9 +40,10 @@ where
     }
 }
 
-impl<E> Nfa<NfaNode<()>, NfaEdge<E>>
+impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
     E: std::fmt::Debug + Clone + Universal + Eq,
+    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     #[tracing::instrument(skip_all)]
     pub fn universal() -> Self {
@@ -48,7 +52,7 @@ where
             state: [Terminal::Not].into(),
         });
         let target = nfa.add_node(NfaNode {
-            state: [Terminal::Accept(())].into(),
+            state: [Terminal::Accept(Default::default())].into(),
         });
         let _ = nfa.add_edge(
             NfaEdge {
@@ -62,7 +66,10 @@ where
     }
 }
 
-impl Nfa<NfaNode<()>, NfaEdge<Element>> {
+impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
+where
+    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
+{
     #[tracing::instrument(skip_all)]
     pub fn from_str(s: &str) -> Self {
         let mut nfa: Self = Default::default();
@@ -77,7 +84,7 @@ impl Nfa<NfaNode<()>, NfaEdge<Element>> {
             let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
             prior = target;
         }
-        nfa.node_mut(prior).state = [Terminal::Accept(())].into();
+        nfa.node_mut(prior).state = [Terminal::Accept(Default::default())].into();
         nfa
     }
 
@@ -104,9 +111,17 @@ impl Nfa<NfaNode<()>, NfaEdge<Element>> {
                     }
                     // Could just push these results onto a return stack instead
                     None => {
-                        if self.node(i).state.contains(&Terminal::Reject(())) {
+                        if self
+                            .node(i)
+                            .state
+                            .contains(&Terminal::Reject(Default::default()))
+                        {
                             return false;
-                        } else if self.node(i).state.contains(&Terminal::Accept(())) {
+                        } else if self
+                            .node(i)
+                            .state
+                            .contains(&Terminal::Accept(Default::default()))
+                        {
                             return true;
                         }
                     }
@@ -138,24 +153,31 @@ impl<E: Clone> NfaBranch<E> {
     }
 }
 
+impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
+where
+    E: std::fmt::Debug + Clone + BranchProduct<E> + Eq,
+    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq,
+{
+    /// An intersection NFA only has accepting states where both input NFAs have accepting states
+    /// Callers must ensure that the metadata carried by self and other must
+    /// be distinguishable by a visitor fn
+    #[tracing::instrument(skip_all)]
+    pub fn intersection(&self, other: &Self, visitor: &impl Fn(M) -> LRSemantics) -> Self {
+        // For DFAs this is the cross-product
+        let union = self.union(other);
+        todo!()
+    }
+}
+
 impl<N, E> Nfa<N, NfaEdge<E>>
 where
     N: std::fmt::Debug + Clone + Default + NodeSum,
     E: std::fmt::Debug + Clone + BranchProduct<E> + Eq,
 {
-    /// An intersection NFA only has accepting states where both input NFAs have accepting states
-    #[tracing::instrument(skip_all)]
-    pub fn intersection(&self, other: &Self) -> Self {
-        // this requires an NFA product
-        todo!()
-    }
-
     /// A union is a non-mimimal NFA with the same resulting states for every input as
     /// either of the two input NFAs.
     // Whatever invariant is enforced here, assume that the inputs have that invariant
-    // 2 methods?:
-    // - one for a single graph with multiple enter states
-    // - one for two distinct graphs
+    // Blindly copying states here allows M to vary widely
     #[tracing::instrument(skip_all)]
     pub fn union(&self, other: &Self) -> Self {
         if self.entry.is_empty() {
@@ -298,9 +320,18 @@ where
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NfaNode<M>
 where
-    M: std::fmt::Debug + Clone,
+    M: std::fmt::Debug + Clone + Default,
 {
     state: BTreeSet<Terminal<M>>,
+}
+
+impl<M> NfaNode<M>
+where
+    M: std::fmt::Debug + Clone + Default,
+{
+    pub(crate) fn state_filter(&self, visitor: impl Fn(&Terminal<M>) -> bool) -> bool {
+        self.state.iter().any(visitor)
+    }
 }
 
 impl<N> Default for NfaNode<N>
@@ -319,7 +350,10 @@ pub trait NodeSum {
     fn sum_mut(&mut self, other: &Self);
 }
 
-impl<M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq> NodeSum for NfaNode<M> {
+impl<M> NodeSum for NfaNode<M>
+where
+    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + Default,
+{
     fn sum(&self, other: &Self) -> Self {
         NfaNode {
             state: self.state.union(&other.state).cloned().collect(),
@@ -331,13 +365,19 @@ impl<M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq> NodeSum for
     }
 }
 
-impl<N: std::fmt::Debug + Clone> std::fmt::Display for NfaNode<N> {
+impl<M> std::fmt::Display for NfaNode<M>
+where
+    M: std::fmt::Debug + Clone + Default,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{:?}", &self.state))
     }
 }
 
-impl<M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq> NfaNode<M> {
+impl<M> NfaNode<M>
+where
+    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + Default,
+{
     #[tracing::instrument(ret)]
     fn negate(&self) -> Self {
         let mut node = self.clone();
@@ -346,7 +386,7 @@ impl<M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq> NfaNode<M> 
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NfaEdge<E: Eq> {
     criteria: E,
 }
@@ -365,13 +405,24 @@ where
     }
 }
 
+impl<E> Universal for NfaEdge<E>
+where
+    E: Universal + PartialOrd + Ord,
+{
+    fn universal() -> Self {
+        NfaEdge {
+            criteria: E::universal(),
+        }
+    }
+}
+
 impl<E: std::fmt::Display + Eq> std::fmt::Display for NfaEdge<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.criteria.to_string())
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Element {
     Token(char),
     Question,
