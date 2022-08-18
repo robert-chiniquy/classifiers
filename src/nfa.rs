@@ -117,12 +117,14 @@ impl Nfa<NfaNode<()>, NfaEdge<Element>> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum EdgeTransition {
     Advance,
     Stay,
     Drop,
 }
 
+#[derive(Debug)]
 pub struct NfaBranch<El> {
     kind: El,
     left: EdgeTransition,
@@ -131,6 +133,7 @@ pub struct NfaBranch<El> {
 
 impl<E: Clone> NfaBranch<E> {
     pub fn new(kind: E, left: EdgeTransition, right: EdgeTransition) -> Self {
+        debug_assert!(!(left == EdgeTransition::Drop && right == EdgeTransition::Drop));
         Self { kind, left, right }
     }
 }
@@ -149,11 +152,8 @@ where
 
     /// A union is a non-mimimal NFA with the same resulting states for every input as
     /// either of the two input NFAs.
-    /// For now can just merge structs adjusting indices for uniqueness,
-    // TODO: combine trees starting from self's initial nodes
-    // Whatever invariant is trying to be enforced, assume that the inputs have
-    // that invariant
-    // 2 methods:
+    // Whatever invariant is enforced here, assume that the inputs have that invariant
+    // 2 methods?:
     // - one for a single graph with multiple enter states
     // - one for two distinct graphs
     #[tracing::instrument(skip_all)]
@@ -168,58 +168,75 @@ where
         union.entry.insert(_entry);
         // for every edge on every node in self.enter,
         // for every edge on every node in other.enter,
-        // now a 3-tuple, self node id, other node id, union node id
-        let mut stack: Vec<(&NfaIndex, &NfaIndex, &NfaIndex)> = Default::default();
+        // now a 3-tuple, (self node id, other node id, union node id)
+        let mut stack: Vec<(&NfaIndex, &NfaIndex, NfaIndex)> = Default::default();
         for self_id in &self.entry {
             for other_id in &other.entry {
-                stack.push((self_id, other_id, &_entry));
+                stack.push((self_id, other_id, _entry));
             }
         }
         while let Some((self_id, other_id, working_union_node_id)) = stack.pop() {
-            let self_node = self.node(*self_id);
-            let other_node = other.node(*other_id);
-            // handle empty edges from a node?
+            let self_edges = self.edges_from(*self_id);
+            let other_edges = other.edges_from(*other_id);
+            if self_edges == None && other_edges == None {
+                return union;
+            } else if self_edges == None {
+                union.copy_subtree(&working_union_node_id, other, other_id);
+            } else if other_edges == None {
+                union.copy_subtree(&working_union_node_id, self, self_id);
+            } else {
+                for (self_target_node_id, self_edge_id) in self.edges_from(*self_id).unwrap() {
+                    let self_edge = self.edge(self_edge_id);
+                    for (other_target_node_id, other_edge_id) in
+                        other.edges_from(*other_id).unwrap()
+                    {
+                        let other_edge = other.edge(other_edge_id);
+                        let product = E::product(&self_edge.criteria, &other_edge.criteria);
+                        for NfaBranch { kind, left, right } in product {
+                            let left_node_id = match left {
+                                EdgeTransition::Advance => Some(self_target_node_id),
+                                EdgeTransition::Stay => Some(self_id),
+                                EdgeTransition::Drop => None,
+                            };
+                            let right_node_id = match right {
+                                EdgeTransition::Advance => Some(other_target_node_id),
+                                EdgeTransition::Stay => Some(other_id),
+                                EdgeTransition::Drop => None,
+                            };
+                            let new_node = match (left_node_id, right_node_id) {
+                                (None, None) => unreachable!(),
+                                (None, Some(right_node_id)) => other.node(*right_node_id).clone(),
+                                (Some(left_node_id), None) => self.node(*left_node_id).clone(),
+                                (Some(left_node_id), Some(right_node_id)) => {
+                                    self.node(*left_node_id).sum(other.node(*right_node_id))
+                                }
+                            };
+                            let next_working_node_id =
+                                union.branch(&working_union_node_id, kind, new_node);
 
-            for (self_target_node_id, self_edge_id) in self.edges_from(*self_id).unwrap() {
-                let self_edge = self.edge(self_edge_id);
-                for (other_target_node_id, other_edge_id) in other.edges_from(*other_id).unwrap() {
-                    let other_edge = other.edge(other_edge_id);
-                    let product = E::product(&self_edge.criteria, &other_edge.criteria);
-                    for NfaBranch { kind, left, right } in product {
-                        let left_node_id = match left {
-                            EdgeTransition::Advance => Some(self_target_node_id),
-                            EdgeTransition::Stay => Some(self_id),
-                            EdgeTransition::Drop => None,
-                        };
-                        let right_node_id = match right {
-                            EdgeTransition::Advance => Some(other_target_node_id),
-                            EdgeTransition::Stay => Some(other_id),
-                            EdgeTransition::Drop => None,
-                        };
-                        let new_node = match (left_node_id, right_node_id) {
-                            (None, None) => unreachable!(),
-                            (None, Some(right_node_id)) => other.node(*right_node_id).clone(),
-                            (Some(left_node_id), None) => self.node(*left_node_id).clone(),
-                            (Some(left_node_id), Some(right_node_id)) => {
-                                self.node(*left_node_id).sum(other.node(*right_node_id))
+                            // if one side is dropped, the other side just copies in from there
+                            // either create a branch and recur to construct the union from that point
+                            // or visit a next node along a branch and recur to union with that node
+                            match (left_node_id, right_node_id) {
+                                (None, None) => unreachable!(),
+                                (None, Some(right_node_id)) => {
+                                    // the right hand side is other
+                                    union.copy_subtree(&next_working_node_id, other, right_node_id)
+                                }
+                                (Some(left_node_id), None) => {
+                                    // the left hand side is self
+                                    union.copy_subtree(&next_working_node_id, self, left_node_id)
+                                }
+                                (Some(left_node_id), Some(right_node_id)) => {
+                                    stack.push((left_node_id, right_node_id, next_working_node_id))
+                                }
                             }
-                        };
-                        union.branch(working_union_node_id, kind, new_node);
+                        }
                     }
-                    // rationalization: there should only be 1 branch of a given kind from a given node
-                    //
-                    // rationalize the potential branches against each other
-                    // rationalize the branches against the actual branches from self and other
-                    // rationalize the branches against the actual branches present in union already
-                    // if one side is dropped, the other side just copies in from there
-                    // either create a branch and recur to construct the union from that point
-                    // or visit a next node along a branch and recur to union with that node
-
-                    todo!()
                 }
             }
         }
-        todo!()
+        union
     }
 
     /// - working_node_id: union node edges are being compared from
@@ -229,13 +246,19 @@ where
     /// returns the index of the new node if an edge is created, or the pre-existing node
     /// which was rationalized to if not.
     fn branch(&mut self, working_node_id: &NfaIndex, kind: E, new_node: N) -> NfaIndex {
+        // rationalization: there should only be 1 branch of a given kind from a given node
+        //
+        // rationalize the potential branches against each other
+        // rationalize the branches against the actual branches from self and other
+        // rationalize the branches against the actual branches present in union already
+
         // assume only one - this is an Nfa.
         // Could do it to all of them to be even more Nfa-y but this is simpler.
         match self.edge_by_kind(*working_node_id, &kind).pop() {
-            Some((target_node_id, edge_id)) => {
+            Some((target_node_id, _edge_id)) => {
                 // smash the new node with the existing node
-
-                todo!()
+                self.node_mut(target_node_id).sum_mut(&new_node);
+                target_node_id
             }
             None => {
                 // new node
@@ -243,6 +266,31 @@ where
                 let _edge = self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node);
                 new_node
             }
+        }
+    }
+
+    // there is no convergence yet but this is convergence-safe
+    #[tracing::instrument(skip(source))]
+    fn copy_subtree(&mut self, copy_target_node: &NfaIndex, source: &Self, source_node: &NfaIndex) {
+        // Step 1 may be needed later for various weird edge cases,
+        // probably need to make a change elsewhere to have it here
+        // 1. merge the node states into target
+        // self.node_mut(*copy_target_node)
+        //     .sum_mut(source.node(*source_node_id));
+        // 2. for each edge from source,
+        let edges: Vec<(_, _)> = source.edges_from(*source_node).unwrap_or(&vec![]).to_vec();
+        for (source_edge_endpoint, edge) in edges {
+            // - create a new copy-target edge-target node matching the target of the source edge
+            let new_edge_endpoint = self.add_node(source.node(source_edge_endpoint).clone());
+            // - get the weight and create a matching edge from target connecting to the new edge target node
+            let _matching_edge = self.add_edge(
+                source.edge(&edge).clone(),
+                *copy_target_node,
+                new_edge_endpoint,
+            );
+            // 3. recur on the new copy-target edge-target node copying from the
+            //    copy-source edge-target node
+            self.copy_subtree(&new_edge_endpoint, source, &source_edge_endpoint);
         }
     }
 }
@@ -268,6 +316,7 @@ where
 
 pub trait NodeSum {
     fn sum(&self, other: &Self) -> Self;
+    fn sum_mut(&mut self, other: &Self);
 }
 
 impl<M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq> NodeSum for NfaNode<M> {
@@ -275,6 +324,10 @@ impl<M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq> NodeSum for
         NfaNode {
             state: self.state.union(&other.state).cloned().collect(),
         }
+    }
+
+    fn sum_mut(&mut self, other: &Self) {
+        self.state = self.state.union(&other.state).cloned().collect();
     }
 }
 
@@ -354,6 +407,7 @@ pub trait BranchProduct<E> {
 }
 
 impl BranchProduct<Element> for Element {
+    #[tracing::instrument(ret)]
     fn product(a: &Self, b: &Self) -> Vec<NfaBranch<Element>> {
         use EdgeTransition::*;
         use Element::*;

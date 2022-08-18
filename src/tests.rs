@@ -17,8 +17,8 @@ fn test_graphviz_one() {
     test_setup();
 
     let lhs = Classifier::Any(BTreeSet::from_iter([
-        Classifier::Literal("ABC"),
-        Classifier::Literal("XYZ"),
+        Classifier::Literal("OOABC"),
+        Classifier::Literal("OOXYZ"),
     ]));
 
     // not ABC and not XYZ
