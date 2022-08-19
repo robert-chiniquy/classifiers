@@ -6,35 +6,63 @@ use super::*;
 
 pub trait NfaBuilder<L, M, E>
 where
-    E: Eq,
+    E: Eq + std::hash::Hash + std::default::Default,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     fn build_nfa(s: L, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>;
 }
 
-impl<L, M, C, E> NfaBuilder<L, M, E> for Nfa<NfaNode<M>, NfaEdge<Element>>
+/// Marker trait for any type to use as a language
+/// prevents conflicting implementations
+pub trait Language {}
+
+pub trait Accepts<L> {
+    fn accepts(&self, l: L) -> bool;
+}
+pub trait Universal {
+    fn universal() -> Self;
+}
+
+pub trait NodeSum {
+    fn sum(&self, other: &Self) -> Self;
+    fn sum_mut(&mut self, other: &Self);
+}
+
+pub trait BranchProduct<E> {
+    fn product(a: &Self, b: &Self) -> Vec<NfaBranch<E>>;
+}
+
+/// This is the default impl of build_nfa for any type where this works
+impl<L, M, C, E> NfaBuilder<L, M, E> for Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: Eq + Clone,
-    C: Into<E>,
-    L: Iterator<Item = C>,
+    E: Eq + Clone + std::hash::Hash + std::default::Default + std::fmt::Debug,
+    C: Into<E> + std::fmt::Debug,
+    L: IntoIterator<Item = C>, // + Language,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     fn build_nfa(l: L, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>> {
+        let l: Vec<C> = l.into_iter().collect();
         Nfa::from_language(l, m)
     }
 }
 
-// impl<M> NfaBuilder<&str, M, Element> for Nfa<NfaNode<M>, NfaEdge<Element>>
+// impl<M, E> NfaBuilder<&str, M, E> for Nfa<NfaNode<M>, NfaEdge<E>>
 // where
+//     E: Eq + Clone + std::hash::Hash + std::default::Default + From<char> + std::fmt::Debug,
 //     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 // {
-//     fn build_nfa(s: &str, m: M) -> Nfa<NfaNode<M>, NfaEdge<Element>> {
-//         Nfa::from_str(s, m)
+//     // E could be an associated type but that would require an nfa builder for every E type
+//     fn build_nfa(s: &str, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>> {
+//         let s: Vec<char> = s.chars().collect();
+//         Nfa::from_language(s, m)
 //     }
 // }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Nfa<N, E: Eq> {
+pub struct Nfa<N, E>
+where
+    E: Eq + std::hash::Hash + Default,
+{
     pub(crate) count: usize,
     // Convenience for now, later switch to only a single initial node
     pub(crate) entry: BTreeSet<NfaIndex>,
@@ -47,13 +75,14 @@ pub struct Nfa<N, E: Eq> {
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: Eq + Clone,
+    E: Eq + Clone + std::hash::Hash + Default + std::fmt::Debug,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
-    pub fn from_language<C, L>(l: L, m: M) -> Self
+    // This should not require L to be a language, merely an iterator over items which can be turned into E
+    pub fn from_language<C>(l: Vec<C>, m: M) -> Self
     where
-        C: Into<E>,
-        L: Iterator<Item = C>,
+        C: Into<E> + std::fmt::Debug,
+        // L: IntoIterator<Item = C>, // + std::iter::FromIterator<C>,
     {
         let mut nfa: Self = Default::default();
         let mut prior = nfa.add_node(NfaNode::new([Terminal::Not].into()));
@@ -66,43 +95,32 @@ where
         nfa.node_mut(prior).state = [Terminal::Accept(m)].into();
         nfa
     }
-}
-
-impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
-where
-    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
-{
-    #[tracing::instrument(skip_all)]
-    pub fn from_str(s: &str, m: M) -> Self {
-        let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new([Terminal::Not].into()));
-        nfa.entry.insert(prior);
-        for c in s.chars() {
-            let target = nfa.add_node(NfaNode::new([Terminal::Not].into()));
-            let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
-            prior = target;
-        }
-        nfa.node_mut(prior).state = [Terminal::Accept(m)].into();
-        nfa
-    }
 
     /// TODO: Returning early rather than collecting all terminal states within the closure of the
     /// input is incorrect. This should be changed to visit all possible nodes.
     #[tracing::instrument]
-    pub fn accepts(&self, s: &str) -> bool {
+    pub fn accepts<C>(&self, s: Vec<C>) -> bool
+    where
+        E: nfa::Accepts<C>,
+        C: Into<E> + Clone + std::fmt::Debug,
+        // L: IntoIterator<Item = C> + std::fmt::Debug /*+ std::iter::FromIterator<C>*/ + Clone,
+        // <L as std::iter::IntoIterator>::IntoIter: Clone,
+    {
         for i in &self.entry {
             let i: NfaIndex = *i as NfaIndex;
             let mut stack: Vec<_> = Default::default();
-            stack.push((i, s));
+            stack.push((i, s.clone()));
             while let Some((i, s)) = stack.pop() {
-                match s.chars().next() {
+                let mut l = s.clone().into_iter();
+                match &l.next() {
                     Some(c) => {
                         if let Some(v) = self.edges_from(i) {
                             for (target, edge) in v {
                                 let edge = self.edge(edge);
-                                if edge.accepts(&c) {
+                                if edge.accepts(c.clone().to_owned()) {
                                     // push target onto stack
-                                    stack.push((*target, &s[1..]));
+                                    // TODO: remove constraint, this line is what requires std::iter::FromIterator<C>
+                                    stack.push((*target, l.clone().collect()));
                                 }
                             }
                         }
@@ -152,15 +170,15 @@ impl<E: Clone> NfaBranch<E> {
 }
 
 #[derive(Default)]
-struct Paths {
-    l: HashSet<Vec<Element>>,
-    lr: HashSet<Vec<Element>>,
-    r: HashSet<Vec<Element>>,
+struct Paths<E: std::hash::Hash> {
+    l: HashSet<Vec<E>>,
+    lr: HashSet<Vec<E>>,
+    r: HashSet<Vec<E>>,
 }
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: std::fmt::Debug + Clone + BranchProduct<E> + Eq,
+    E: std::fmt::Debug + Clone + BranchProduct<E> + Eq + std::hash::Hash + Default,
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
 {
     /// An intersection NFA only has accepting states where both input NFAs have accepting states
@@ -178,7 +196,7 @@ where
         todo!()
     }
 
-    fn accepting_paths(&self) -> Paths {
+    fn accepting_paths(&self) -> Paths<E> {
         // (current node id, current path: Vec<_>)
         let mut stack: Vec<(NfaIndex, Vec<E>)> = self
             .entry
@@ -186,23 +204,34 @@ where
             .cloned()
             .map(|e| (e, Default::default()))
             .collect();
-        let mut paths: Paths = Default::default();
+        let mut paths: Paths<E> = Default::default();
 
         while let Some((current_node, current_path)) = stack.pop() {
             // for each edge from current node, append the edge criteria to a copy of the path
             // and push the edge target on the stack with the new path
+
+            // if the current node is an accepting state, push the path onto Paths based on the chirality
+            match self.node(current_node).chirality {
+                LRSemantics::L => {
+                    paths.l.insert(current_path.clone());
+                }
+                LRSemantics::R => {
+                    paths.r.insert(current_path.clone());
+                }
+                LRSemantics::LR => {
+                    paths.lr.insert(current_path.clone());
+                }
+                LRSemantics::None => {}
+            }
+
             if let Some(edges) = self.edges_from(current_node) {
                 for (next_node, edge_id) in edges {
                     let mut next_path = current_path.to_vec();
                     next_path.push(self.edge(&edge_id).criteria.clone());
-                    stack.push((next_node, next_path));
+                    stack.push((next_node.clone(), next_path));
                 }
             }
-            // if the current node is an accepting state, push the path onto Paths based on the chirality
         }
-
-        todo!();
-
         paths
     }
 
@@ -216,7 +245,7 @@ where
 impl<N, E> Nfa<N, NfaEdge<E>>
 where
     N: std::fmt::Debug + Clone + Default + NodeSum,
-    E: std::fmt::Debug + Clone + BranchProduct<E> + Eq,
+    E: std::fmt::Debug + Clone + BranchProduct<E> + Eq + std::hash::Hash + std::default::Default,
 {
     /// A union is a non-mimimal NFA with the same resulting states for every input as
     /// either of the two input NFAs.
@@ -337,7 +366,12 @@ where
 
     // there is no convergence yet but this is convergence-safe
     #[tracing::instrument(skip(source))]
-    fn copy_subtree(&mut self, copy_target_node: &NfaIndex, source: &Self, source_node: &NfaIndex) {
+    pub(crate) fn copy_subtree(
+        &mut self,
+        copy_target_node: &NfaIndex,
+        source: &Self,
+        source_node: &NfaIndex,
+    ) {
         // Step 1 may be needed later for various weird edge cases,
         // probably need to make a change elsewhere to have it here
         // 1. merge the node states into target
@@ -398,11 +432,6 @@ where
     }
 }
 
-pub trait NodeSum {
-    fn sum(&self, other: &Self) -> Self;
-    fn sum_mut(&mut self, other: &Self);
-}
-
 impl<M> NodeSum for NfaNode<M>
 where
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + Default,
@@ -440,13 +469,20 @@ where
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NfaEdge<E: Eq> {
-    criteria: E,
+    pub criteria: E,
 }
 
-pub trait Accepts<L> {
-    fn accepts(&self, l: L) -> bool;
+impl<E> Default for NfaEdge<E>
+where
+    E: Default + std::cmp::Eq,
+{
+    fn default() -> Self {
+        Self {
+            criteria: Default::default(),
+        }
+    }
 }
 
 impl<L, E> Accepts<L> for NfaEdge<E>
@@ -473,137 +509,6 @@ where
 impl<E: std::fmt::Display + Eq> std::fmt::Display for NfaEdge<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.criteria.to_string())
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Element {
-    Token(char),
-    Question,
-    Star,
-}
-
-impl std::fmt::Display for Element {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "{}",
-            match self {
-                Element::Token(c) => format!("'{c}'"),
-                Element::Question => "?".to_string(),
-                Element::Star => "*".to_string(),
-            }
-        ))
-    }
-}
-
-impl Accepts<&char> for Element {
-    #[tracing::instrument(skip_all)]
-    fn accepts(&self, l: &char) -> bool {
-        match self {
-            Element::Token(c) => c == l,
-            Element::Question => true,
-            Element::Star => true,
-        }
-    }
-}
-
-pub trait BranchProduct<E> {
-    fn product(a: &Self, b: &Self) -> Vec<NfaBranch<E>>;
-}
-
-impl BranchProduct<Element> for Element {
-    #[tracing::instrument(ret)]
-    fn product(a: &Self, b: &Self) -> Vec<NfaBranch<Element>> {
-        use EdgeTransition::*;
-        use Element::*;
-
-        match (a, b) {
-            (Star, Star) => {
-                // three edges, L, R, L+R
-                vec![
-                    NfaBranch::new(Star, Advance, Stay),
-                    NfaBranch::new(Star, Stay, Advance),
-                    NfaBranch::new(Star, Advance, Advance),
-                ]
-            }
-            (Question, Question) => vec![NfaBranch::new(Question, Advance, Advance)],
-            (Token(c1), Token(c2)) => {
-                if c1 == c2 {
-                    // advance both
-                    vec![NfaBranch::new(*a, Advance, Advance)]
-                } else {
-                    // disjoint
-                    vec![
-                        NfaBranch::new(*a, Advance, Drop),
-                        NfaBranch::new(*b, Drop, Advance),
-                    ]
-                }
-            }
-            (Star, Token(_)) => {
-                // consume lr, consume left, or drop right...
-                vec![
-                    NfaBranch::new(Star, Advance, Drop),
-                    NfaBranch::new(*b, Stay, Advance),
-                    NfaBranch::new(*b, Advance, Advance),
-                ]
-            }
-            (Star, Question) => {
-                vec![
-                    NfaBranch::new(Star, Advance, Drop),
-                    NfaBranch::new(Question, Stay, Advance),
-                    NfaBranch::new(Question, Advance, Advance),
-                ]
-            }
-            (Token(_), Star) => {
-                vec![
-                    NfaBranch::new(Star, Drop, Advance),
-                    NfaBranch::new(*a, Advance, Stay),
-                    NfaBranch::new(*a, Advance, Advance),
-                ]
-            }
-            (Question, Star) => {
-                // The union path is ?
-                // the star path is * minus ?
-                vec![
-                    NfaBranch::new(Star, Drop, Advance),
-                    NfaBranch::new(Question, Advance, Stay),
-                    NfaBranch::new(Question, Advance, Advance),
-                ]
-            }
-            (Token(_), Question) => {
-                vec![
-                    NfaBranch::new(Question, Drop, Advance),
-                    NfaBranch::new(*a, Advance, Advance),
-                ]
-            }
-
-            (Question, Token(_)) => {
-                vec![
-                    NfaBranch::new(Question, Advance, Drop),
-                    NfaBranch::new(*b, Advance, Advance),
-                ]
-            }
-        }
-    }
-}
-
-pub trait Universal {
-    fn universal() -> Self;
-}
-
-impl Universal for Element {
-    fn universal() -> Self {
-        Element::Star
-    }
-}
-
-impl From<char> for Element {
-    fn from(c: char) -> Self {
-        match c {
-            '*' => Element::Star,
-            '?' => Element::Question,
-            c => Element::Token(c),
-        }
     }
 }
 
@@ -641,7 +546,10 @@ impl<M: std::fmt::Debug + Clone> Terminal<M> {
     }
 }
 
-impl<N, E: Eq> Default for Nfa<N, E> {
+impl<N, E> Default for Nfa<N, E>
+where
+    E: Eq + std::hash::Hash + std::default::Default,
+{
     fn default() -> Self {
         Self {
             count: Default::default(),
@@ -656,7 +564,7 @@ impl<N, E: Eq> Default for Nfa<N, E> {
 impl<M, E> Nfa<NfaNode<M>, E>
 where
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
-    E: std::fmt::Debug + Clone + Eq,
+    E: std::fmt::Debug + Clone + Eq + std::hash::Hash + std::default::Default,
 {
     #[tracing::instrument]
     pub fn negate(&self) -> Self {
@@ -672,7 +580,7 @@ where
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: std::fmt::Debug + Clone + Universal + Eq,
+    E: std::fmt::Debug + Clone + Universal + Eq + std::hash::Hash + std::default::Default,
     M: std::fmt::Debug + Clone + PartialOrd + Ord + std::default::Default,
 {
     #[tracing::instrument(skip_all)]
@@ -692,39 +600,42 @@ where
     }
 }
 
-impl<N, E: Eq + Clone> Nfa<N, E> {
+impl<N, E> Nfa<N, E>
+where
+    E: Eq + Clone + std::hash::Hash + std::default::Default,
+{
     #[tracing::instrument(skip_all)]
-    fn index(&mut self) -> NfaIndex {
+    pub(crate) fn index(&mut self) -> NfaIndex {
         self.count += 1;
         self.count as NfaIndex
     }
 
     #[tracing::instrument(skip_all)]
-    fn add_node(&mut self, n: N) -> NfaIndex {
+    pub fn add_node(&mut self, n: N) -> NfaIndex {
         let i = self.index();
         self.nodes.insert(i, n);
         i
     }
 
     #[tracing::instrument(skip_all)]
-    fn node(&self, i: NfaIndex) -> &N {
+    pub fn node(&self, i: NfaIndex) -> &N {
         self.nodes.get(&i).unwrap()
     }
 
     /// Panic if unknown
     #[tracing::instrument(skip_all)]
-    fn node_mut(&mut self, i: NfaIndex) -> &mut N {
+    pub fn node_mut(&mut self, i: NfaIndex) -> &mut N {
         self.nodes.get_mut(&i).unwrap()
     }
 
     #[tracing::instrument(skip_all)]
-    fn edge(&self, i: &NfaIndex) -> &E {
+    pub fn edge(&self, i: &NfaIndex) -> &E {
         self.edges.get(i).unwrap()
     }
 
     #[tracing::instrument(skip_all)]
     /// E is the edge weight, usually NfaEdge
-    fn add_edge(&mut self, edge: E, source: NfaIndex, target: NfaIndex) -> NfaIndex {
+    pub fn add_edge(&mut self, edge: E, source: NfaIndex, target: NfaIndex) -> NfaIndex {
         let i = self.index();
         self.edges.insert(i, edge);
         let entry = match self.transitions.entry(source) {
@@ -740,12 +651,15 @@ impl<N, E: Eq + Clone> Nfa<N, E> {
     /// source node index -> (target node index, edge index)
     #[inline]
     #[tracing::instrument(skip_all)]
-    fn edges_from(&self, i: NfaIndex) -> Option<&Vec<(NfaIndex, NfaIndex)>> {
+    pub fn edges_from(&self, i: NfaIndex) -> Option<&Vec<(NfaIndex, NfaIndex)>> {
         self.transitions.get(&i)
     }
 }
 
-impl<N, E: Eq + Clone> Nfa<N, NfaEdge<E>> {
+impl<N, E> Nfa<N, NfaEdge<E>>
+where
+    E: Eq + Clone + std::hash::Hash + std::default::Default,
+{
     fn edge_by_kind<'a>(&self, i: NfaIndex, kind: &E) -> Vec<(NfaIndex, NfaIndex)> {
         self.transitions
             .get(&i)
@@ -755,59 +669,4 @@ impl<N, E: Eq + Clone> Nfa<N, NfaEdge<E>> {
             .cloned()
             .collect()
     }
-}
-
-impl<N, E> Nfa<N, E>
-where
-    N: std::fmt::Display,
-    E: std::fmt::Display + Eq + Clone,
-{
-    pub(crate) fn graphviz(&self) -> String {
-        let mut ret = "".to_string();
-        for (source, edges) in &self.transitions {
-            for (target, edge) in edges {
-                ret = format!(
-                    r#"{ret}
-  {} -> {} [label="{}" fontsize="20pt"];"#,
-                    nodename(source),
-                    nodename(target),
-                    self.edge(edge)
-                );
-            }
-        }
-        for (id, node) in &self.nodes {
-            let nodelabel = if self.entry.contains(id) {
-                "enter".to_string()
-            } else {
-                node.to_string()
-            };
-            ret = format!(
-                r#"{ret}
-  {} [label="{}"]"#,
-                nodename(id),
-                nodelabel
-            );
-        }
-        ret
-    }
-}
-
-fn nodename(i: &NfaIndex) -> String {
-    format!("node_{i}")
-}
-
-pub(crate) fn graphviz_wrap(s: String, label: &str) -> String {
-    format!(
-        r#"
-strict digraph G {{
-    rankdir = TB;
-    remincross = true;
-    splines = true;
-    fontsize="40";
-    label = "{label}";
-    {}
-}}
-"#,
-        s
-    )
 }

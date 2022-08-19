@@ -3,11 +3,12 @@ use super::*;
 
 #[test]
 fn test_accepts() {
-    let d1: Nfa<NfaNode<()>, _> = Nfa::from_str("abc", ());
-    assert!(d1.accepts("abc"));
-    assert!(!d1.accepts("ab"));
-    assert!(!d1.accepts("a"));
-    assert!(!d1.accepts("abcc"));
+    let d1: Nfa<NfaNode<()>, NfaEdge<Element>> =
+        Nfa::from_language("abc".to_string().chars().collect(), ());
+    assert!(d1.accepts_string("abc"));
+    assert!(!d1.accepts("ab".to_string().chars().collect()));
+    assert!(!d1.accepts("a".to_string().chars().collect()));
+    assert!(!d1.accepts("abcc".to_string().chars().collect()));
 }
 
 #[test]
@@ -27,13 +28,13 @@ fn test_graphviz_one() {
         Classifier::not(Classifier::Literal("XYZ")),
     ]));
 
-    // let c: Nfa<NfaNode<()>, _> = Classifier::compile(&lhs, ());
+    let c: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile(&lhs, ());
 
-    // let g = graphviz_wrap(c.graphviz(), "");
-    // let mut output = std::fs::File::create("./one.dot").unwrap();
-    // assert!(output.write_all(g.as_bytes()).is_ok());
+    let g = graphviz_wrap(c.graphviz(), "");
+    let mut output = std::fs::File::create("./one.dot").unwrap();
+    assert!(output.write_all(g.as_bytes()).is_ok());
 
-    // assert_eq!(Relation::Disjoint, lhs.relation::<Element, ()>(&rhs));
+    assert_eq!(Relation::Disjoint, lhs.relation(&rhs));
 }
 
 #[test]
