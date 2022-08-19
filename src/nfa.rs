@@ -1,67 +1,69 @@
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, HashSet};
 
 pub type NfaIndex = usize;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Nfa<N, E: Eq> {
-    count: usize,
-    // Convenience for now, later switch to only a single initial node
-    entry: BTreeSet<NfaIndex>,
-    nodes: BTreeMap<NfaIndex, N>,
-    edges: BTreeMap<NfaIndex, E>,
-    /// source node index -> Vec<(target node index, edge index)>
-    // TODO: just split into 2 maps
-    transitions: BTreeMap<NfaIndex, Vec<(NfaIndex, NfaIndex)>>,
-}
+use super::*;
 
-impl<M> From<&str> for Nfa<NfaNode<M>, NfaEdge<Element>>
+pub trait NfaBuilder<L, M, E>
 where
+    E: Eq,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
-    fn from(s: &str) -> Self {
-        Nfa::from_str(s)
+    fn build_nfa(s: L, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>;
+}
+
+impl<L, M, C, E> NfaBuilder<L, M, E> for Nfa<NfaNode<M>, NfaEdge<Element>>
+where
+    E: Eq + Clone,
+    C: Into<E>,
+    L: Iterator<Item = C>,
+    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
+{
+    fn build_nfa(l: L, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>> {
+        Nfa::from_language(l, m)
     }
 }
 
-impl<M, E> Nfa<NfaNode<M>, E>
-where
-    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + Default,
-    E: std::fmt::Debug + Clone + Eq,
-{
-    #[tracing::instrument]
-    pub fn negate(&self) -> Self {
-        let mut nfa: Nfa<NfaNode<M>, E> = self.clone();
-        nfa.nodes = nfa
-            .nodes
-            .into_iter()
-            .map(|(i, n)| (i, n.negate()))
-            .collect();
-        nfa
-    }
+// impl<M> NfaBuilder<&str, M, Element> for Nfa<NfaNode<M>, NfaEdge<Element>>
+// where
+//     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
+// {
+//     fn build_nfa(s: &str, m: M) -> Nfa<NfaNode<M>, NfaEdge<Element>> {
+//         Nfa::from_str(s, m)
+//     }
+// }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Nfa<N, E: Eq> {
+    pub(crate) count: usize,
+    // Convenience for now, later switch to only a single initial node
+    pub(crate) entry: BTreeSet<NfaIndex>,
+    pub(crate) nodes: BTreeMap<NfaIndex, N>,
+    pub(crate) edges: BTreeMap<NfaIndex, E>,
+    /// source node index -> Vec<(target node index, edge index)>
+    // TODO: just split into 2 maps
+    pub(crate) transitions: BTreeMap<NfaIndex, Vec<(NfaIndex, NfaIndex)>>,
 }
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: std::fmt::Debug + Clone + Universal + Eq,
+    E: Eq + Clone,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
-    #[tracing::instrument(skip_all)]
-    pub fn universal() -> Self {
+    pub fn from_language<C, L>(l: L, m: M) -> Self
+    where
+        C: Into<E>,
+        L: Iterator<Item = C>,
+    {
         let mut nfa: Self = Default::default();
-        let prior = nfa.add_node(NfaNode {
-            state: [Terminal::Not].into(),
-        });
-        let target = nfa.add_node(NfaNode {
-            state: [Terminal::Accept(Default::default())].into(),
-        });
-        let _ = nfa.add_edge(
-            NfaEdge {
-                criteria: E::universal(),
-            },
-            prior,
-            target,
-        );
+        let mut prior = nfa.add_node(NfaNode::new([Terminal::Not].into()));
         nfa.entry.insert(prior);
+        for c in l {
+            let target = nfa.add_node(NfaNode::new([Terminal::Not].into()));
+            let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
+            prior = target;
+        }
+        nfa.node_mut(prior).state = [Terminal::Accept(m)].into();
         nfa
     }
 }
@@ -71,20 +73,16 @@ where
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     #[tracing::instrument(skip_all)]
-    pub fn from_str(s: &str) -> Self {
+    pub fn from_str(s: &str, m: M) -> Self {
         let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode {
-            state: [Terminal::Not].into(),
-        });
+        let mut prior = nfa.add_node(NfaNode::new([Terminal::Not].into()));
         nfa.entry.insert(prior);
         for c in s.chars() {
-            let target = nfa.add_node(NfaNode {
-                state: [Terminal::Not].into(),
-            });
+            let target = nfa.add_node(NfaNode::new([Terminal::Not].into()));
             let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
             prior = target;
         }
-        nfa.node_mut(prior).state = [Terminal::Accept(Default::default())].into();
+        nfa.node_mut(prior).state = [Terminal::Accept(m)].into();
         nfa
     }
 
@@ -153,19 +151,65 @@ impl<E: Clone> NfaBranch<E> {
     }
 }
 
+#[derive(Default)]
+struct Paths {
+    l: HashSet<Vec<Element>>,
+    lr: HashSet<Vec<Element>>,
+    r: HashSet<Vec<Element>>,
+}
+
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
     E: std::fmt::Debug + Clone + BranchProduct<E> + Eq,
-    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq,
+    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
 {
     /// An intersection NFA only has accepting states where both input NFAs have accepting states
     /// Callers must ensure that the metadata carried by self and other must
     /// be distinguishable by a visitor fn
     #[tracing::instrument(skip_all)]
-    pub fn intersection(&self, other: &Self, visitor: &impl Fn(M) -> LRSemantics) -> Self {
+    pub fn intersection(&self, other: &Self) -> Self {
         // For DFAs this is the cross-product
+        let mut a = self.clone();
+        a.set_chirality(LRSemantics::L);
+        let mut b = self.clone();
+        b.set_chirality(LRSemantics::R);
         let union = self.union(other);
+        let paths = union.accepting_paths();
         todo!()
+    }
+
+    fn accepting_paths(&self) -> Paths {
+        // (current node id, current path: Vec<_>)
+        let mut stack: Vec<(NfaIndex, Vec<E>)> = self
+            .entry
+            .iter()
+            .cloned()
+            .map(|e| (e, Default::default()))
+            .collect();
+        let mut paths: Paths = Default::default();
+
+        while let Some((current_node, current_path)) = stack.pop() {
+            // for each edge from current node, append the edge criteria to a copy of the path
+            // and push the edge target on the stack with the new path
+            if let Some(edges) = self.edges_from(current_node) {
+                for (next_node, edge_id) in edges {
+                    let mut next_path = current_path.to_vec();
+                    next_path.push(self.edge(&edge_id).criteria.clone());
+                    stack.push((next_node, next_path));
+                }
+            }
+            // if the current node is an accepting state, push the path onto Paths based on the chirality
+        }
+
+        todo!();
+
+        paths
+    }
+
+    fn set_chirality(&mut self, c: LRSemantics) {
+        self.nodes.iter_mut().for_each(|(_, mut n)| {
+            n.chirality = c.clone();
+        })
     }
 }
 
@@ -322,13 +366,21 @@ pub struct NfaNode<M>
 where
     M: std::fmt::Debug + Clone + Default,
 {
-    state: BTreeSet<Terminal<M>>,
+    pub(crate) state: BTreeSet<Terminal<M>>,
+    pub(crate) chirality: LRSemantics,
 }
 
 impl<M> NfaNode<M>
 where
     M: std::fmt::Debug + Clone + Default,
 {
+    pub fn new(state: BTreeSet<Terminal<M>>) -> Self {
+        Self {
+            state,
+            ..Default::default()
+        }
+    }
+
     pub(crate) fn state_filter(&self, visitor: impl Fn(&Terminal<M>) -> bool) -> bool {
         self.state.iter().any(visitor)
     }
@@ -341,6 +393,7 @@ where
     fn default() -> Self {
         Self {
             state: Default::default(),
+            chirality: LRSemantics::None,
         }
     }
 }
@@ -357,6 +410,7 @@ where
     fn sum(&self, other: &Self) -> Self {
         NfaNode {
             state: self.state.union(&other.state).cloned().collect(),
+            chirality: self.chirality.sum(&other.chirality),
         }
     }
 
@@ -376,7 +430,7 @@ where
 
 impl<M> NfaNode<M>
 where
-    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + Default,
+    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
 {
     #[tracing::instrument(ret)]
     fn negate(&self) -> Self {
@@ -596,6 +650,45 @@ impl<N, E: Eq> Default for Nfa<N, E> {
             edges: Default::default(),
             transitions: Default::default(),
         }
+    }
+}
+
+impl<M, E> Nfa<NfaNode<M>, E>
+where
+    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
+    E: std::fmt::Debug + Clone + Eq,
+{
+    #[tracing::instrument]
+    pub fn negate(&self) -> Self {
+        let mut nfa: Nfa<NfaNode<M>, E> = self.clone();
+        nfa.nodes = nfa
+            .nodes
+            .into_iter()
+            .map(|(i, n)| (i, n.negate()))
+            .collect();
+        nfa
+    }
+}
+
+impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
+where
+    E: std::fmt::Debug + Clone + Universal + Eq,
+    M: std::fmt::Debug + Clone + PartialOrd + Ord + std::default::Default,
+{
+    #[tracing::instrument(skip_all)]
+    pub fn universal(m: M) -> Self {
+        let mut nfa: Self = Default::default();
+        let prior = nfa.add_node(NfaNode::new([Terminal::Not].into()));
+        let target = nfa.add_node(NfaNode::new([Terminal::Accept(m)].into()));
+        let _ = nfa.add_edge(
+            NfaEdge {
+                criteria: E::universal(),
+            },
+            prior,
+            target,
+        );
+        nfa.entry.insert(prior);
+        nfa
     }
 }
 

@@ -31,17 +31,18 @@ where
     L: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::hash::Hash,
 {
     #[tracing::instrument(skip_all)]
-    fn relation<M, E>(&self, other: &Self) -> Relation
+    fn relation<E, M, C>(&self, other: &Self) -> Relation
     where
-        M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
-        L: Into<Nfa<NfaNode<M>, NfaEdge<E>>>,
+        M: std::fmt::Debug + Clone + PartialOrd + Ord + Default,
+        C: Into<E>,
+        L: Iterator<Item = C> + NfaBuilder<L, M, E>,
         E: std::fmt::Debug + Clone + PartialEq + Eq + Universal + BranchProduct<E>,
     {
         // 1. compile
         // 2. relate NFAs (product of NFAs, search terminal states)
         // graphviz will help w/ this
-        let s: Nfa<NfaNode<M>, NfaEdge<E>> = self.compile();
-        let o = other.compile();
+        let s = Classifier::compile(&self, Default::default());
+        let o = Classifier::compile(&other, Default::default());
         let i = s.intersection(&o);
         // if the number of Accept states in the intersection is < s, s has Accept states not in o
         // and the inverse for i < o
@@ -61,56 +62,68 @@ where
     L: std::fmt::Debug + std::hash::Hash + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
     #[tracing::instrument(skip_all)]
-    fn compile<M, E>(&self, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>
+    fn compile<E, M, C>(c: &Self, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>
     where
         E: std::fmt::Debug + Clone + Universal + BranchProduct<E> + Eq,
-        L: Into<Nfa<NfaNode<M>, NfaEdge<E>>>,
-        M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
+        C: Into<E>,
+        L: Iterator<Item = C> + NfaBuilder<L, M, E>,
+        M: std::fmt::Debug + Clone + PartialOrd + Ord + Default,
     {
-        match self {
-            Classifier::Universal => Nfa::universal(),
-            Classifier::Literal(l) => l.clone().into(),
-            Classifier::Not(c) => c.compile(m).negate(),
+        match c {
+            Classifier::Universal => Nfa::universal(m),
+            Classifier::Literal(l) => {
+                let f = l.clone();
+                let a: Nfa<NfaNode<M>, NfaEdge<E>> = Nfa::build_nfa(f, m);
+                a
+            }
+            Classifier::Not(c) => Classifier::compile(c, m).negate(),
             Classifier::Any(v) => {
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {
-                    items.fold(acc.compile(m), |acc, cur| acc.union(&cur.compile(m)))
+                    items.fold(Classifier::compile(acc, m.clone()), |acc, cur| {
+                        acc.union(&Classifier::compile(cur, m.clone()))
+                    })
                 } else {
-                    Nfa::universal().negate()
+                    Nfa::universal(m).negate()
                 }
             }
             Classifier::And(v) => {
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {
-                    items.fold(acc.compile(m), |acc, cur| acc.intersection(&cur.compile(m)))
+                    let acc = Classifier::compile(acc, m.clone());
+                    items.fold(acc, |acc, cur| {
+                        acc.intersection(&Classifier::compile(cur, m.clone()))
+                    })
                 } else {
-                    Nfa::universal().negate()
+                    Nfa::universal(m).negate()
                 }
             }
         }
     }
 }
 
-// For use in functions which need to sort M
-pub enum LRSemantics<M> {
-    L(Box<M>),
-    R(Box<M>),
-    LR(Box<M>),
-    None(Box<M>),
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum LRSemantics {
+    L,
+    R,
+    LR,
+    None,
 }
 
-impl<M> LRSemantics<M> {
-    pub fn m(&self) -> M {
-        match self {
-            LRSemantics::L(m) | LRSemantics::R(m) | LRSemantics::LR(m) | LRSemantics::None(m) => {
-                **m
-            }
-        }
+impl Default for LRSemantics {
+    fn default() -> Self {
+        LRSemantics::None
     }
 }
 
-impl<M> From<LRSemantics<M>> for M {
-    fn from(s: LRSemantics<M>) -> Self {
-        s.m()
+impl LRSemantics {
+    fn sum(&self, other: &LRSemantics) -> LRSemantics {
+        match (self, other) {
+            (x, y) if x == y => x.clone(),
+            (x, LRSemantics::None) | (LRSemantics::None, x) => x.clone(),
+            (x, LRSemantics::LR) | (LRSemantics::LR, x) => LRSemantics::LR,
+            (LRSemantics::R, LRSemantics::L) | (LRSemantics::L, LRSemantics::R) => LRSemantics::LR,
+            (_, _) => unreachable!(),
+        }
     }
 }
