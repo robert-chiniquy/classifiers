@@ -11,68 +11,36 @@ fn test_accepts() {
     assert!(!d1.accepts("abcc".to_string().chars().collect()));
 }
 
+fn str_to_chars(s: &str) -> Vec<char> {
+    s.to_string().chars().into_iter().collect()
+}
+
 #[test]
 fn test_graphviz_one() {
     use std::io::Write;
 
     test_setup();
-    let adsf: Vec<char> = "OOABC".chars().collect();
+    // let asdf: Nfa<NfaNode<()>, NfaEdge<Element>> = Nfa::from_language(str_to_chars("XYZ"), ());
     let lhs = Classifier::Any(BTreeSet::from_iter([
-        Classifier::Literal(adsf),
-        // Classifier::Literal("OOXYZ"),
+        Classifier::Literal(str_to_chars("XYZ")),
+        Classifier::Literal(str_to_chars("OOXYZ")),
     ]));
 
     // not ABC and not XYZ
     let rhs = Classifier::And(BTreeSet::from_iter([
-        Classifier::not(Classifier::Literal("ABC".to_string().chars().into_iter().collect())),
-        Classifier::not(Classifier::Literal("XYZ".to_string().chars().into_iter().collect())),
+        Classifier::not(Classifier::Literal(str_to_chars("ABC"))),
+        Classifier::not(Classifier::Literal(str_to_chars("XYZ"))),
     ]));
 
-    // impl<C, M, E> NfaBuilder<C, M, E> for Nfa<NfaNode<M>, NfaEdge<E>>
-    // where
-    //     E: Eq + Clone + std::hash::Hash + std::default::Default + std::fmt::Debug,
-    //     C: Into<E> + std::fmt::Debug,
-    //     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
-    // {
-    //     fn build_nfa(l: Vec<C>, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>> {
-    //         // let l: Vec<C> = l.into_iter().collect();
-    //         Nfa::from_language(l, m)
-    //     }
-    // }
-
-
-
-    // E: Eq + Clone + std::hash::Hash + std::default::Default + std::fmt::Debug,
-    // C: Into<E> + std::fmt::Debug,
-    // M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
-
-    //  element, 
-
-    // IntoIterator<Item = C> + NfaBuilder<L, M, E>
-
-    // E: std::fmt::Debug
-    //     + Clone
-    //     + Universal
-    //     + BranchProduct<E>
-    //     + Eq
-    //     + std::hash::Hash
-    //     + std::default::Default,
-    // C: Into<E> + std::fmt::Debug + NfaBuilder<C, M, E>,
-    // L: IntoIterator<Item = C>,
-    // // <L as std::iter::IntoIterator>::IntoIter: nfa::Language,
-    // M: std::fmt::Debug + Clone + PartialOrd + Ord + Default,
-
-    // 66:49  error   the trait bound `char: nfa::NfaBuilder<char, (), element::Element>` is not satisfied ​rustc:
-    //                the trait `nfa::NfaBuilder<E, M, C>` is implemented for `nfa::Nfa<nfa::NfaNode<M>, nfa::NfaEdge<E>>`
-
-    let asdf: Nfa<NfaNode<()>, NfaEdge<Element>> = NfaBuilder::<char, (), Element>::build_nfa("XYZ".to_string().chars().into_iter().collect(), ());
     let c: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile::<Element, (), char>(&lhs, ());
 
     let g = graphviz_wrap(c.graphviz(), "");
     let mut output = std::fs::File::create("./one.dot").unwrap();
     assert!(output.write_all(g.as_bytes()).is_ok());
 
-    // assert_eq!(Relation::Disjoint, lhs.relation(&rhs));
+    let adsf: Vec<char> = "OOABC".chars().collect();
+
+    assert_eq!(Relation::Disjoint, lhs.relation::<Element, char>(&rhs));
 }
 
 #[test]

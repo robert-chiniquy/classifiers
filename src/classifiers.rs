@@ -26,10 +26,9 @@ where
     L: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::hash::Hash,
 {
     #[tracing::instrument(skip_all)]
-    pub fn relation<E, M, C>(&self, other: &Self) -> Relation
+    pub fn relation<E, C>(&self, other: &Self) -> Relation
     where
-        M: std::fmt::Debug + Clone + PartialOrd + Ord + Default,
-        C: Into<E> + std::fmt::Debug + NfaBuilder<C, M, E> + Eq + std::hash::Hash + Default,
+        C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
         L: IntoIterator<Item = C>,
         // <L as std::iter::IntoIterator>::IntoIter: nfa::Language,
         E: std::fmt::Debug
@@ -44,8 +43,8 @@ where
         // 1. compile
         // 2. relate NFAs (product of NFAs, search terminal states)
         // graphviz will help w/ this
-        let s = Classifier::compile::<Element, (), char>(self, Default::default());
-        let o = Classifier::compile(other, Default::default());
+        let s: Nfa<NfaNode<()>, NfaEdge<_>> = Classifier::compile(self, ());
+        let o = Classifier::compile(other, ());
         let i = s.intersection(&o);
         // if the number of Accept states in the intersection is < s, s has Accept states not in o
         // and the inverse for i < o
@@ -74,7 +73,6 @@ where
             + Eq
             + std::hash::Hash
             + std::default::Default,
-
         C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
         Nfa<NfaNode<M>, NfaEdge<E>>: NfaBuilder<E, M, C>,
         L: IntoIterator<Item = C>,
@@ -86,7 +84,7 @@ where
             Classifier::Literal(l) => {
                 let arg = l.clone().into_iter().collect();
                 Nfa::build_nfa(arg, m)
-            },
+            }
             Classifier::Not(c) => Classifier::compile(c, m).negate(),
             Classifier::Any(v) => {
                 let mut items = v.iter();
