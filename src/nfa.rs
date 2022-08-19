@@ -4,12 +4,12 @@ pub type NfaIndex = usize;
 
 use super::*;
 
-pub trait NfaBuilder<L, M, E>
+pub trait NfaBuilder<E, M, C>
 where
     E: Eq + std::hash::Hash + std::default::Default,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
-    fn build_nfa(s: L, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>;
+    fn build_nfa(s: Vec<C>, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>;
 }
 
 /// Marker trait for any type to use as a language
@@ -32,28 +32,31 @@ pub trait BranchProduct<E> {
     fn product(a: &Self, b: &Self) -> Vec<NfaBranch<E>>;
 }
 
-/// This is the default impl of build_nfa for any type where this works
-impl<L, M, C, E> NfaBuilder<L, M, E> for Nfa<NfaNode<M>, NfaEdge<E>>
+// / This is the default impl of build_nfa for any type where this works
+impl<E, M, C> NfaBuilder<E, M, C> for Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: Eq + Clone + std::hash::Hash + std::default::Default + std::fmt::Debug,
-    C: Into<E> + std::fmt::Debug,
-    L: IntoIterator<Item = C>, // + Language,
+    E: Eq
+        + Clone
+        + std::hash::Hash
+        + std::default::Default
+        + std::fmt::Debug,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
+    C: Into<E> + std::fmt::Debug,
 {
-    fn build_nfa(l: L, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>> {
-        let l: Vec<C> = l.into_iter().collect();
+    fn build_nfa(l: Vec<C>, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>> {
+        // let l: Vec<C> = l.into_iter().collect();
         Nfa::from_language(l, m)
     }
 }
 
-// impl<M, E> NfaBuilder<&str, M, E> for Nfa<NfaNode<M>, NfaEdge<E>>
+// impl<M, E> NfaBuilder<E, M, char> for Nfa<NfaNode<M>, NfaEdge<E>>
 // where
 //     E: Eq + Clone + std::hash::Hash + std::default::Default + From<char> + std::fmt::Debug,
 //     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 // {
 //     // E could be an associated type but that would require an nfa builder for every E type
-//     fn build_nfa(s: &str, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>> {
-//         let s: Vec<char> = s.chars().collect();
+//     fn build_nfa(s: Vec<char>, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>> {
+//         // let s: Vec<char> = s.chars().collect();
 //         Nfa::from_language(s, m)
 //     }
 // }
