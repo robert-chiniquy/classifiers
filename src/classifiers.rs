@@ -99,6 +99,7 @@ where
                 let arg = l.clone().into_iter().collect();
                 Nfa::build_nfa(arg, m)
             }
+            // NotToken?
             Classifier::Not(c) => Classifier::compile(c, m).negate(),
             Classifier::Any(v) => {
                 let mut items = v.iter();

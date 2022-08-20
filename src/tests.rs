@@ -105,10 +105,16 @@ fn test_terminal_on() {
     //     Classifier::not(Classifier::Literal(str_to_chars("AB"))),
     //     Classifier::Literal(str_to_chars("AB")),
     // ]));
-    // Matt is suggesting a Element::NotToken
+    // Matt is suggesting a Element::NotToken, doesn't need to be a public interface
     let zzz = Classifier::And(BTreeSet::from_iter([
         Classifier::not(Classifier::Literal(str_to_chars("A*"))),
         Classifier::Literal(str_to_chars("*A")),
+    ]));
+
+    // only 1 char
+    let _ = Classifier::And(BTreeSet::from_iter([
+        Classifier::not(Classifier::Literal(str_to_chars("**"))),
+        Classifier::Literal(str_to_chars("*")),
     ]));
 
     let c = Classifier::compile::<Element, (), char>(&zzz, ());
