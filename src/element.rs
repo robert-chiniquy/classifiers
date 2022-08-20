@@ -27,6 +27,23 @@ impl std::fmt::Display for Element {
     }
 }
 
+impl Accepts<Element> for Element {
+    fn accepts(&self, l: Element) -> bool {
+        match (self, l) {
+            (x, y) if x == &y => true,
+            (Element::Token(_), Element::Question) => false,
+            (Element::Token(_), Element::Star) => false,
+            (Element::Question, Element::Token(_)) => true,
+            (Element::Question, Element::Question) => true,
+            (Element::Question, Element::Star) => false,
+            (Element::Star, Element::Token(_)) => true,
+            (Element::Star, Element::Question) => true,
+            (Element::Star, Element::Star) => true,
+            (_, _) => false,
+        }
+    }
+}
+
 impl Accepts<&char> for Element {
     #[tracing::instrument(skip_all)]
     fn accepts(&self, l: &char) -> bool {
@@ -130,7 +147,7 @@ where
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     pub fn accepts_string(&self, s: &str) -> bool {
-        self.accepts(s.to_string().chars().collect())
+        self.accepts(&str_to_chars(s))
     }
 
     #[tracing::instrument(skip_all)]

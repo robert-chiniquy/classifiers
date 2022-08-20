@@ -1,6 +1,15 @@
 use super::*;
 
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+pub enum Relation {
+    Disjoint,
+    Intersection,
+    Subset,
+    Superset,
+    Equality,
+}
+
+#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum Classifier<L>
 where
     L: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::hash::Hash,
@@ -12,15 +21,7 @@ where
     And(BTreeSet<Classifier<L>>),
 }
 
-#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub enum Relation {
-    Disjoint,
-    Intersection,
-    Subset,
-    Superset,
-    Equality,
-}
-
+// TODO: Check membership
 impl<L> Classifier<L>
 where
     L: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::hash::Hash,
@@ -30,7 +31,7 @@ where
     where
         C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
         L: IntoIterator<Item = C>,
-        // <L as std::iter::IntoIterator>::IntoIter: nfa::Language,
+        E: Accepts<E>,
         E: std::fmt::Debug
             + Clone
             + PartialEq
@@ -43,14 +44,27 @@ where
         // 1. compile
         // 2. relate NFAs (product of NFAs, search terminal states)
         // graphviz will help w/ this
-        let s: Nfa<NfaNode<()>, NfaEdge<_>> = Classifier::compile(self, ());
-        let o = Classifier::compile(other, ());
-        let i = s.intersection(&o);
-        // if the number of Accept states in the intersection is < s, s has Accept states not in o
-        // and the inverse for i < o
-        // ... probably only works for a minimal NFA
-        // if i has no Accept states, then s and o are disjoint
-        todo!()
+        let mut s: Nfa<NfaNode<()>, NfaEdge<_>> = Classifier::compile(self, ());
+        let mut o = Classifier::compile(other, ());
+
+        s.set_chirality(LRSemantics::L);
+        o.set_chirality(LRSemantics::R);
+        let union = s.union(&o);
+        let paths = union.accepting_paths();
+        match (
+            !paths.l.is_empty(),
+            !paths.lr.is_empty(),
+            !paths.r.is_empty(),
+        ) {
+            (true, true, true) => Relation::Intersection,
+            (true, true, false) => Relation::Superset,
+            (true, false, true) => Relation::Disjoint,
+            (true, false, false) => Relation::Disjoint,
+            (false, true, true) => Relation::Subset,
+            (false, true, false) => Relation::Equality,
+            (false, false, true) => Relation::Disjoint,
+            (false, false, false) => Relation::Disjoint,
+        }
     }
 
     #[tracing::instrument(skip_all)]
@@ -73,10 +87,10 @@ where
             + Eq
             + std::hash::Hash
             + std::default::Default,
+        E: Accepts<E>,
         C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
         Nfa<NfaNode<M>, NfaEdge<E>>: NfaBuilder<E, M, C>,
         L: IntoIterator<Item = C>,
-        // <L as std::iter::IntoIterator>::IntoIter: nfa::Language,
         M: std::fmt::Debug + Clone + PartialOrd + Ord + Default,
     {
         match c {
@@ -96,12 +110,16 @@ where
                     Nfa::universal(m).negate()
                 }
             }
+            // how does this treat heterogenous states?
             Classifier::And(v) => {
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {
                     let acc = Classifier::compile(acc, m.clone());
                     items.fold(acc, |acc, cur| {
+                        // An intersection() method on Classifiers first which may delegate to Nfa::intersection() ? for heterogenous structures
                         acc.intersection(&Classifier::compile(cur, m.clone()))
+                        // if we needed a conjunction state on all terminal states in the intersection,
+                        // we could mutate and add it here, or does it happen in intersection?
                     })
                 } else {
                     Nfa::universal(m).negate()

@@ -12,13 +12,17 @@ where
     fn build_nfa(s: Vec<C>, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>;
 }
 
-/// Marker trait for any type to use as a language
-/// prevents conflicting implementations
-pub trait Language {}
-
+/// E: Accepts<L> implies a C: Into<E> and L: IntoIterator<Item = C>
 pub trait Accepts<L> {
     fn accepts(&self, l: L) -> bool;
 }
+
+// impl<T> Accepts<T> for T {
+//     fn accepts(&self, l: T) -> bool {
+//         true
+//     }
+// }
+
 pub trait Universal {
     fn universal() -> Self;
 }
@@ -35,11 +39,7 @@ pub trait BranchProduct<E> {
 // / This is the default impl of build_nfa for any type where this works
 impl<E, M, C> NfaBuilder<E, M, C> for Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: Eq
-        + Clone
-        + std::hash::Hash
-        + std::default::Default
-        + std::fmt::Debug,
+    E: Eq + Clone + std::hash::Hash + std::default::Default + std::fmt::Debug,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
     C: Into<E> + std::fmt::Debug,
 {
@@ -48,6 +48,17 @@ where
         Nfa::from_language(l, m)
     }
 }
+
+// impl<E, M> NfaBuilder<E, M, E> for Nfa<NfaNode<M>, NfaEdge<E>>
+// where
+//     E: Eq + Clone + std::hash::Hash + std::default::Default + std::fmt::Debug,
+//     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
+// {
+//     fn build_nfa(l: Vec<E>, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>> {
+//         // let l: Vec<C> = l.into_iter().collect();
+//         Nfa::from_language(l, m)
+//     }
+// }
 
 // impl<M, E> NfaBuilder<E, M, char> for Nfa<NfaNode<M>, NfaEdge<E>>
 // where
@@ -99,20 +110,45 @@ where
         nfa
     }
 
-    /// TODO: Returning early rather than collecting all terminal states within the closure of the
-    /// input is incorrect. This should be changed to visit all possible nodes.
-    #[tracing::instrument]
-    pub fn accepts<C>(&self, s: Vec<C>) -> bool
+    pub fn from_symbols(l: &Vec<E>, m: M) -> Self {
+        let mut nfa: Self = Default::default();
+        let mut prior = nfa.add_node(NfaNode::new([Terminal::Not].into()));
+        nfa.entry.insert(prior);
+        for criteria in l.clone() {
+            let target = nfa.add_node(NfaNode::new([Terminal::Not].into()));
+            let _ = nfa.add_edge(NfaEdge { criteria }, prior, target);
+            prior = target;
+        }
+        nfa.node_mut(prior).state = [Terminal::Accept(m)].into();
+        nfa
+    }
+
+    pub fn accepts<C>(&self, path: &Vec<C>) -> bool
     where
         E: nfa::Accepts<C>,
         C: Into<E> + Clone + std::fmt::Debug,
-        // L: IntoIterator<Item = C> + std::fmt::Debug /*+ std::iter::FromIterator<C>*/ + Clone,
-        // <L as std::iter::IntoIterator>::IntoIter: Clone,
+    {
+        self.terminal_on(path, &|t| match t {
+            LRSemantics::L | LRSemantics::R | LRSemantics::LR => true,
+            LRSemantics::None => false,
+        })
+    }
+
+    /// TODO: Returning early rather than collecting all terminal states within the closure of the
+    /// input is incorrect. This should be changed to visit all possible nodes.
+    pub fn terminal_on<C>(
+        &self,
+        single_path: &Vec<C>,
+        filter: &impl Fn(&LRSemantics) -> bool,
+    ) -> bool
+    where
+        E: Accepts<C>,
+        C: Into<E> + Clone + std::fmt::Debug,
     {
         for i in &self.entry {
             let i: NfaIndex = *i as NfaIndex;
             let mut stack: Vec<_> = Default::default();
-            stack.push((i, s.clone()));
+            stack.push((i, single_path.clone()));
             while let Some((i, s)) = stack.pop() {
                 let mut l = s.clone().into_iter();
                 match &l.next() {
@@ -122,13 +158,13 @@ where
                                 let edge = self.edge(edge);
                                 if edge.accepts(c.clone().to_owned()) {
                                     // push target onto stack
-                                    // TODO: remove constraint, this line is what requires std::iter::FromIterator<C>
                                     stack.push((*target, l.clone().collect()));
                                 }
                             }
                         }
                     }
                     // Could just push these results onto a return stack instead
+                    // just collect all terminal states period and return them instead of a bool
                     None => {
                         if self
                             .node(i)
@@ -141,7 +177,7 @@ where
                             .state
                             .contains(&Terminal::Accept(Default::default()))
                         {
-                            return true;
+                            return filter(&self.node(i).chirality);
                         }
                     }
                 }
@@ -173,33 +209,53 @@ impl<E: Clone> NfaBranch<E> {
 }
 
 #[derive(Default)]
-struct Paths<E: std::hash::Hash> {
-    l: HashSet<Vec<E>>,
-    lr: HashSet<Vec<E>>,
-    r: HashSet<Vec<E>>,
+// ? 6 fields, 1 for accepting and 1 for rejecting ?
+// 1. need to visit all states and not return early
+// 2. .... assume heterogenous NFAs
+// 3. any path in L or R which is rejected is not in LR accepted
+pub(crate) struct Paths<E: std::hash::Hash> {
+    pub(crate) l: HashSet<Vec<E>>,
+    pub(crate) lr: HashSet<Vec<E>>,
+    pub(crate) r: HashSet<Vec<E>>,
 }
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: std::fmt::Debug + Clone + BranchProduct<E> + Eq + std::hash::Hash + Default,
+    E: std::fmt::Debug + Clone + BranchProduct<E> + Eq + std::hash::Hash + Default + Universal,
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
 {
     /// An intersection NFA only has accepting states where both input NFAs have accepting states
-    /// Callers must ensure that the metadata carried by self and other must
-    /// be distinguishable by a visitor fn
     #[tracing::instrument(skip_all)]
-    pub fn intersection(&self, other: &Self) -> Self {
+    pub fn intersection(&self, other: &Self) -> Self
+    where
+        E: Accepts<E>,
+    {
         // For DFAs this is the cross-product
         let mut a = self.clone();
         a.set_chirality(LRSemantics::L);
         let mut b = self.clone();
         b.set_chirality(LRSemantics::R);
         let union = self.union(other);
+        // FIXME accepting_paths is illogical, this must respect all terminal states
+        // ... .terminal_paths() -> Paths (where Paths additionally stores terminal state and/or M)
         let paths = union.accepting_paths();
-        todo!()
+        // if a method here returned all terminal states with their associated paths,
+        // (matt says intersection is a conjunction)
+        // then each terminal state could be marked as in conjunction
+        if paths.lr.is_empty() {
+            return Nfa::universal(Default::default()).negate();
+        }
+        let lr_paths: Vec<_> = paths.lr.iter().collect();
+        lr_paths[1..].iter().fold(
+            Nfa::from_symbols(lr_paths[0], Default::default()),
+            |acc, cur| acc.union(&Nfa::from_symbols(cur, Default::default())),
+        )
     }
 
-    fn accepting_paths(&self) -> Paths<E> {
+    pub(crate) fn accepting_paths(&self) -> Paths<E>
+    where
+        E: Accepts<E>,
+    {
         // (current node id, current path: Vec<_>)
         let mut stack: Vec<(NfaIndex, Vec<E>)> = self
             .entry
@@ -230,15 +286,46 @@ where
             if let Some(edges) = self.edges_from(current_node) {
                 for (next_node, edge_id) in edges {
                     let mut next_path = current_path.to_vec();
-                    next_path.push(self.edge(&edge_id).criteria.clone());
-                    stack.push((next_node.clone(), next_path));
+                    next_path.push(self.edge(edge_id).criteria.clone());
+                    stack.push((*next_node, next_path));
                 }
             }
         }
+        for path in paths.l.iter() {
+            if paths.r.remove(path) {
+                paths.lr.insert(path.clone().to_owned());
+            }
+        }
+
+        // ensure that all values in left_paths are not in left_paths.r
+        for path in paths.lr.iter() {
+            paths.l.remove(path);
+            paths.r.remove(path);
+        }
+
+        let mut move_stuff = Default::default();
+        (move_stuff, paths.l) = paths.l.iter().cloned().partition(|path| {
+            self.terminal_on::<E>(path, &|t| {
+                let r = t == &LRSemantics::R || t == &LRSemantics::LR;
+                if r {
+                    println!("found an r for l!?!? {path:?} {t:?}");
+                }
+                r
+            })
+        });
+
+        paths.lr.extend(move_stuff.into_iter());
+
+        (move_stuff, paths.r) = paths.r.iter().cloned().partition(|path| {
+            self.terminal_on(path, &|t| t == &LRSemantics::L || t == &LRSemantics::LR)
+        });
+
+        paths.lr.extend(move_stuff.into_iter());
+
         paths
     }
 
-    fn set_chirality(&mut self, c: LRSemantics) {
+    pub(crate) fn set_chirality(&mut self, c: LRSemantics) {
         self.nodes.iter_mut().for_each(|(_, mut n)| {
             n.chirality = c.clone();
         })
@@ -571,6 +658,8 @@ where
 {
     #[tracing::instrument]
     pub fn negate(&self) -> Self {
+        // a NotToken here would need to flip edges as well
+
         let mut nfa: Nfa<NfaNode<M>, E> = self.clone();
         nfa.nodes = nfa
             .nodes
@@ -661,9 +750,10 @@ where
 
 impl<N, E> Nfa<N, NfaEdge<E>>
 where
+    N: Clone,
     E: Eq + Clone + std::hash::Hash + std::default::Default,
 {
-    fn edge_by_kind<'a>(&self, i: NfaIndex, kind: &E) -> Vec<(NfaIndex, NfaIndex)> {
+    fn edge_by_kind(&self, i: NfaIndex, kind: &E) -> Vec<(NfaIndex, NfaIndex)> {
         self.transitions
             .get(&i)
             .unwrap_or(&vec![])
@@ -671,5 +761,35 @@ where
             .filter(|(_target_node_id, edge_id)| self.edge(edge_id).criteria == *kind)
             .cloned()
             .collect()
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub fn concatenate(&self, other: &Self) -> Self {
+        let mut cat = self.clone();
+        cat.count += other.count;
+        cat.count += 1;
+        cat.entry.extend(other.entry.iter().map(|i| i + self.count));
+        cat.nodes.extend(
+            other
+                .nodes
+                .iter()
+                .map(|(i, n)| ((i + self.count), n.clone())),
+        );
+        cat.edges.extend(
+            other
+                .edges
+                .iter()
+                .map(|(i, e)| ((i + self.count), e.clone())),
+        );
+        cat.transitions
+            .extend(other.transitions.iter().map(|(i, v)| {
+                (
+                    (i + self.count),
+                    v.iter()
+                        .map(|(t, e)| ((t + self.count), (e + self.count)))
+                        .collect(),
+                )
+            }));
+        cat
     }
 }
