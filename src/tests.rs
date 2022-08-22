@@ -108,7 +108,7 @@ fn test_terminal_on() {
     // Matt is suggesting a Element::NotToken, doesn't need to be a public interface
     let zzz = Classifier::And(BTreeSet::from_iter([
         Classifier::not(Classifier::Literal(str_to_chars("A*"))),
-        Classifier::Literal(str_to_chars("*A")),
+        Classifier::Literal(str_to_chars("*B")),
     ]));
 
     // only 1 char
@@ -119,7 +119,7 @@ fn test_terminal_on() {
 
     let c = Classifier::compile::<Element, (), char>(&zzz, ());
     write_graph(c.graphviz(), "terminal_on_zzz1.dot");
-    assert!(c.accepts_string("AB"));
+    assert!(c.accepts_string("BB"));
     // how do we ask c if it accepts any state which is not AB
     // (c could also accept AB in addition to some other state)
     // - c minus an NFA which accepts AB
@@ -205,7 +205,7 @@ fn test_negate3() {
 
     let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
 
-    // write_graph(d.graphviz(), "negate3.dot");
+    write_graph(d.graphviz(), "negate3.dot");
 
     let mut b = Classifier::compile::<Element, (), char>(&astar, ());
     let mut a = stara.compile(());
@@ -215,7 +215,7 @@ fn test_negate3() {
 
     write_graph(union.graphviz(), "union-negate3.dot");
 
-    assert!(d.accepts_string("AAA"));
+    assert!(d.accepts_string("AAb"));
     // assert!(false);
 }
 

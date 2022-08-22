@@ -72,6 +72,10 @@ impl Accepts<char> for Element {
     }
 }
 
+impl Invertible for Vec<Element> {
+    fn inverse(&self) -> Self {}
+}
+
 impl BranchProduct<Element> for Element {
     #[tracing::instrument(ret)]
     fn product(a: &Self, b: &Self) -> Vec<NfaBranch<Element>> {
@@ -195,14 +199,14 @@ where
     #[tracing::instrument(skip_all)]
     pub fn from_str(s: &str, m: M) -> Self {
         let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new([Terminal::Not].into()));
+        let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
         nfa.entry.insert(prior);
         for c in s.chars() {
-            let target = nfa.add_node(NfaNode::new([Terminal::Not].into()));
+            let target = nfa.add_node(NfaNode::new(Terminal::Not));
             let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
             prior = target;
         }
-        nfa.node_mut(prior).state = [Terminal::Accept(m)].into();
+        nfa.node_mut(prior).state = Terminal::Accept(m);
         nfa
     }
 }

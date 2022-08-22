@@ -4,6 +4,11 @@ pub type NfaIndex = usize;
 
 use super::*;
 
+// TODO
+// - remove NfaNode, NfaEdge?
+//
+// - Not logic, inversion, compilation, intersection
+
 pub trait NfaBuilder<E, M, C>
 where
     E: Eq + std::hash::Hash + std::default::Default,
@@ -17,12 +22,6 @@ pub trait Accepts<L> {
     fn accepts(&self, l: L) -> bool;
 }
 
-// impl<T> Accepts<T> for T {
-//     fn accepts(&self, l: T) -> bool {
-//         true
-//     }
-// }
-
 pub trait Universal {
     fn universal() -> Self;
 }
@@ -34,6 +33,11 @@ pub trait NodeSum {
 
 pub trait BranchProduct<E> {
     fn product(a: &Self, b: &Self) -> Vec<NfaBranch<E>>;
+}
+
+// This should be implemented on a path of E
+pub trait Invertible {
+    fn inverse(&self) -> Self;
 }
 
 // / This is the default impl of build_nfa for any type where this works
@@ -85,7 +89,7 @@ where
     /// source node index -> Vec<(target node index, edge index)>
     // TODO: just split into 2 maps
     pub(crate) transitions: BTreeMap<NfaIndex, Vec<(NfaIndex, NfaIndex)>>,
-    pub(crate) chirality: BTreeMap<NfaIndex, LRSemantics>,
+    // pub(crate) chirality: BTreeMap<NfaIndex, LRSemantics>,
 }
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
@@ -100,28 +104,28 @@ where
         // L: IntoIterator<Item = C>, // + std::iter::FromIterator<C>,
     {
         let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new([Terminal::Not].into()));
+        let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
         nfa.entry.insert(prior);
         for c in l {
-            let target = nfa.add_node(NfaNode::new([Terminal::Not].into()));
+            let target = nfa.add_node(NfaNode::new(Terminal::Not));
             let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
             prior = target;
         }
-        nfa.node_mut(prior).state = [Terminal::Accept(m)].into();
+        nfa.node_mut(prior).state = Terminal::Accept(m);
         nfa
     }
 
     #[tracing::instrument(skip_all)]
     pub fn from_symbols(l: &Vec<E>, m: M) -> Self {
         let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new([Terminal::Not].into()));
+        let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
         nfa.entry.insert(prior);
         for criteria in l.clone() {
-            let target = nfa.add_node(NfaNode::new([Terminal::Not].into()));
+            let target = nfa.add_node(NfaNode::new(Terminal::Not));
             let _ = nfa.add_edge(NfaEdge { criteria }, prior, target);
             prior = target;
         }
-        nfa.node_mut(prior).state = [Terminal::Accept(m)].into();
+        nfa.node_mut(prior).state = Terminal::Accept(m);
         nfa
     }
 
@@ -183,60 +187,21 @@ where
 
     #[tracing::instrument(skip(self), ret)]
     pub fn node_accepting(&self, i: NfaIndex) -> bool {
-        for s in &self.node(i).state {
-            if matches!(s, Terminal::Reject(_)) {
-                return false;
-            }
+        match &self.node(i).state {
+            Terminal::Not => false,
+            Terminal::Accept(_) => true,
+            Terminal::Reject(_) => false,
         }
-        for s in &self.node(i).state {
-            if matches!(s, Terminal::Accept(_)) {
-                return true;
-            }
-        }
-        false
     }
 
     #[tracing::instrument(skip(self), ret)]
     pub fn node_rejecting(&self, i: NfaIndex) -> bool {
-        for s in &self.node(i).state {
-            if matches!(s, Terminal::Reject(_)) {
-                return true;
-            }
+        match &self.node(i).state {
+            Terminal::Not => false,
+            Terminal::Accept(_) => false,
+            Terminal::Reject(_) => true,
         }
-        false
     }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum EdgeTransition {
-    Advance,
-    Stay,
-    Drop,
-}
-
-#[derive(Debug)]
-pub struct NfaBranch<El> {
-    kind: El,
-    left: EdgeTransition,
-    right: EdgeTransition,
-}
-
-impl<E: Clone> NfaBranch<E> {
-    pub fn new(kind: E, left: EdgeTransition, right: EdgeTransition) -> Self {
-        debug_assert!(!(left == EdgeTransition::Drop && right == EdgeTransition::Drop));
-        Self { kind, left, right }
-    }
-}
-
-#[derive(Default, Debug)]
-// ? 6 fields, 1 for accepting and 1 for rejecting ?
-// 1. need to visit all states and not return early
-// 2. .... assume heterogenous NFAs
-// 3. any path in L or R which is rejected is not in LR accepted
-pub(crate) struct Paths<E: std::hash::Hash> {
-    pub(crate) l: HashSet<Vec<E>>,
-    pub(crate) lr: HashSet<Vec<E>>,
-    pub(crate) r: HashSet<Vec<E>>,
 }
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
@@ -256,7 +221,7 @@ where
         let mut b = other.clone();
         b.set_chirality(LRSemantics::R);
         let union = a.union(&b);
-        println!("XXX\n{a:?}\n{b:?}\n{union:?}");
+        // println!("XXX\n{a:?}\n{b:?}\n{union:?}");
         // FIXME accepting_paths is illogical, this must respect all terminal states
         // ... .terminal_paths() -> Paths (where Paths additionally stores terminal state and/or M)
         let paths = union.accepting_paths();
@@ -354,8 +319,9 @@ where
 
     #[tracing::instrument]
     pub(crate) fn set_chirality(&mut self, c: LRSemantics) {
-        self.nodes.iter_mut().for_each(|(_, mut n)| {
-            n.chirality = c.clone();
+        self.nodes.iter_mut().for_each(|(_, mut n)| match n.state {
+            Terminal::Not => (),
+            Terminal::Reject(_) | Terminal::Accept(_) => n.chirality = c.clone(),
         })
     }
 }
@@ -414,14 +380,10 @@ where
         // for each branch in the vector, you should push onto the stack again,
         // so if we're missing a value,
         while let Some((self_id, other_id, working_union_node_id)) = stack.pop() {
-            println!("{stack:?}");
-            if *self_id == 1 as usize
-                && *other_id == (2 as usize)
-                && working_union_node_id == (6 as usize)
-            {
-                println!("*((**(");
-                // panic!();
-            }
+            // if *self_id == 1_usize && *other_id == 2_usize && working_union_node_id == 6_usize {
+            // println!("{stack:?}");
+            //     ()
+            // }
             let self_edges = self.edges_from(*self_id);
             let other_edges = other.edges_from(*other_id);
             if (self_edges == None && other_edges == None)
@@ -430,10 +392,7 @@ where
                     && self_edges.as_ref().unwrap().is_empty()
                     && other_edges.as_ref().unwrap().is_empty())
             {
-                // early return :(
-                //                return union;
-                //union
-                ()
+                continue;
             } else if self_edges == None || self_edges.as_ref().unwrap().is_empty() {
                 union.copy_subtree(&working_union_node_id, other, other_id);
             } else if other_edges == None || other_edges.as_ref().unwrap().is_empty() {
@@ -575,12 +534,44 @@ where
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum EdgeTransition {
+    Advance,
+    Stay,
+    Drop,
+}
+
+#[derive(Debug)]
+pub struct NfaBranch<El> {
+    kind: El,
+    left: EdgeTransition,
+    right: EdgeTransition,
+}
+
+impl<E: Clone> NfaBranch<E> {
+    pub fn new(kind: E, left: EdgeTransition, right: EdgeTransition) -> Self {
+        debug_assert!(!(left == EdgeTransition::Drop && right == EdgeTransition::Drop));
+        Self { kind, left, right }
+    }
+}
+
+#[derive(Default, Debug)]
+// ? 6 fields, 1 for accepting and 1 for rejecting ?
+// 1. need to visit all states and not return early
+// 2. .... assume heterogenous NFAs
+// 3. any path in L or R which is rejected is not in LR accepted
+pub(crate) struct Paths<E: std::hash::Hash> {
+    pub(crate) l: HashSet<Vec<E>>,
+    pub(crate) lr: HashSet<Vec<E>>,
+    pub(crate) r: HashSet<Vec<E>>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NfaNode<M>
 where
     M: std::fmt::Debug + Clone + Default,
 {
-    pub(crate) state: BTreeSet<Terminal<M>>,
+    pub(crate) state: Terminal<M>,
     pub(crate) chirality: LRSemantics,
 }
 
@@ -589,7 +580,7 @@ impl<M> NfaNode<M>
 where
     M: std::fmt::Debug + Clone + Default,
 {
-    pub fn new(state: BTreeSet<Terminal<M>>) -> Self {
+    pub fn new(state: Terminal<M>) -> Self {
         Self {
             state,
             ..Default::default()
@@ -597,7 +588,7 @@ where
     }
 
     pub(crate) fn state_filter(&self, visitor: impl Fn(&Terminal<M>) -> bool) -> bool {
-        self.state.iter().any(visitor)
+        visitor(&self.state)
     }
 }
 
@@ -627,7 +618,7 @@ fn test_nodesum() {
     let n1 = d1.node(1);
     let n2 = d2.node(1);
     let n3 = n1.sum(n2);
-    assert_eq!(n3.chirality, LRSemantics::LR);
+    assert_eq!(n3.chirality, LRSemantics::None);
 }
 
 impl<M> NodeSum for NfaNode<M>
@@ -637,13 +628,13 @@ where
     #[tracing::instrument(skip(self, other), ret)]
     fn sum(&self, other: &Self) -> Self {
         NfaNode {
-            state: self.state.union(&other.state).cloned().collect(),
+            state: self.state.sum(&other.state),
             chirality: self.chirality.sum(&other.chirality),
         }
     }
     #[tracing::instrument(skip(self, other))]
     fn sum_mut(&mut self, other: &Self) {
-        self.state = self.state.union(&other.state).cloned().collect();
+        self.state = self.state.sum(&other.state);
         self.chirality = self.chirality.sum(&other.chirality);
     }
 }
@@ -664,7 +655,7 @@ where
     #[tracing::instrument(ret)]
     fn negate(&self) -> Self {
         let mut node = self.clone();
-        node.state = node.state.iter().map(|s| s.negate()).collect();
+        node.state = node.state.negate();
         node
     }
 }
@@ -745,6 +736,26 @@ impl<M: std::fmt::Debug + Clone> Terminal<M> {
             Terminal::Reject(m) => Terminal::Accept(m.clone()),
         }
     }
+
+    fn sum(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Terminal::Not, Terminal::Not) => Terminal::Not,
+            (Terminal::Not, Terminal::Accept(_)) => other.clone(),
+            (Terminal::Not, Terminal::Reject(_)) => other.clone(),
+            (Terminal::Accept(_), Terminal::Not) => self.clone(),
+            (Terminal::Accept(_), Terminal::Accept(_)) => {
+                // TODO: Worry about merging Ms
+                self.clone()
+            }
+            (Terminal::Accept(_), Terminal::Reject(_)) => other.clone(),
+            (Terminal::Reject(_), Terminal::Not) => self.clone(),
+            (Terminal::Reject(_), Terminal::Accept(_)) => self.clone(),
+            (Terminal::Reject(_), Terminal::Reject(_)) => {
+                // TODO: worry about merging Ms
+                self.clone()
+            }
+        }
+    }
 }
 
 impl<N, E> Default for Nfa<N, E>
@@ -758,7 +769,7 @@ where
             nodes: Default::default(),
             edges: Default::default(),
             transitions: Default::default(),
-            chirality: Default::default(),
+            // chirality: Default::default(),
         }
     }
 }
@@ -771,8 +782,8 @@ where
     #[tracing::instrument(skip_all)]
     pub fn universal(m: M) -> Self {
         let mut nfa: Self = Default::default();
-        let prior = nfa.add_node(NfaNode::new([Terminal::Not].into()));
-        let target = nfa.add_node(NfaNode::new([Terminal::Accept(m)].into()));
+        let prior = nfa.add_node(NfaNode::new(Terminal::Not));
+        let target = nfa.add_node(NfaNode::new(Terminal::Accept(m)));
         let _ = nfa.add_edge(
             NfaEdge {
                 criteria: E::universal(),
