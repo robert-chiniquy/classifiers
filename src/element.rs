@@ -1,7 +1,7 @@
 use super::*;
 use std::{collections::HashSet, default};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Element {
     Token(char),
     TokenSeq(Vec<char>),
@@ -26,9 +26,9 @@ impl std::fmt::Display for Element {
                 Element::Token(c) => format!("'{c}'"),
                 Element::Question => "?".to_string(),
                 Element::Star => "*".to_string(),
-                Element::NotTokenSeq(c) => format!("'!{c}'"),
+                Element::NotTokenSeq(c) => format!("!'{c:?}'"),
                 Element::TokenSeq(c) => format!("'{c:?}'"),
-                Element::NotSe(c) => format!("'!{c:?}'"),
+                Element::NotToken(c) => format!("!'{c:?}'"),
             }
         ))
     }
@@ -37,44 +37,48 @@ impl std::fmt::Display for Element {
 impl Accepts<Element> for Element {
     #[tracing::instrument(ret)]
     fn accepts(&self, l: Element) -> bool {
-        match (self, l) {
-            (x, y) if x == &y => true,
-            (Element::Token(_), Element::Question) => false,
-            (Element::Token(_), Element::Star) => false,
-            (Element::Question, Element::Token(_)) => true,
+        match (self, &l) {
+            (x, y) if x == y => true,
+            (Element::NotToken(_), Element::Question) | (Element::Token(_), Element::Question) => {
+                false
+            }
+            (Element::Question, Element::NotToken(_)) | (Element::Question, Element::Token(_)) => {
+                true
+            }
             (Element::Question, Element::Question) => true,
-            (Element::Question, Element::Star) => false,
-            (Element::Question, Element::NotToken(_)) => ,
-
-            (Element::Star, Element::Token(_)) => true,
-            (Element::Star, Element::Question) => true,
-            (Element::Star, Element::Star) => true,
-            (Element::Token(c), Element::NotTokenSeq(nc))
-            | (Element::NotToken(nc), Element::Token(c)) => {
-                c != nc
-            },
-            (Element::TokenSeq(a), Element::Token(b)) |
-            (Element::Token(b), Element::TokenSeq(a)) => {
+            (_, Element::Star) => false,
+            (Element::Star, _) => true,
+            (Element::Token(c), Element::NotToken(nc))
+            | (Element::NotToken(nc), Element::Token(c)) => c != nc,
+            (Element::TokenSeq(a), Element::Token(b))
+            | (Element::Token(b), Element::TokenSeq(a)) => {
                 if a.is_empty() || a.len() > 1 {
                     return false;
                 }
-                return a[0] == b;
-            },
-            (Element::TokenSeq(a), Element::NotToken(b)) |
-            (Element::NotToken(b), Element::TokenSeq(a)) => {
+                return a[0] == *b;
+            }
+            (Element::TokenSeq(a), Element::NotToken(b))
+            | (Element::NotToken(b), Element::TokenSeq(a)) => {
                 if a.is_empty() || a.len() > 1 {
                     return false;
                 }
-                return a[0] != b;
-            },
-
-            (Element::TokenSeq(a), Element::NotTokenSeq(b)) => false,
+                return a[0] != *b;
+            }
+            (Element::TokenSeq(_), Element::NotTokenSeq(_)) => false,
             (Element::NotTokenSeq(b), Element::TokenSeq(a)) => {
-                /// this should never happen
+                // this should never happen
                 debug_assert!(!b.is_empty());
                 debug_assert!(!a.is_empty());
                 return a != b;
             }
+            (Element::Question, Element::NotTokenSeq(n)) => {
+                return n.len() == 1;
+            }
+            (Element::NotTokenSeq(_), Element::Question) => false,
+            (Element::Question, Element::TokenSeq(n)) => {
+                return n.len() == 1;
+            }
+            (Element::TokenSeq(_), Element::Question) => false,
             // ¿![ab] accept ![a]?  : NO
             // ¿![a] accept ![ab]?  : Yes
 
@@ -82,7 +86,7 @@ impl Accepts<Element> for Element {
             //  !Tokens(ab) = [!a, b], [!a, !b], [a, !b]
 
             // TODO: not token needed here
-            // (_, _) => false,
+            (_, _) => false,
         }
     }
 }
@@ -95,6 +99,9 @@ impl Accepts<&char> for Element {
             Element::Question => true,
             Element::Star => true,
             Element::NotToken(c) => c != l,
+            Element::TokenSeq(n) if n.len() == 1 => n[0] == *l,
+            Element::NotTokenSeq(n) if n.len() == 1 => n[0] != *l,
+            _ => false,
         }
     }
 }
@@ -107,6 +114,8 @@ impl Accepts<char> for Element {
             Element::Question => true,
             Element::Star => true,
             Element::NotToken(c) => c != &l,
+            Element::TokenSeq(n) if n.len() == 1 => n[0] == l,
+            Element::NotTokenSeq(n) if n.len() == 1 => n[0] != l,
         }
     }
 }
@@ -172,6 +181,8 @@ impl Invertible for Vec<Element> {
                     }
                     parts.push(vec![Element::Token(c.clone())]);
                 }
+                Element::TokenSeq(_) => todo!(),
+                Element::NotTokenSeq(_) => todo!(),
             }
         }
         todo!();
@@ -198,15 +209,15 @@ impl BranchProduct<Element> for Element {
                 if c == n {
                     // mutually exclusive, add 2 paths, one for each side
                     vec![
-                        NfaBranch::new(*a, Drop, Advance),
-                        NfaBranch::new(*b, Advance, Drop),
+                        NfaBranch::new(a.clone(), Drop, Advance),
+                        NfaBranch::new(b.clone(), Advance, Drop),
                     ]
                 } else {
                     // L < R
                     // one edge for both advancing, one edge for only R advancing
                     vec![
-                        NfaBranch::new(*b, Drop, Advance),
-                        NfaBranch::new(*a, Advance, Advance),
+                        NfaBranch::new(b.clone(), Drop, Advance),
+                        NfaBranch::new(a.clone(), Advance, Advance),
                     ]
                 }
             }
@@ -214,13 +225,13 @@ impl BranchProduct<Element> for Element {
                 if c == n {
                     // mutually exclusive, add 2 paths, one for each side
                     vec![
-                        NfaBranch::new(*a, Drop, Advance),
-                        NfaBranch::new(*b, Advance, Drop),
+                        NfaBranch::new(a.clone(), Drop, Advance),
+                        NfaBranch::new(b.clone(), Advance, Drop),
                     ]
                 } else {
                     vec![
-                        NfaBranch::new(*a, Advance, Drop),
-                        NfaBranch::new(*b, Advance, Advance),
+                        NfaBranch::new(a.clone(), Advance, Drop),
+                        NfaBranch::new(b.clone(), Advance, Advance),
                     ]
                 }
             }
@@ -228,46 +239,30 @@ impl BranchProduct<Element> for Element {
             (NotToken(c1), NotToken(c2)) | (Token(c1), Token(c2)) => {
                 if c1 == c2 {
                     // advance both
-                    vec![NfaBranch::new(*a, Advance, Advance)]
+                    vec![NfaBranch::new(a.clone(), Advance, Advance)]
                 } else {
                     // disjoint
                     vec![
-                        NfaBranch::new(*a, Advance, Drop),
-                        NfaBranch::new(*b, Drop, Advance),
+                        NfaBranch::new(a.clone(), Advance, Drop),
+                        NfaBranch::new(b.clone(), Drop, Advance),
                     ]
                 }
             }
-            (Star, NotToken(_)) | (Star, Token(_)) => {
+            (Star, _) => {
                 // consume lr, consume left, or drop right...
                 vec![
                     NfaBranch::new(Star, Advance, Drop),
-                    NfaBranch::new(*b, Stay, Advance),
+                    NfaBranch::new(b.clone(), Stay, Advance),
                     // NfaBranch::new(*a, Stay, Advance), //?
-                    NfaBranch::new(*b, Advance, Advance),
+                    NfaBranch::new(b.clone(), Advance, Advance),
                 ]
             }
-            (Star, Question) => {
-                vec![
-                    NfaBranch::new(Star, Advance, Drop),
-                    NfaBranch::new(Question, Stay, Advance),
-                    NfaBranch::new(Question, Advance, Advance),
-                ]
-            }
-            (NotToken(_), Star) | (Token(_), Star) => {
+            (_, Star) => {
                 vec![
                     NfaBranch::new(Star, Drop, Advance),
-                    NfaBranch::new(*a, Advance, Stay),
+                    NfaBranch::new(a.clone(), Advance, Stay),
                     //NfaBranch::new(*b, Advance, Stay), // ?
-                    NfaBranch::new(*a, Advance, Advance),
-                ]
-            }
-            (Question, Star) => {
-                // The union path is ?
-                // the star path is * minus ?
-                vec![
-                    NfaBranch::new(Star, Drop, Advance),
-                    NfaBranch::new(Question, Advance, Stay),
-                    NfaBranch::new(Question, Advance, Advance),
+                    NfaBranch::new(a.clone(), Advance, Advance),
                 ]
             }
             (NotToken(_), Question) | (Token(_), Question) => {
@@ -277,14 +272,52 @@ impl BranchProduct<Element> for Element {
                 // branch for L+R and just R
                 vec![
                     NfaBranch::new(Question, Drop, Advance),
-                    NfaBranch::new(*a, Advance, Advance),
+                    NfaBranch::new(a.clone(), Advance, Advance),
                 ]
             }
             (Question, NotToken(_)) | (Question, Token(_)) => {
                 vec![
                     NfaBranch::new(Question, Advance, Drop),
-                    NfaBranch::new(*b, Advance, Advance),
+                    NfaBranch::new(b.clone(), Advance, Advance),
                 ]
+            }
+            (TokenSeq(n), Question) => {
+                vec![]
+            }
+            (TokenSeq(_), Token(_)) => {
+                vec![]
+            }
+            (TokenSeq(_), NotToken(_)) => {
+                vec![]
+            }
+            (TokenSeq(_), TokenSeq(_)) => {
+                vec![]
+            }
+            (TokenSeq(_), NotTokenSeq(_)) => {
+                vec![]
+            }
+            (NotTokenSeq(_), Question) => {
+                vec![]
+            }
+            (NotTokenSeq(_), Token(_)) => {
+                vec![]
+            }
+            (NotTokenSeq(_), NotToken(_)) => {
+                vec![]
+            }
+            (NotTokenSeq(_), TokenSeq(_)) => {
+                vec![]
+            }
+            (NotTokenSeq(n1), NotTokenSeq(n2)) => {
+                if n1 == n2 {
+                    vec![]
+                } else {
+                    // diverge
+                    vec![
+                        NfaBranch::new(b.clone(), Drop, Advance),
+                        NfaBranch::new(a.clone(), Advance, Drop),
+                    ]
+                }
             }
         }
     }
