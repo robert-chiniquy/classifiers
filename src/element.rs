@@ -5,6 +5,7 @@ pub enum Element {
     Token(char),
     Question,
     Star,
+    NotToken(char),
 }
 
 // TODO: Remove the dep on Default for this stuff
@@ -22,12 +23,14 @@ impl std::fmt::Display for Element {
                 Element::Token(c) => format!("'{c}'"),
                 Element::Question => "?".to_string(),
                 Element::Star => "*".to_string(),
+                Element::NotToken(c) => format!("'{c}'"),
             }
         ))
     }
 }
 
 impl Accepts<Element> for Element {
+    #[tracing::instrument(ret)]
     fn accepts(&self, l: Element) -> bool {
         match (self, l) {
             (x, y) if x == &y => true,
@@ -39,29 +42,32 @@ impl Accepts<Element> for Element {
             (Element::Star, Element::Token(_)) => true,
             (Element::Star, Element::Question) => true,
             (Element::Star, Element::Star) => true,
+            // TODO: not token needed here
             (_, _) => false,
         }
     }
 }
 
 impl Accepts<&char> for Element {
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, ret)]
     fn accepts(&self, l: &char) -> bool {
         match self {
             Element::Token(c) => c == l,
             Element::Question => true,
             Element::Star => true,
+            Element::NotToken(c) => c != l,
         }
     }
 }
 
 impl Accepts<char> for Element {
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, ret)]
     fn accepts(&self, l: char) -> bool {
         match self {
             Element::Token(c) => c == &l,
             Element::Question => true,
             Element::Star => true,
+            Element::NotToken(c) => c != &l,
         }
     }
 }
@@ -81,8 +87,39 @@ impl BranchProduct<Element> for Element {
                     NfaBranch::new(Star, Advance, Advance),
                 ]
             }
+            // todo case for not token plus token and vice versa
+            (Token(c), NotToken(n)) => {
+                if c == n {
+                    // mutually exclusive, add 2 paths, one for each side
+                    vec![
+                        NfaBranch::new(*a, Drop, Advance),
+                        NfaBranch::new(*b, Advance, Drop),
+                    ]
+                } else {
+                    // L < R
+                    // one edge for both advancing, one edge for only R advancing
+                    vec![
+                        NfaBranch::new(*b, Drop, Advance),
+                        NfaBranch::new(*a, Advance, Advance),
+                    ]
+                }
+            }
+            (NotToken(n), Token(c)) => {
+                if c == n {
+                    // mutually exclusive, add 2 paths, one for each side
+                    vec![
+                        NfaBranch::new(*a, Drop, Advance),
+                        NfaBranch::new(*b, Advance, Drop),
+                    ]
+                } else {
+                    vec![
+                        NfaBranch::new(*a, Advance, Drop),
+                        NfaBranch::new(*b, Advance, Advance),
+                    ]
+                }
+            }
             (Question, Question) => vec![NfaBranch::new(Question, Advance, Advance)],
-            (Token(c1), Token(c2)) => {
+            (NotToken(c1), NotToken(c2)) | (Token(c1), Token(c2)) => {
                 if c1 == c2 {
                     // advance both
                     vec![NfaBranch::new(*a, Advance, Advance)]
@@ -94,11 +131,12 @@ impl BranchProduct<Element> for Element {
                     ]
                 }
             }
-            (Star, Token(_)) => {
+            (Star, NotToken(_)) | (Star, Token(_)) => {
                 // consume lr, consume left, or drop right...
                 vec![
                     NfaBranch::new(Star, Advance, Drop),
                     NfaBranch::new(*b, Stay, Advance),
+                    // NfaBranch::new(*a, Stay, Advance), //?
                     NfaBranch::new(*b, Advance, Advance),
                 ]
             }
@@ -109,10 +147,11 @@ impl BranchProduct<Element> for Element {
                     NfaBranch::new(Question, Advance, Advance),
                 ]
             }
-            (Token(_), Star) => {
+            (NotToken(_), Star) | (Token(_), Star) => {
                 vec![
                     NfaBranch::new(Star, Drop, Advance),
                     NfaBranch::new(*a, Advance, Stay),
+                    //NfaBranch::new(*b, Advance, Stay), // ?
                     NfaBranch::new(*a, Advance, Advance),
                 ]
             }
@@ -125,14 +164,17 @@ impl BranchProduct<Element> for Element {
                     NfaBranch::new(Question, Advance, Advance),
                 ]
             }
-            (Token(_), Question) => {
+            (NotToken(_), Question) | (Token(_), Question) => {
+                // TODO: Optimization: Token(c) and ? optimizes to Token(c) and NotToken(c)
+                // ? > t
+                // L < R
+                // branch for L+R and just R
                 vec![
                     NfaBranch::new(Question, Drop, Advance),
                     NfaBranch::new(*a, Advance, Advance),
                 ]
             }
-
-            (Question, Token(_)) => {
+            (Question, NotToken(_)) | (Question, Token(_)) => {
                 vec![
                     NfaBranch::new(Question, Advance, Drop),
                     NfaBranch::new(*b, Advance, Advance),
@@ -186,7 +228,7 @@ impl From<&char> for Element {
         match c {
             '*' => Element::Star,
             '?' => Element::Question,
-            c => Element::Token(c.clone()),
+            c => Element::Token(*c),
         }
     }
 }

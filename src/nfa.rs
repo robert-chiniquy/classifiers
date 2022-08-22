@@ -92,7 +92,7 @@ where
     E: Eq + Clone + std::hash::Hash + Default + std::fmt::Debug,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
-    // This should not require L to be a language, merely an iterator over items which can be turned into E
+    #[tracing::instrument(skip_all)]
     pub fn from_language<C>(l: Vec<C>, m: M) -> Self
     where
         C: Into<E> + std::fmt::Debug,
@@ -110,6 +110,7 @@ where
         nfa
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn from_symbols(l: &Vec<E>, m: M) -> Self {
         let mut nfa: Self = Default::default();
         let mut prior = nfa.add_node(NfaNode::new([Terminal::Not].into()));
@@ -123,19 +124,18 @@ where
         nfa
     }
 
+    #[tracing::instrument(skip(self), ret)]
     pub fn accepts<C>(&self, path: &Vec<C>) -> bool
     where
         E: nfa::Accepts<C>,
         C: Into<E> + Clone + std::fmt::Debug,
     {
-        self.terminal_on(path, &|t| match t {
-            LRSemantics::L | LRSemantics::R | LRSemantics::LR => true,
-            LRSemantics::None => false,
-        })
+        self.terminal_on(path, &|_| true)
     }
 
     /// TODO: Returning early rather than collecting all terminal states within the closure of the
     /// input is incorrect. This should be changed to visit all possible nodes.
+    #[tracing::instrument(skip(filter, self), ret)]
     pub fn terminal_on<C>(
         &self,
         single_path: &Vec<C>,
@@ -165,22 +165,41 @@ where
                     }
                     // Could just push these results onto a return stack instead
                     // just collect all terminal states period and return them instead of a bool
+                    // TODO: remove use of Default here
                     None => {
-                        if self
-                            .node(i)
-                            .state
-                            .contains(&Terminal::Reject(Default::default()))
-                        {
+                        // todo: clarify, maybe accepting should not check for rejection
+                        if self.node_rejecting(i) {
                             return false;
-                        } else if self
-                            .node(i)
-                            .state
-                            .contains(&Terminal::Accept(Default::default()))
-                        {
+                        } else if self.node_accepting(i) {
                             return filter(&self.node(i).chirality);
                         }
                     }
                 }
+            }
+        }
+        false
+    }
+
+    #[tracing::instrument(skip(self), ret)]
+    pub fn node_accepting(&self, i: NfaIndex) -> bool {
+        for s in &self.node(i).state {
+            if matches!(s, Terminal::Reject(_)) {
+                return false;
+            }
+        }
+        for s in &self.node(i).state {
+            if matches!(s, Terminal::Accept(_)) {
+                return true;
+            }
+        }
+        false
+    }
+
+    #[tracing::instrument(skip(self), ret)]
+    pub fn node_rejecting(&self, i: NfaIndex) -> bool {
+        for s in &self.node(i).state {
+            if matches!(s, Terminal::Reject(_)) {
+                return true;
             }
         }
         false
@@ -208,7 +227,7 @@ impl<E: Clone> NfaBranch<E> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 // ? 6 fields, 1 for accepting and 1 for rejecting ?
 // 1. need to visit all states and not return early
 // 2. .... assume heterogenous NFAs
@@ -233,9 +252,10 @@ where
         // For DFAs this is the cross-product
         let mut a = self.clone();
         a.set_chirality(LRSemantics::L);
-        let mut b = self.clone();
+        let mut b = other.clone();
         b.set_chirality(LRSemantics::R);
-        let union = self.union(other);
+        let union = a.union(&b);
+        println!("XXX\n{a:?}\n{b:?}\n{union:?}");
         // FIXME accepting_paths is illogical, this must respect all terminal states
         // ... .terminal_paths() -> Paths (where Paths additionally stores terminal state and/or M)
         let paths = union.accepting_paths();
@@ -252,6 +272,8 @@ where
         )
     }
 
+    // TODO: remove use of Default
+    #[tracing::instrument(skip_all, ret)]
     pub(crate) fn accepting_paths(&self) -> Paths<E>
     where
         E: Accepts<E>,
@@ -270,17 +292,21 @@ where
             // and push the edge target on the stack with the new path
 
             // if the current node is an accepting state, push the path onto Paths based on the chirality
-            match self.node(current_node).chirality {
-                LRSemantics::L => {
-                    paths.l.insert(current_path.clone());
+            if self.node_accepting(current_node) {
+                match self.node(current_node).chirality {
+                    LRSemantics::L => {
+                        paths.l.insert(current_path.clone());
+                    }
+                    LRSemantics::R => {
+                        paths.r.insert(current_path.clone());
+                    }
+                    LRSemantics::LR => {
+                        paths.lr.insert(current_path.clone());
+                    }
+                    LRSemantics::None => {
+                        println!("🏡🏡🏡🏡🏡🏡🏡🏡🏡🏡");
+                    }
                 }
-                LRSemantics::R => {
-                    paths.r.insert(current_path.clone());
-                }
-                LRSemantics::LR => {
-                    paths.lr.insert(current_path.clone());
-                }
-                LRSemantics::None => {}
             }
 
             if let Some(edges) = self.edges_from(current_node) {
@@ -325,10 +351,30 @@ where
         paths
     }
 
+    #[tracing::instrument]
     pub(crate) fn set_chirality(&mut self, c: LRSemantics) {
         self.nodes.iter_mut().for_each(|(_, mut n)| {
             n.chirality = c.clone();
         })
+    }
+}
+
+impl<M, E> Nfa<NfaNode<M>, E>
+where
+    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
+    E: std::fmt::Debug + Clone + Eq + std::hash::Hash + std::default::Default,
+{
+    #[tracing::instrument]
+    pub fn negate(&self) -> Self {
+        // a NotToken here would need to flip edges as well
+        // TODO: negate edges too
+        let mut nfa: Nfa<NfaNode<M>, E> = self.clone();
+        nfa.nodes = nfa
+            .nodes
+            .into_iter()
+            .map(|(i, n)| (i, n.negate()))
+            .collect();
+        nfa
     }
 }
 
@@ -341,7 +387,7 @@ where
     /// either of the two input NFAs.
     // Whatever invariant is enforced here, assume that the inputs have that invariant
     // Blindly copying states here allows M to vary widely
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip(self, other))]
     pub fn union(&self, other: &Self) -> Self {
         if self.entry.is_empty() {
             return other.clone();
@@ -360,14 +406,36 @@ where
                 stack.push((self_id, other_id, _entry));
             }
         }
+        // start
+        // stack: first left, first right, target, ignore target
+        // evaluate edges, each of the two nodes has 1 edge, you see like a * A product,
+        // next ... for each combo of edges, you get a vector
+        // for each branch in the vector, you should push onto the stack again,
+        // so if we're missing a value,
         while let Some((self_id, other_id, working_union_node_id)) = stack.pop() {
+            println!("{stack:?}");
+            if *self_id == 1 as usize
+                && *other_id == (2 as usize)
+                && working_union_node_id == (6 as usize)
+            {
+                println!("*((**(");
+                // panic!();
+            }
             let self_edges = self.edges_from(*self_id);
             let other_edges = other.edges_from(*other_id);
-            if self_edges == None && other_edges == None {
-                return union;
-            } else if self_edges == None {
+            if (self_edges == None && other_edges == None)
+                || (self_edges.is_some()
+                    && other_edges.is_some()
+                    && self_edges.as_ref().unwrap().is_empty()
+                    && other_edges.as_ref().unwrap().is_empty())
+            {
+                // early return :(
+                //                return union;
+                //union
+                ()
+            } else if self_edges == None || self_edges.as_ref().unwrap().is_empty() {
                 union.copy_subtree(&working_union_node_id, other, other_id);
-            } else if other_edges == None {
+            } else if other_edges == None || other_edges.as_ref().unwrap().is_empty() {
                 union.copy_subtree(&working_union_node_id, self, self_id);
             } else {
                 for (self_target_node_id, self_edge_id) in self.edges_from(*self_id).unwrap() {
@@ -390,14 +458,28 @@ where
                             };
                             let new_node = match (left_node_id, right_node_id) {
                                 (None, None) => unreachable!(),
-                                (None, Some(right_node_id)) => other.node(*right_node_id).clone(),
-                                (Some(left_node_id), None) => self.node(*left_node_id).clone(),
+                                (None, Some(right_node_id)) => {
+                                    // println!("🎧🎧🎧🎧{:?}", other.node(*right_node_id));
+                                    other.node(*right_node_id).clone()
+                                }
+                                (Some(left_node_id), None) => {
+                                    // println!("✈️✈️✈️✈️✈️✈️✈️✈️✈️{:?}", self.node(*left_node_id));
+                                    self.node(*left_node_id).clone()
+                                }
                                 (Some(left_node_id), Some(right_node_id)) => {
                                     self.node(*left_node_id).sum(other.node(*right_node_id))
                                 }
                             };
-                            let next_working_node_id =
-                                union.branch(&working_union_node_id, kind, new_node);
+                            // println!("🐥🐥🐥🐥🐥{new_node:?}");
+                            let next_working_node_id = union.branch(
+                                &working_union_node_id,
+                                kind.clone(),
+                                new_node.clone(),
+                            );
+
+                            if left == EdgeTransition::Stay && right == EdgeTransition::Advance {
+                                println!("🚗🚗🚗🚗{kind:?} {left_node_id:?} {right_node_id:?} {new_node:?} {next_working_node_id}");
+                            }
 
                             // if one side is dropped, the other side just copies in from there
                             // either create a branch and recur to construct the union from that point
@@ -413,6 +495,10 @@ where
                                     union.copy_subtree(&next_working_node_id, self, left_node_id)
                                 }
                                 (Some(left_node_id), Some(right_node_id)) => {
+                                    println!(
+                                        "XOXOXOXO {:?}",
+                                        (left_node_id, right_node_id, next_working_node_id)
+                                    );
                                     stack.push((left_node_id, right_node_id, next_working_node_id))
                                 }
                             }
@@ -430,6 +516,7 @@ where
     ///
     /// returns the index of the new node if an edge is created, or the pre-existing node
     /// which was rationalized to if not.
+    #[tracing::instrument]
     fn branch(&mut self, working_node_id: &NfaIndex, kind: E, new_node: N) -> NfaIndex {
         // rationalization: there should only be 1 branch of a given kind from a given node
         //
@@ -447,6 +534,8 @@ where
             }
             None => {
                 // new node
+                // caller must pass in node of correct chirality, usually this will
+                // be from NfaNode.sum()
                 let new_node = self.add_node(new_node);
                 let _edge = self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node);
                 new_node
@@ -455,7 +544,7 @@ where
     }
 
     // there is no convergence yet but this is convergence-safe
-    #[tracing::instrument(skip(source))]
+    #[tracing::instrument]
     pub(crate) fn copy_subtree(
         &mut self,
         copy_target_node: &NfaIndex,
@@ -522,19 +611,38 @@ where
     }
 }
 
+#[test]
+fn test_nodesum() {
+    crate::tests::setup();
+    let c = Classifier::literal("P");
+    let mut d1: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
+    d1.set_chirality(LRSemantics::L);
+
+    let c = Classifier::literal("Q");
+    let mut d2: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
+    d2.set_chirality(LRSemantics::R);
+
+    let n1 = d1.node(1);
+    let n2 = d2.node(1);
+    let n3 = n1.sum(n2);
+    assert_eq!(n3.chirality, LRSemantics::LR);
+}
+
 impl<M> NodeSum for NfaNode<M>
 where
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + Default,
 {
+    #[tracing::instrument(skip(self, other), ret)]
     fn sum(&self, other: &Self) -> Self {
         NfaNode {
             state: self.state.union(&other.state).cloned().collect(),
             chirality: self.chirality.sum(&other.chirality),
         }
     }
-
+    #[tracing::instrument(skip(self, other))]
     fn sum_mut(&mut self, other: &Self) {
         self.state = self.state.union(&other.state).cloned().collect();
+        self.chirality = self.chirality.sum(&other.chirality);
     }
 }
 
@@ -543,7 +651,7 @@ where
     M: std::fmt::Debug + Clone + Default,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{:?}", &self.state))
+        f.write_fmt(format_args!("{:?} {:?}", &self.state, &self.chirality))
     }
 }
 
@@ -577,9 +685,10 @@ where
 
 impl<L, E> Accepts<L> for NfaEdge<E>
 where
-    E: Accepts<L> + Eq,
+    E: Accepts<L> + Eq + std::fmt::Debug,
+    L: std::fmt::Debug,
 {
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(ret)]
     fn accepts(&self, l: L) -> bool {
         self.criteria.accepts(l)
     }
@@ -648,25 +757,6 @@ where
             edges: Default::default(),
             transitions: Default::default(),
         }
-    }
-}
-
-impl<M, E> Nfa<NfaNode<M>, E>
-where
-    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
-    E: std::fmt::Debug + Clone + Eq + std::hash::Hash + std::default::Default,
-{
-    #[tracing::instrument]
-    pub fn negate(&self) -> Self {
-        // a NotToken here would need to flip edges as well
-
-        let mut nfa: Nfa<NfaNode<M>, E> = self.clone();
-        nfa.nodes = nfa
-            .nodes
-            .into_iter()
-            .map(|(i, n)| (i, n.negate()))
-            .collect();
-        nfa
     }
 }
 
@@ -742,7 +832,7 @@ where
     ///
     /// source node index -> (target node index, edge index)
     #[inline]
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, ret)]
     pub fn edges_from(&self, i: NfaIndex) -> Option<&Vec<(NfaIndex, NfaIndex)>> {
         self.transitions.get(&i)
     }

@@ -73,12 +73,18 @@ where
     }
 }
 
+impl Classifier<Vec<char>> {
+    pub fn literal(s: &str) -> Self {
+        Classifier::Literal(str_to_chars(s))
+    }
+}
+
 impl<L> Classifier<L>
 where
     L: std::fmt::Debug + std::hash::Hash + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
     #[tracing::instrument(skip_all)]
-    pub fn compile<E, M, C>(c: &Self, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>
+    pub fn compile<E, M, C>(&self, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>
     where
         E: std::fmt::Debug
             + Clone
@@ -93,7 +99,7 @@ where
         L: IntoIterator<Item = C>,
         M: std::fmt::Debug + Clone + PartialOrd + Ord + Default,
     {
-        match c {
+        match self {
             Classifier::Universal => Nfa::universal(m),
             Classifier::Literal(l) => {
                 let arg = l.clone().into_iter().collect();
@@ -145,12 +151,13 @@ impl Default for LRSemantics {
 }
 
 impl LRSemantics {
+    #[tracing::instrument(ret)]
     pub(crate) fn sum(&self, other: &LRSemantics) -> LRSemantics {
         match (self, other) {
             (x, y) if x == y => x.clone(),
-            (x, LRSemantics::None) | (LRSemantics::None, x) => x.clone(),
-            (x, LRSemantics::LR) | (LRSemantics::LR, x) => LRSemantics::LR,
+            (_x, LRSemantics::LR) | (LRSemantics::LR, _x) => LRSemantics::LR,
             (LRSemantics::R, LRSemantics::L) | (LRSemantics::L, LRSemantics::R) => LRSemantics::LR,
+            (x, LRSemantics::None) | (LRSemantics::None, x) => x.clone(),
             (_, _) => unreachable!(),
         }
     }

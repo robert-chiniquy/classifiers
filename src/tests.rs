@@ -179,16 +179,59 @@ fn test_negate() {
     // the set of P
     // - accepts P
     // - rejects not P
-    // let cp = Classifier::Literal("P");
-    // let dp: Nfa<NfaNode<()>, NfaEdge<Element>> = cp.compile(());
-    // assert!(dp.accepts("P"));
+    let cp = Classifier::literal("P");
+    let dp: Nfa<NfaNode<()>, NfaEdge<Element>> = cp.compile(());
 
+    assert!(dp.accepts_string("P"));
+}
+#[test]
+fn test_negate2() {
+    setup();
     // // the set of all things excluding P
     // // - accepts not P
     // // - rejects P
-    // let c = Classifier::not(Classifier::Literal("P"));
-    // let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
-    // assert!(!d.accepts("P"));
+    let c = Classifier::not(Classifier::literal("P"));
+    let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
+    assert!(!d.accepts_string("P"));
+}
+
+#[test]
+fn test_negate3() {
+    setup();
+
+    let astar = Classifier::Literal(str_to_chars("A*"));
+    let stara = Classifier::Literal(str_to_chars("*b"));
+    let c = Classifier::And(BTreeSet::from_iter([astar.clone(), stara.clone()]));
+
+    let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
+
+    // write_graph(d.graphviz(), "negate3.dot");
+
+    let mut b = Classifier::compile::<Element, (), char>(&astar, ());
+    let mut a = stara.compile(());
+    a.set_chirality(LRSemantics::L);
+    b.set_chirality(LRSemantics::R);
+    let union = a.union(&b);
+
+    write_graph(union.graphviz(), "union-negate3.dot");
+
+    assert!(d.accepts_string("AAA"));
+    // assert!(false);
+}
+
+#[test]
+fn test_negate4() {
+    setup();
+    let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
+        Classifier::Literal(str_to_chars("A*")),
+        Classifier::Literal(str_to_chars("*A")),
+    ])));
+
+    let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
+
+    // write_graph(d.graphviz(), "negate1.dot");
+
+    assert!(!d.accepts_string("AA"));
 }
 
 pub fn test_setup() {
@@ -200,7 +243,7 @@ static TEST_SETUP: once_cell::sync::Lazy<bool> = once_cell::sync::Lazy::new(|| {
     true
 });
 
-fn setup() {
+pub fn setup() {
     let subscriber = tracing_subscriber::fmt()
         .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
         .finish();
