@@ -188,6 +188,20 @@ impl Invertible for Vec<Element> {
         todo!();
     }
 }
+fn diverge(a: &Element, b: &Element) -> Vec<NfaBranch<Element>> {
+    use EdgeTransition::*;
+    vec![
+        NfaBranch::new(a.clone(), Advance, Drop),
+        NfaBranch::new(b.clone(), Drop, Advance),
+    ]
+}
+
+fn converge(a: &Element) -> Vec<NfaBranch<Element>> {
+    use EdgeTransition::*;
+    vec![
+        NfaBranch::new(a.clone(), Advance, Advance),
+    ]
+}
 
 impl BranchProduct<Element> for Element {
     #[tracing::instrument(ret)]
@@ -310,13 +324,9 @@ impl BranchProduct<Element> for Element {
             }
             (NotTokenSeq(n1), NotTokenSeq(n2)) => {
                 if n1 == n2 {
-                    vec![]
+                    converge(a)
                 } else {
-                    // diverge
-                    vec![
-                        NfaBranch::new(b.clone(), Drop, Advance),
-                        NfaBranch::new(a.clone(), Advance, Drop),
-                    ]
+                    diverge(a, b)
                 }
             }
         }
