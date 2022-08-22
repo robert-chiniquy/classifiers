@@ -36,8 +36,11 @@ pub trait BranchProduct<E> {
 }
 
 // This should be implemented on a path of E
-pub trait Invertible {
-    fn inverse(&self) -> Self;
+pub trait Invertible
+where Self: Sized
+{
+
+    fn inverse(&self) -> HashSet<Self>;
 }
 
 // / This is the default impl of build_nfa for any type where this works

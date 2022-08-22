@@ -1,11 +1,14 @@
 use super::*;
+use std::{collections::HashSet, default};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Element {
     Token(char),
+    TokenSeq(Vec<char>),
     Question,
     Star,
     NotToken(char),
+    NotTokenSeq(Vec<char>),
 }
 
 // TODO: Remove the dep on Default for this stuff
@@ -23,7 +26,9 @@ impl std::fmt::Display for Element {
                 Element::Token(c) => format!("'{c}'"),
                 Element::Question => "?".to_string(),
                 Element::Star => "*".to_string(),
-                Element::NotToken(c) => format!("'{c}'"),
+                Element::NotTokenSeq(c) => format!("'!{c}'"),
+                Element::TokenSeq(c) => format!("'{c:?}'"),
+                Element::NotSe(c) => format!("'!{c:?}'"),
             }
         ))
     }
@@ -39,11 +44,45 @@ impl Accepts<Element> for Element {
             (Element::Question, Element::Token(_)) => true,
             (Element::Question, Element::Question) => true,
             (Element::Question, Element::Star) => false,
+            (Element::Question, Element::NotToken(_)) => ,
+
             (Element::Star, Element::Token(_)) => true,
             (Element::Star, Element::Question) => true,
             (Element::Star, Element::Star) => true,
+            (Element::Token(c), Element::NotTokenSeq(nc))
+            | (Element::NotToken(nc), Element::Token(c)) => {
+                c != nc
+            },
+            (Element::TokenSeq(a), Element::Token(b)) |
+            (Element::Token(b), Element::TokenSeq(a)) => {
+                if a.is_empty() || a.len() > 1 {
+                    return false;
+                }
+                return a[0] == b;
+            },
+            (Element::TokenSeq(a), Element::NotToken(b)) |
+            (Element::NotToken(b), Element::TokenSeq(a)) => {
+                if a.is_empty() || a.len() > 1 {
+                    return false;
+                }
+                return a[0] != b;
+            },
+
+            (Element::TokenSeq(a), Element::NotTokenSeq(b)) => false,
+            (Element::NotTokenSeq(b), Element::TokenSeq(a)) => {
+                /// this should never happen
+                debug_assert!(!b.is_empty());
+                debug_assert!(!a.is_empty());
+                return a != b;
+            }
+            // ¿![ab] accept ![a]?  : NO
+            // ¿![a] accept ![ab]?  : Yes
+
+            //  !ab = Any([!a, ?], [?, !b], [?], [***])
+            //  !Tokens(ab) = [!a, b], [!a, !b], [a, !b]
+
             // TODO: not token needed here
-            (_, _) => false,
+            // (_, _) => false,
         }
     }
 }
@@ -72,8 +111,71 @@ impl Accepts<char> for Element {
     }
 }
 
+#[test]
+fn blah() {
+    let sources = vec![("a", ["!a", "**"])];
+    for (s, v) in sources {
+        let p = path_from_str(s);
+        let expected_paths: HashSet<_> = v.into_iter().map(path_from_str).collect();
+        assert_eq!(p.inverse(), expected_paths);
+    }
+}
+
+fn path_from_str(s: &str) -> Vec<Element> {
+    let mut negate_next = false;
+    let mut v: Vec<_> = Default::default();
+    for c in s.chars() {
+        if c == '!' {
+            negate_next = true;
+            continue;
+        }
+        let mut e = c.into();
+        if negate_next {
+            e = Element::NotToken(c);
+            negate_next = false;
+        }
+        v.push(e);
+    }
+    v
+}
+
 impl Invertible for Vec<Element> {
-    fn inverse(&self) -> Self {}
+    fn inverse(&self) -> HashSet<Self> {
+        // ab -> [a, b] -> [!a, ?], [?, !b] + [?], [***] OR [!ab], [?], [***]
+        // a*b -> [a, *, b]
+        // a**b -> [a, **, b]
+        // a?*b -> [a, ?*, b]
+        // a?b -> [a, ?, b]
+        // !a -> [a]
+
+        // [!a, ?], [?, !b], [?], [*, *, *]
+        let mut parts: Vec<Vec<_>> = Default::default();
+        let mut buf: Vec<_> = vec![];
+
+        for c in self {
+            match c {
+                Element::Token(c) => {
+                    if buf.len() > 0 {
+                        parts.push(buf.clone());
+                        buf.truncate(0);
+                    }
+                    parts.push(vec![Element::NotToken(c.clone())]);
+                }
+                Element::Star | Element::Question => {
+                    buf.push(c.clone());
+                }
+
+                Element::NotToken(c) => {
+                    if buf.len() > 0 {
+                        parts.push(buf.clone());
+                        buf.truncate(0);
+                    }
+                    parts.push(vec![Element::Token(c.clone())]);
+                }
+            }
+        }
+        todo!();
+    }
 }
 
 impl BranchProduct<Element> for Element {
