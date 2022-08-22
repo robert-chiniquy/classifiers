@@ -85,6 +85,7 @@ where
     /// source node index -> Vec<(target node index, edge index)>
     // TODO: just split into 2 maps
     pub(crate) transitions: BTreeMap<NfaIndex, Vec<(NfaIndex, NfaIndex)>>,
+    pub(crate) chirality: BTreeMap<NfaIndex, LRSemantics>,
 }
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
@@ -583,6 +584,7 @@ where
     pub(crate) chirality: LRSemantics,
 }
 
+// TODO: Consider chirality
 impl<M> NfaNode<M>
 where
     M: std::fmt::Debug + Clone + Default,
@@ -756,6 +758,7 @@ where
             nodes: Default::default(),
             edges: Default::default(),
             transitions: Default::default(),
+            chirality: Default::default(),
         }
     }
 }
