@@ -1,5 +1,5 @@
 use super::*;
-use std::{collections::HashSet};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Element {
@@ -150,55 +150,53 @@ fn path_from_str(s: &str) -> Vec<Element> {
     v
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Elementals {
+    Tokens(Vec<char>),
+    NotTokens(Vec<char>),
+    Questions(usize),
+    Globulars(usize),
+}
+
 impl Invertible for Vec<Element> {
     fn inverse(&self) -> HashSet<Self> {
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        pub enum Elementals {
-            Tokens(Vec<char>),
-            NotTokens(Vec<char>),
-            Questions(usize),
-            Globulars(usize),
-        }
-
         use Elementals::*;
 
         let mut parts: Vec<Elementals> = Default::default();
         let mut buf: Elementals = Tokens(Default::default());
 
-        for (i, e) in self.iter().cloned().enumerate() {
+        for e in self.iter() {
             match e {
                 Element::Token(t) => {
                     if let Tokens(ref mut v) = buf {
-                        v.push(t.clone());
+                        v.push(*t);
                         continue;
                     }
                     parts.push(buf.clone());
-                    buf = Tokens(vec![t]);
-                },
+                    buf = Tokens(vec![*t]);
+                }
                 Element::Star => {
                     if let Globulars(ref mut n) = buf {
-                        *n = (*n) + 1_usize;
+                        *n += 1;
                         continue;
                     }
 
                     if let Questions(n) = buf {
-                        buf = Globulars(n);
+                        buf = Globulars(n + 1);
                         continue;
                     }
                     // do look ahead...
                     parts.push(buf.clone());
                     buf = Globulars(1);
-                },
-                Element::Question => {
-                    match buf {
-                        Questions(ref mut n) | Globulars(ref mut n) => {
-                            *n = (*n) + 1_usize;
-                            continue;
-                        },
-                        _ => {
-                            parts.push(buf.clone());
-                            buf = Questions(1);
-                        }
+                }
+                Element::Question => match buf {
+                    Questions(ref mut n) | Globulars(ref mut n) => {
+                        *n += 1;
+                        continue;
+                    }
+                    _ => {
+                        parts.push(buf.clone());
+                        buf = Questions(1);
                     }
                 },
                 Element::TokenSeq(a) => {
@@ -206,19 +204,19 @@ impl Invertible for Vec<Element> {
                         b.extend(a.clone());
                         continue;
                     }
-                        // do look ahead...
-                        // ...
+                    // do look ahead...
+                    // ...
                     parts.push(buf.clone());
                     buf = Tokens(a.clone());
-                },
+                }
                 Element::NotToken(a) => {
                     if let NotTokens(ref mut b) = buf {
-                        b.push(a.clone());
+                        b.push(*a);
                         continue;
                     }
                     parts.push(buf.clone());
-                    buf = NotTokens(vec![a.clone()]);
-                },
+                    buf = NotTokens(vec![*a]);
+                }
                 Element::NotTokenSeq(a) => {
                     if let NotTokens(ref mut b) = buf {
                         b.extend(a.clone());
@@ -226,80 +224,65 @@ impl Invertible for Vec<Element> {
                     }
                     parts.push(buf.clone());
                     buf = NotTokens(a.clone());
-                },
+                }
             }
         }
 
         parts.push(buf.clone());
 
-        fn flip(v: Vec<Element>) -> Vec<Vec<Element>> {
-            if matches!(v[0], Element::Token(_)) {
-                if v.len() == 1 {
-                    if let Element::Token(e) = v[0] {
-                        return vec![vec![Element::NotToken(e)]];
-                    } else {
-                        panic!();
-                    }
-                }
-                return vec![vec![Element::NotTokenSeq(
-                    v.clone().iter().flat_map(|e| {
-                        if let Element::Token(e) = e {
-                            Ok(e)
-                        } else {
-                            Err(())
-                        }}).cloned().collect())]];
+        let mut new_parts = vec![];
+        let mut skip = 0;
+        enum Mode {
+            Start,
+            PartOfGlobSeq,
+        }
+        let mut mode = Mode::Start;
+        let mut working_glob = Elementals::Globulars(0);
+        for (i, part) in parts.iter().enumerate() {
+            if i < skip {
+                continue;
             }
-            
-            if matches!(v[0], Element::Question) {
-                if v.len() == 1 {
-                    return vec![vec![Element::Star, Element::Star]];
-                }
-                //  ?** -> ??, ?
-                let len = v.len();
-                if v.into_iter().any(|e| matches!(e, Element::Star)) {
-                    let mut r: Vec<_> = Default::default();
-                    for i in 1..len-1 {
-                        r.push(vec![Element::Question; i]);
-                    }
-                    return r;
-                }
-                // ?? -> ***
-                return vec![vec![Element::Star; len + 1]];
-            }
+            match part {
+                Tokens(_) => new_parts.push(part),
+                NotTokens(_) => new_parts.push(part),
+                Questions(q) => match mode {
+                    Mode::Start => {
+                        /*
+                        let mut j = i + 1;
+                        let mut working_question = 0;
+                        while let Some(part) = parts.get(j) {
+                            match part {
+                                Questions(n) => working_question += n,
+                                Globulars(n) => {
+                                    if let Globulars(ref mut n) = working_glob {
+                                        *n += q;
+                                        *n += working_question;
+                                        working_question = 0;
+                                    }
+                                }
+                                _ => {
 
-            if matches!(v[0], Element::Star) {
-                if v.len() == 1 {
-                    return Default::default();
-                }
-                //  *?* -> ??, ?
-                let mut r: Vec<_> = Default::default();
-                for i in 1..v.len()-1 {
-                    r.push(vec![Element::Question; i]);
-                }
-                return r;
-            }
-
-            if matches!(v[0], Element::NotToken(_)) {
-                if v.len() == 1 {
-                    if let Element::NotToken(e) = v[0] {
-                        return vec![vec![Element::Token(e)]];
-                    } else {
-                        panic!();
+                                skip = j;
+                                break;
+                            }
+                            }
+                            j += 1;
+                        }
+                        */
                     }
-                }
-                return vec![
-                    vec![Element::TokenSeq(
-                        v.clone().iter().flat_map(|e| {
-                            if let Element::NotToken(e) = e {
-                                Ok(e)
-                            } else {
-                                Err(())
-                            }}).cloned().collect())]];
+                    Mode::PartOfGlobSeq => {
+                        if let Globulars(ref mut n) = working_glob {
+                            *n += q;
+                        }
+                    }
+                },
+                Globulars(_) => todo!(),
             }
-            // unreachable!
-            unreachable!();
         }
 
+        // concatenate adjacent parts where correct to
+
+        // generate combinations of inverses
         // for &p1 in parts {
         //     for &p2 in parts {
 
@@ -319,6 +302,83 @@ impl Invertible for Vec<Element> {
         // [!a, ?], [?, !b], [?], [*, *, *]
         todo!()
     }
+}
+
+fn flip(v: Vec<Element>) -> Vec<Vec<Element>> {
+    if matches!(v[0], Element::Token(_)) {
+        if v.len() == 1 {
+            if let Element::Token(e) = v[0] {
+                return vec![vec![Element::NotToken(e)]];
+            } else {
+                panic!();
+            }
+        }
+        return vec![vec![Element::NotTokenSeq(
+            v.iter()
+                .flat_map(|e| {
+                    if let Element::Token(e) = e {
+                        Ok(e)
+                    } else {
+                        Err(())
+                    }
+                })
+                .cloned()
+                .collect(),
+        )]];
+    }
+
+    if matches!(v[0], Element::Question) {
+        if v.len() == 1 {
+            return vec![vec![Element::Star, Element::Star]];
+        }
+        //  ?** -> ??, ?
+        let len = v.len();
+        if v.into_iter().any(|e| matches!(e, Element::Star)) {
+            let mut r: Vec<_> = Default::default();
+            for i in 1..len - 1 {
+                r.push(vec![Element::Question; i]);
+            }
+            return r;
+        }
+        // ?? -> ***
+        return vec![vec![Element::Star; len + 1]];
+    }
+
+    if matches!(v[0], Element::Star) {
+        if v.len() == 1 {
+            return Default::default();
+        }
+        //  *?* -> ??, ?
+        let mut r: Vec<_> = Default::default();
+        for i in 1..v.len() - 1 {
+            r.push(vec![Element::Question; i]);
+        }
+        return r;
+    }
+
+    if matches!(v[0], Element::NotToken(_)) {
+        if v.len() == 1 {
+            if let Element::NotToken(e) = v[0] {
+                return vec![vec![Element::Token(e)]];
+            } else {
+                panic!();
+            }
+        }
+        return vec![vec![Element::TokenSeq(
+            v.iter()
+                .flat_map(|e| {
+                    if let Element::NotToken(e) = e {
+                        Ok(e)
+                    } else {
+                        Err(())
+                    }
+                })
+                .cloned()
+                .collect(),
+        )]];
+    }
+    // unreachable!
+    unreachable!();
 }
 
 fn diverge(a: &Element, b: &Element) -> Vec<NfaBranch<Element>> {
