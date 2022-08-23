@@ -150,14 +150,148 @@ fn path_from_str(s: &str) -> Vec<Element> {
     v
 }
 
-
 impl Invertible for Vec<Element> {
     fn inverse(&self) -> HashSet<Self> {
-        enum BufType{
+        #[derive(Eq, PartialEq)]
+        enum BufType {
             Tokens,
             Globs,
             NotTokens,
         }
+        let mut parts: Vec<Vec<_>> = Default::default();
+        let mut buf: Vec<_> = vec![];
+        let mut buf_type: BufType = BufType::Tokens;
+
+        for c in self {
+            match c {
+                Element::Token(_) => {
+                    if buf.len() > 0 && buf_type != BufType::Tokens {
+                        parts.push(buf.clone());
+                        buf.truncate(0);
+                    }
+                    buf_type = BufType::Tokens;
+                    buf.push(c.clone());
+                }
+                Element::TokenSeq(s) => {
+                    if buf.len() > 0 && buf_type != BufType::Tokens {
+                        parts.push(buf.clone());
+                        buf.truncate(0);
+                    }
+                    buf_type = BufType::Tokens;
+                    for x in s {
+                        buf.push(Element::Token(x.clone()));
+                    }   
+                }
+                Element::Star | Element::Question => {
+                    if buf.len() > 0 && buf_type != BufType::Globs {
+                        parts.push(buf.clone());
+                        buf.truncate(0);
+                    }
+                    buf_type = BufType::Globs;
+                    buf.push(c.clone());
+                }
+
+                Element::NotToken(_) => {
+                    if buf.len() > 0 && buf_type != BufType::NotTokens {
+                        parts.push(buf.clone());
+                        buf.truncate(0);
+                    }
+                    buf_type = BufType::NotTokens;
+                    buf.push(c.clone());
+                }
+                Element::NotTokenSeq(s) => {
+                    if buf.len() > 0 && buf_type != BufType::NotTokens {
+                        parts.push(buf.clone());
+                        buf.truncate(0);
+                    }
+                    buf_type = BufType::NotTokens;
+                    for x in s {
+                        buf.push(Element::NotToken(x.clone()));
+                    } 
+                },
+            }
+        }
+        if buf.len() > 0 {
+            parts.push(buf.clone());
+        }
+
+        fn flip(v: Vec<Element>) -> Vec<Vec<Element>> {
+            if matches!(v[0], Element::Token(_)) {
+                if v.len() == 1 {
+                    if let Element::Token(e) = v[0] {
+                        return vec![vec![Element::NotToken(e)]];
+                    } else {
+                        panic!();
+                    }
+                }
+                return vec![vec![Element::NotTokenSeq(
+                    v.clone().iter().flat_map(|e| {
+                        if let Element::Token(e) = e {
+                            Ok(e)
+                        } else {
+                            Err(())
+                        }}).cloned().collect())]];
+            }
+            
+            if matches!(v[0], Element::Question) {
+                if v.len() == 1 {
+                    return vec![vec![Element::Star, Element::Star]];
+                }
+                //  ?** -> ??, ?
+                let len = v.len();
+                if v.into_iter().any(|e| matches!(e, Element::Star)) {
+                    let mut r: Vec<_> = Default::default();
+                    for i in 1..len-1 {
+                        r.push(vec![Element::Question; i]);
+                    }
+                    return r;
+                }
+                // ?? -> ***
+                return vec![vec![Element::Star; len + 1]];
+            }
+
+            if matches!(v[0], Element::Star) {
+                if v.len() == 1 {
+                    return Default::default();
+                }
+                //  *?* -> ??, ?
+                let mut r: Vec<_> = Default::default();
+                for i in 1..v.len()-1 {
+                    r.push(vec![Element::Question; i]);
+                }
+                return r;
+            }
+
+            if matches!(v[0], Element::NotToken(_)) {
+                if v.len() == 1 {
+                    if let Element::NotToken(e) = v[0] {
+                        return vec![vec![Element::Token(e)]];
+                    } else {
+                        panic!();
+                    }
+                }
+                return vec![
+                    vec![Element::TokenSeq(
+                        v.clone().iter().flat_map(|e| {
+                            if let Element::NotToken(e) = e {
+                                Ok(e)
+                            } else {
+                                Err(())
+                            }}).cloned().collect())]];
+            }
+            // unreachable!
+            unreachable!();
+        }
+
+        for &p1 in parts {
+            for &p2 in parts {
+
+            }
+        }
+        // *** -> ??, ?
+        // ab -> !ab, ?, ***
+        // [**?] => len(s) -1 * '?'
+        // ab*c -> [!ab, *, ?], [?, ?, ?], [??*!c]
         // ab -> [a, b] -> [!a, ?], [?, !b] + [?], [***] OR [!ab], [?], [***]
         // a*b -> [a, *, b]
         // a**b -> [a, **, b]
@@ -166,41 +300,7 @@ impl Invertible for Vec<Element> {
         // !a -> [a]
 
         // [!a, ?], [?, !b], [?], [*, *, *]
-        let mut parts: Vec<Vec<_>> = Default::default();
-        let mut buf: Vec<_> = vec![];
-        let mut buf_is_stars = true;
-
-        for c in self {
-            match c {
-                Element::Token(c) => {
-                    if buf.len() > 0 && buf_is_stars {
-                        parts.push(buf.clone());
-                        buf.truncate(0);
-                    }
-                    buf_is_stars = false;
-                    buf.push(c.clone());
-                }
-                Element::Star | Element::Question => {
-                    if buf.len() > 0 && !buf_is_stars {
-                        parts.push(buf.clone());
-                        buf.truncate(0);
-                    }
-                    buf_is_stars = true;
-                    buf.push(c.clone().into());
-                }
-
-                Element::NotToken(c) => {
-                    if buf.len() > 0 {
-                        parts.push(buf.clone());
-                        buf.truncate(0);
-                    }
-                    parts.push(vec![Element::Token(c.clone())]);
-                }
-                Element::TokenSeq(_) => todo!(),
-                Element::NotTokenSeq(_) => todo!(),
-            }
-        }
-        todo!();
+        todo!()
     }
 }
 
