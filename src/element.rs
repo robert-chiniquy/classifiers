@@ -150,8 +150,14 @@ fn path_from_str(s: &str) -> Vec<Element> {
     v
 }
 
+
 impl Invertible for Vec<Element> {
     fn inverse(&self) -> HashSet<Self> {
+        enum BufType{
+            Tokens,
+            Globs,
+            NotTokens,
+        }
         // ab -> [a, b] -> [!a, ?], [?, !b] + [?], [***] OR [!ab], [?], [***]
         // a*b -> [a, *, b]
         // a**b -> [a, **, b]
@@ -162,18 +168,25 @@ impl Invertible for Vec<Element> {
         // [!a, ?], [?, !b], [?], [*, *, *]
         let mut parts: Vec<Vec<_>> = Default::default();
         let mut buf: Vec<_> = vec![];
+        let mut buf_is_stars = true;
 
         for c in self {
             match c {
                 Element::Token(c) => {
-                    if buf.len() > 0 {
+                    if buf.len() > 0 && buf_is_stars {
                         parts.push(buf.clone());
                         buf.truncate(0);
                     }
-                    parts.push(vec![Element::NotToken(c.clone())]);
+                    buf_is_stars = false;
+                    buf.push(c.clone());
                 }
                 Element::Star | Element::Question => {
-                    buf.push(c.clone());
+                    if buf.len() > 0 && !buf_is_stars {
+                        parts.push(buf.clone());
+                        buf.truncate(0);
+                    }
+                    buf_is_stars = true;
+                    buf.push(c.clone().into());
                 }
 
                 Element::NotToken(c) => {
