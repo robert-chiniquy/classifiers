@@ -91,6 +91,7 @@ impl Accepts<Element> for Element {
     }
 }
 
+// TODO: FIXME: terminal_on needs to decompose seqs of len > 1 into component token/not token to call this method
 impl Accepts<&char> for Element {
     #[tracing::instrument(skip_all, ret)]
     fn accepts(&self, l: &char) -> bool {
@@ -116,12 +117,13 @@ impl Accepts<char> for Element {
             Element::NotToken(c) => c != &l,
             Element::TokenSeq(n) if n.len() == 1 => n[0] == l,
             Element::NotTokenSeq(n) if n.len() == 1 => n[0] != l,
+            _ => false,
         }
     }
 }
 
 #[test]
-fn blah() {
+fn test_blah() {
     let sources = vec![("a", ["!a", "**"])];
     for (s, v) in sources {
         let p = path_from_str(s);
@@ -188,6 +190,7 @@ impl Invertible for Vec<Element> {
         todo!();
     }
 }
+
 fn diverge(a: &Element, b: &Element) -> Vec<NfaBranch<Element>> {
     use EdgeTransition::*;
     vec![
@@ -198,9 +201,7 @@ fn diverge(a: &Element, b: &Element) -> Vec<NfaBranch<Element>> {
 
 fn converge(a: &Element) -> Vec<NfaBranch<Element>> {
     use EdgeTransition::*;
-    vec![
-        NfaBranch::new(a.clone(), Advance, Advance),
-    ]
+    vec![NfaBranch::new(a.clone(), Advance, Advance)]
 }
 
 impl BranchProduct<Element> for Element {
@@ -296,34 +297,152 @@ impl BranchProduct<Element> for Element {
                 ]
             }
             (TokenSeq(n), Question) => {
-                vec![]
+                if n.len() == 1 {
+                    vec![
+                        NfaBranch::new(Question, Drop, Advance),
+                        NfaBranch::new(a.clone(), Advance, Advance),
+                    ]
+                } else {
+                    diverge(a, b)
+                }
             }
-            (TokenSeq(_), Token(_)) => {
-                vec![]
+            (TokenSeq(x), Token(y)) => {
+                if x.len() == 1 && x[0] == *y {
+                    converge(b)
+                } else {
+                    diverge(a, b)
+                }
             }
-            (TokenSeq(_), NotToken(_)) => {
-                vec![]
+            (TokenSeq(x), NotToken(y)) => {
+                if x.len() == 1 && x[0] != *y {
+                    converge(a)
+                } else {
+                    diverge(a, b)
+                }
             }
-            (TokenSeq(_), TokenSeq(_)) => {
-                vec![]
+            (TokenSeq(x), TokenSeq(y)) => {
+                if x == y {
+                    converge(a)
+                } else {
+                    diverge(a, b)
+                }
             }
-            (TokenSeq(_), NotTokenSeq(_)) => {
-                vec![]
+            (TokenSeq(x), NotTokenSeq(y)) => {
+                if x == y {
+                    diverge(a, b)
+                } else if x.len() == y.len() {
+                    // a < b
+                    vec![
+                        NfaBranch::new(a.clone(), Advance, Advance),
+                        NfaBranch::new(b.clone(), Drop, Advance),
+                    ]
+                } else {
+                    diverge(a, b)
+                }
             }
-            (NotTokenSeq(_), Question) => {
-                vec![]
+            (NotTokenSeq(x), Question) => {
+                if x.len() == 1 {
+                    vec![
+                        NfaBranch::new(a.clone(), Advance, Advance),
+                        NfaBranch::new(Element::Token(x[0]), Drop, Advance),
+                    ]
+                } else {
+                    diverge(a, b)
+                }
             }
-            (NotTokenSeq(_), Token(_)) => {
-                vec![]
+            (NotTokenSeq(x), Token(y)) => {
+                if x.len() == 1 && x[0] != *y {
+                    // x > y
+                    // both advance and a continues
+                    vec![
+                        NfaBranch::new(a.clone(), Advance, Drop),
+                        NfaBranch::new(b.clone(), Advance, Advance),
+                    ]
+                } else {
+                    diverge(a, b)
+                }
             }
-            (NotTokenSeq(_), NotToken(_)) => {
-                vec![]
+            (NotTokenSeq(x), NotToken(y)) => {
+                if x.len() == 1 && x[0] == *y {
+                    // x > y
+                    converge(b)
+                } else if x.len() == 1 {
+                    (vec![converge(b), diverge(a, b)])
+                        .into_iter()
+                        .flatten()
+                        .collect()
+                } else {
+                    diverge(a, b)
+                }
             }
-            (NotTokenSeq(_), TokenSeq(_)) => {
-                vec![]
+            (NotTokenSeq(x), TokenSeq(y)) => {
+                if x == y {
+                    diverge(a, b)
+                } else {
+                    // x > y
+                    vec![
+                        NfaBranch::new(a.clone(), Advance, Drop),
+                        NfaBranch::new(b.clone(), Advance, Advance),
+                    ]
+                }
             }
             (NotTokenSeq(n1), NotTokenSeq(n2)) => {
                 if n1 == n2 {
+                    converge(a)
+                } else {
+                    diverge(a, b)
+                }
+            }
+            (Question, TokenSeq(y)) => {
+                if y.len() == 1 {
+                    // a > b
+                    vec![
+                        NfaBranch::new(Question, Advance, Drop),
+                        NfaBranch::new(b.clone(), Advance, Advance),
+                    ]
+                } else {
+                    diverge(a, b)
+                }
+            }
+            (Token(x), TokenSeq(y)) => {
+                if y.len() == 1 && *x == y[0] {
+                    converge(a)
+                } else {
+                    diverge(a, b)
+                }
+            }
+            (NotToken(x), TokenSeq(y)) => {
+                if y.len() == 1 && *x != y[0] {
+                    // x > y
+                    converge(a)
+                } else {
+                    diverge(a, b)
+                }
+            }
+            (Question, NotTokenSeq(y)) => {
+                if y.len() == 1 {
+                    // a > b
+                    vec![
+                        NfaBranch::new(Element::Token(y[0]), Advance, Drop),
+                        NfaBranch::new(b.clone(), Advance, Advance),
+                    ]
+                } else {
+                    diverge(a, b)
+                }
+            }
+            (Token(x), NotTokenSeq(y)) => {
+                if y.len() == 1 && *x != y[0] {
+                    // y > x, x < y
+                    vec![
+                        NfaBranch::new(a.clone(), Advance, Advance),
+                        NfaBranch::new(b.clone(), Drop, Advance),
+                    ]
+                } else {
+                    diverge(a, b)
+                }
+            }
+            (NotToken(x), NotTokenSeq(y)) => {
+                if y.len() == 1 && *x == y[0] {
                     converge(a)
                 } else {
                     diverge(a, b)
