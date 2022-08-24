@@ -412,12 +412,12 @@ where
                             let left_node_id = match left {
                                 EdgeTransition::Advance => Some(self_target_node_id),
                                 EdgeTransition::Stay => Some(self_id),
-                                EdgeTransition::Drop => None,
+                                EdgeTransition::Dropp => None,
                             };
                             let right_node_id = match right {
                                 EdgeTransition::Advance => Some(other_target_node_id),
                                 EdgeTransition::Stay => Some(other_id),
-                                EdgeTransition::Drop => None,
+                                EdgeTransition::Dropp => None,
                             };
                             let new_node = match (left_node_id, right_node_id) {
                                 (None, None) => unreachable!(),
@@ -541,7 +541,7 @@ where
 pub enum EdgeTransition {
     Advance,
     Stay,
-    Drop,
+    Dropp,
 }
 
 #[derive(Debug)]
@@ -553,7 +553,7 @@ pub struct NfaBranch<El> {
 
 impl<E: Clone> NfaBranch<E> {
     pub fn new(kind: E, left: EdgeTransition, right: EdgeTransition) -> Self {
-        debug_assert!(!(left == EdgeTransition::Drop && right == EdgeTransition::Drop));
+        debug_assert!(!(left == EdgeTransition::Dropp && right == EdgeTransition::Dropp));
         Self { kind, left, right }
     }
 }
