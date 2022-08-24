@@ -307,6 +307,7 @@ impl BranchProduct<Element> for Element {
 
             },
             (Tokens(x), LoopNotTokens(y)) => {
+                //  we really need some form of lookahead here!
                 if x == y {
                     diverge(a, b)
                 } else if x.len() == y.len() {
@@ -337,7 +338,9 @@ impl BranchProduct<Element> for Element {
                     diverge(a, b)
                 }
             },
-            (LoopNotTokens(_), Question) => todo!(),
+            (LoopNotTokens(x), Question) => {
+                todo!()
+            },
             (LoopNotTokens(_), Tokens(_)) => todo!(),
             (LoopNotTokens(_), NotTokens(_)) => todo!(),
             (LoopNotTokens(_), LoopNotTokens(_)) => todo!(),
