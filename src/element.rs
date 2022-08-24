@@ -231,7 +231,6 @@ impl Invertible for Vec<Element> {
         parts.push(buf.clone());
 
         let mut new_parts = vec![];
-        let mut skip = 0;
         enum Mode {
             Start,
             PartOfGlobSeq,
@@ -239,36 +238,47 @@ impl Invertible for Vec<Element> {
         let mut mode = Mode::Start;
         let mut working_glob = Elementals::Globulars(0);
         for (i, part) in parts.iter().enumerate() {
-            if i < skip {
-                continue;
-            }
             match part {
-                Tokens(_) => new_parts.push(part),
-                NotTokens(_) => new_parts.push(part),
+                Tokens(_) | NotTokens(_) => {
+                    new_parts.push(part);
+                    match mode {
+                        Mode::Start => (),
+                        Mode::PartOfGlobSeq => {
+                            parts.push(working_glob.clone());
+                            working_glob = Elementals::Globulars(0);
+                            mode = Mode::Start;
+                        },
+                    }
+                },
                 Questions(q) => match mode {
                     Mode::Start => {
-                        /*
+                        // Look Ahead!
                         let mut j = i + 1;
-                        let mut working_question = 0;
+                        // let mut working_question = 0;
                         while let Some(part) = parts.get(j) {
+                            j += 1;
                             match part {
-                                Questions(n) => working_question += n,
-                                Globulars(n) => {
-                                    if let Globulars(ref mut n) = working_glob {
-                                        *n += q;
-                                        *n += working_question;
-                                        working_question = 0;
-                                    }
+                                Questions(_) => (),
+                                Globulars(_) => {
+                                    mode = Mode::PartOfGlobSeq;
+                                    break;
                                 }
                                 _ => {
-
-                                skip = j;
-                                break;
+                                    break;
+                                }
                             }
-                            }
-                            j += 1;
                         }
-                        */
+
+                        match mode {
+                            Mode::Start => {
+                                new_parts.push(part);
+                            },
+                            Mode::PartOfGlobSeq => {
+                                if let Globulars(ref mut n) = working_glob {
+                                    *n += q;
+                                }
+                            },
+                        }
                     }
                     Mode::PartOfGlobSeq => {
                         if let Globulars(ref mut n) = working_glob {
@@ -276,9 +286,18 @@ impl Invertible for Vec<Element> {
                         }
                     }
                 },
-                Globulars(_) => todo!(),
+
+                Globulars(q) => {
+                    if let Globulars(ref mut n) = working_glob {
+                        *n += q;
+                    }
+                    mode = Mode::PartOfGlobSeq;
+
+                },
             }
         }
+
+
 
         // concatenate adjacent parts where correct to
 
