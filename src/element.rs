@@ -468,7 +468,7 @@ impl BranchProduct<Element> for Element {
                 if x.len() == 1 {
                     vec![
                         NfaBranch::new(a.clone(), Advance, Advance),
-                        NfaBranch::new(Element::TokenSeq(vec![x[0]]), Drop, Advance),
+                        NfaBranch::new(Element::TokenSeq(x.clone()), Drop, Advance),
                     ]
                 } else {
                     diverge(a, b)
@@ -507,7 +507,7 @@ impl BranchProduct<Element> for Element {
                 if y.len() == 1 {
                     // a > b
                     vec![
-                        NfaBranch::new(Element::TokenSeq(vec![y[0]]), Advance, Drop),
+                        NfaBranch::new(Element::TokenSeq(y.clone()), Advance, Drop),
                         NfaBranch::new(b.clone(), Advance, Advance),
                     ]
                 } else {
