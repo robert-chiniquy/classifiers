@@ -102,7 +102,7 @@ fn star_a_star_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Tr
 fn tokens(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
     let mut chars: Vec<_> = vec![];
     let mut elements = input.v().iter();
-    while let Some(Element::TokenSeq(c)) = elements.next() {
+    while let Some(Element::Tokens(c)) = elements.next() {
         chars.extend(c);
     }
     if chars.is_empty() {
@@ -114,7 +114,7 @@ fn tokens(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
 fn not_tokens(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
     let mut chars: Vec<_> = vec![];
     let mut elements = input.v().iter();
-    while let Some(Element::NotTokenSeq(c)) = elements.next() {
+    while let Some(Element::NotTokens(c)) = elements.next() {
         chars.extend(c);
     }
     if chars.is_empty() {

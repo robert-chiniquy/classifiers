@@ -5,9 +5,9 @@ use std::collections::HashSet;
 pub enum Element {
     Question,
     Star,
-    TokenSeq(Vec<char>),
-    NotTokenSeq(Vec<char>),
-    NotTokenSeqLoop(Vec<char>),
+    Tokens(Vec<char>),
+    NotTokens(Vec<char>),
+    LoopNotTokens(Vec<char>),
 }
 
 // TODO: Remove the dep on Default for this stuff
@@ -24,21 +24,21 @@ impl std::fmt::Display for Element {
             match self {
                 Element::Question => "?".to_string(),
                 Element::Star => "*°".to_string(),
-                Element::NotTokenSeq(c) => {
+                Element::NotTokens(c) => {
                     if c.len() > 1 {
                         format!("!'{c:?}'")
                     } else {
                         format!("!{c:?}")
                     }
                 }
-                Element::TokenSeq(c) => {
+                Element::Tokens(c) => {
                     if c.len() > 1 {
                         format!("'{c:?}'")
                     } else {
                         format!("{c:?}")
                     }
                 }
-                Element::NotTokenSeqLoop(c) => {
+                Element::LoopNotTokens(c) => {
                     if c.len() > 1 {
                         format!("!'{c:?}'°")
                     } else {
@@ -58,31 +58,31 @@ impl Accepts<Element> for Element {
             (x, y) if x == y => true,
             // (Element::Question, Element::Question) => true,
             (Star, _) => true,
-            (NotTokenSeq(b), TokenSeq(a)) => {
+            (NotTokens(b), Tokens(a)) => {
                 // this should never happen
                 debug_assert!(!b.is_empty());
                 debug_assert!(!a.is_empty());
                 return a != b;
             }
-            (Question, NotTokenSeq(n)) => {
+            (Question, NotTokens(n)) => {
                 return n.len() == 1;
             }
-            (Question, TokenSeq(n)) => {
+            (Question, Tokens(n)) => {
                 return n.len() == 1;
             }
-            (NotTokenSeqLoop(a), TokenSeq(b)) => {
+            (LoopNotTokens(a), Tokens(b)) => {
                 return a != b;
             }
-            (NotTokenSeqLoop(a), NotTokenSeq(b)) => {
+            (LoopNotTokens(a), NotTokens(b)) => {
                 return a != b;
             }
 
             (_, Star) => false,
             // if len(seq) == 1, Q can match seq.  Otherwise, Q can't match multi chars.
-            (NotTokenSeqLoop(_), Question) => false, 
-            (TokenSeq(_), NotTokenSeq(_)) => false,
-            (NotTokenSeq(_), Question) => false,
-            (TokenSeq(_), Question) => false,
+            (LoopNotTokens(_), Question) => false, 
+            (Tokens(_), NotTokens(_)) => false,
+            (NotTokens(_), Question) => false,
+            (Tokens(_), Question) => false,
             (_, _) => false,
         }
     }
@@ -95,9 +95,9 @@ impl Accepts<&char> for Element {
         match self {
             Element::Question => true,
             Element::Star => true,
-            Element::TokenSeq(n) if n.len() == 1 => n[0] == *l,
-            Element::NotTokenSeq(n) if n.len() == 1 => n[0] != *l,
-            Element::NotTokenSeqLoop(n) if n.len() == 1 => n[0] != *l,
+            Element::Tokens(n) if n.len() == 1 => n[0] == *l,
+            Element::NotTokens(n) if n.len() == 1 => n[0] != *l,
+            Element::LoopNotTokens(n) if n.len() == 1 => n[0] != *l,
             _ => false,
         }
     }
@@ -130,7 +130,7 @@ fn path_from_str(s: &str) -> Vec<Element> {
         }
         let mut e = c.into();
         if negate_next {
-            e = Element::NotTokenSeq(vec![c]);
+            e = Element::NotTokens(vec![c]);
             negate_next = false;
         }
         v.push(e);
@@ -180,7 +180,7 @@ impl BranchProduct<Element> for Element {
                     NfaBranch::new(Star, Advance, Advance),
                 ]
             }
-            (Star, NotTokenSeqLoop(_)) => {
+            (Star, LoopNotTokens(_)) => {
                 vec![
                     NfaBranch::new(Star, Advance, Dropp),
                     NfaBranch::new(b.clone(), Stay, Advance),
@@ -188,7 +188,7 @@ impl BranchProduct<Element> for Element {
                     NfaBranch::new(b.clone(), Advance, Stay),
                 ]
             },
-            (NotTokenSeqLoop(_), Star) => {
+            (LoopNotTokens(_), Star) => {
                 vec![
                     NfaBranch::new(Star, Dropp, Advance),
                     NfaBranch::new(b.clone(), Stay, Advance),
@@ -214,7 +214,7 @@ impl BranchProduct<Element> for Element {
                 ]
             }
             (Question, Question) => converge(a),
-            (TokenSeq(n), Question) => {
+            (Tokens(n), Question) => {
                 if n.len() == 1 {
                     vec![
                         NfaBranch::new(Question, Dropp, Advance),
@@ -224,14 +224,14 @@ impl BranchProduct<Element> for Element {
                     diverge(a, b)
                 }
             }
-            (TokenSeq(x), TokenSeq(y)) => {
+            (Tokens(x), Tokens(y)) => {
                 if x == y {
                     converge(a)
                 } else {
                     diverge(a, b)
                 }
             }
-            (TokenSeq(x), NotTokenSeq(y)) => {
+            (Tokens(x), NotTokens(y)) => {
                 if x == y {
                     diverge(a, b)
                 } else if x.len() == y.len() {
@@ -244,17 +244,17 @@ impl BranchProduct<Element> for Element {
                     diverge(a, b)
                 }
             }
-            (NotTokenSeq(x), Question) => {
+            (NotTokens(x), Question) => {
                 if x.len() == 1 {
                     vec![
                         NfaBranch::new(a.clone(), Advance, Advance),
-                        NfaBranch::new(Element::TokenSeq(x.clone()), Dropp, Advance),
+                        NfaBranch::new(Element::Tokens(x.clone()), Dropp, Advance),
                     ]
                 } else {
                     diverge(a, b)
                 }
             }
-            (NotTokenSeq(x), TokenSeq(y)) => {
+            (NotTokens(x), Tokens(y)) => {
                 if x == y {
                     diverge(a, b)
                 } else {
@@ -265,14 +265,14 @@ impl BranchProduct<Element> for Element {
                     ]
                 }
             }
-            (NotTokenSeq(n1), NotTokenSeq(n2)) => {
+            (NotTokens(n1), NotTokens(n2)) => {
                 if n1 == n2 {
                     converge(a)
                 } else {
                     diverge(a, b)
                 }
             }
-            (Question, TokenSeq(y)) => {
+            (Question, Tokens(y)) => {
                 if y.len() == 1 {
                     // a > b
                     vec![
@@ -283,18 +283,18 @@ impl BranchProduct<Element> for Element {
                     diverge(a, b)
                 }
             }
-            (Question, NotTokenSeq(y)) => {
+            (Question, NotTokens(y)) => {
                 if y.len() == 1 {
                     // a > b
                     vec![
-                        NfaBranch::new(Element::TokenSeq(y.clone()), Advance, Dropp),
+                        NfaBranch::new(Element::Tokens(y.clone()), Advance, Dropp),
                         NfaBranch::new(b.clone(), Advance, Advance),
                     ]
                 } else {
                     diverge(a, b)
                 }
             }
-            (Question, NotTokenSeqLoop(y)) => {
+            (Question, LoopNotTokens(y)) => {
                 if y.len() == 1 {
                     vec![
                         NfaBranch::new(Question, Advance, Dropp), 
@@ -306,7 +306,7 @@ impl BranchProduct<Element> for Element {
                 }
 
             },
-            (TokenSeq(x), NotTokenSeqLoop(y)) => {
+            (Tokens(x), LoopNotTokens(y)) => {
                 if x == y {
                     diverge(a, b)
                 } else if x.len() == y.len() {
@@ -320,7 +320,7 @@ impl BranchProduct<Element> for Element {
                     diverge(a, b)
                 }
             },
-            (NotTokenSeq(x), NotTokenSeqLoop(y)) => {
+            (NotTokens(x), LoopNotTokens(y)) => {
                 if x == y {
                     vec![
                         NfaBranch::new(a.clone(), Advance, Advance),
@@ -337,10 +337,10 @@ impl BranchProduct<Element> for Element {
                     diverge(a, b)
                 }
             },
-            (NotTokenSeqLoop(_), Question) => todo!(),
-            (NotTokenSeqLoop(_), TokenSeq(_)) => todo!(),
-            (NotTokenSeqLoop(_), NotTokenSeq(_)) => todo!(),
-            (NotTokenSeqLoop(_), NotTokenSeqLoop(_)) => todo!(),
+            (LoopNotTokens(_), Question) => todo!(),
+            (LoopNotTokens(_), Tokens(_)) => todo!(),
+            (LoopNotTokens(_), NotTokens(_)) => todo!(),
+            (LoopNotTokens(_), LoopNotTokens(_)) => todo!(),
         }
     }
 }
@@ -379,7 +379,7 @@ impl From<char> for Element {
         match c {
             '*' => Element::Star,
             '?' => Element::Question,
-            c => Element::TokenSeq(vec![c]),
+            c => Element::Tokens(vec![c]),
         }
     }
 }
@@ -389,7 +389,7 @@ impl From<&char> for Element {
         match c {
             '*' => Element::Star,
             '?' => Element::Question,
-            c => Element::TokenSeq(vec![*c]),
+            c => Element::Tokens(vec![*c]),
         }
     }
 }
