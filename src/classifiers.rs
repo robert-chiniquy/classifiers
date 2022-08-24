@@ -17,7 +17,9 @@ where
     Universal,
     Literal(L),
     Not(Box<Classifier<L>>),
+    /// Union
     Any(BTreeSet<Classifier<L>>),
+    /// Intersection
     And(BTreeSet<Classifier<L>>),
 }
 

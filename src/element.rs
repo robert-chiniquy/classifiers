@@ -27,11 +27,10 @@ impl std::fmt::Display for Element {
                 Element::Star => "*".to_string(),
                 Element::NotTokenSeq(c) => {
                     if c.len() > 1 {
-                        format!("!'{c:?}'")    
+                        format!("!'{c:?}'")
                     } else {
                         format!("!{c:?}")
                     }
-                    
                 }
                 Element::TokenSeq(c) => {
                     if c.len() > 1 {
@@ -39,7 +38,6 @@ impl std::fmt::Display for Element {
                     } else {
                         format!("{c:?}")
                     }
-                    
                 }
             }
         ))
@@ -226,7 +224,7 @@ mod p {
         // 1. run input through parser to produce transform variants
         // 2. for each Transform variant, turn it into a list of paths
         // 3. for each set of paths, produce permutations of inverses?
-        let (_, txms) = transforms(&input).unwrap();
+        let (_, txms) = transforms(input).unwrap();
         todo!()
     }
 
@@ -249,7 +247,7 @@ mod p {
 
     fn star_a_star(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
         let (rest, (first,)) = tuple((a_star_and_more /*tokens, stars_or_questions*/,))(input)?;
-        Ok((rest.clone(), (todo!())))
+        Ok((rest, (todo!())))
     }
 
     /// any number of stars or questions such that there is at least one star
@@ -260,7 +258,7 @@ mod p {
         {
             Ok((rest, stars + or1.unwrap_or(0) + or2.unwrap_or(0)))
         } else {
-            fail(input.clone())
+            fail(input)
         }
     }
 
@@ -497,8 +495,6 @@ impl Invertible for Vec<Element> {
         //     }
         // }
 
-
-
         // concatenate adjacent parts where correct to
 
         // generate combinations of inverses
@@ -629,7 +625,6 @@ impl BranchProduct<Element> for Element {
                 ]
             }
             // todo case for not token plus token and vice versa
-
             (Question, Question) => vec![NfaBranch::new(Question, Advance, Advance)],
             (Star, _) => {
                 // consume lr, consume left, or drop right...

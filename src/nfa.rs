@@ -37,9 +37,9 @@ pub trait BranchProduct<E> {
 
 // This should be implemented on a path of E
 pub trait Invertible
-where Self: Sized
+where
+    Self: Sized,
 {
-
     fn inverse(&self) -> HashSet<Self>;
 }
 
@@ -85,7 +85,7 @@ where
     E: Eq + std::hash::Hash + Default,
 {
     pub(crate) count: usize,
-    // Convenience for now, later switch to only a single initial node
+    // Convenience for now, later switch to only a single initial node?
     pub(crate) entry: BTreeSet<NfaIndex>,
     pub(crate) nodes: BTreeMap<NfaIndex, N>,
     pub(crate) edges: BTreeMap<NfaIndex, E>,
