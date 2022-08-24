@@ -239,7 +239,7 @@ mod p {
         StarAStar(Vec<Elementals>),
     }
 
-    fn transforms(input: &ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
+    fn transforms(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
         // need to ordered such that no prefix matches early
         let (rest, (elementals, _)) =
             many_till(alt((star_a_star /* , globs, tokens, not_tokens*/,)), eof)(input)?;
@@ -254,7 +254,7 @@ mod p {
 
     /// any number of stars or questions such that there is at least one star
     /// returns the number of stars and questions
-    fn a_star_and_more(input: &ElementContainer) -> IResult<ElementContainer, usize> {
+    fn a_star_and_more(input: ElementContainer) -> IResult<ElementContainer, usize> {
         if let Ok((rest, (or1, stars, or2))) =
             tuple((opt(stars_or_questions), stars, opt(stars_or_questions)))(input.clone())
         {
