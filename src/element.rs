@@ -79,7 +79,7 @@ impl Accepts<Element> for Element {
 
             (_, Star) => false,
             // if len(seq) == 1, Q can match seq.  Otherwise, Q can't match multi chars.
-            (LoopNotTokens(_), Question) => false, 
+            (LoopNotTokens(_), Question) => false,
             (Tokens(_), NotTokens(_)) => false,
             (NotTokens(_), Question) => false,
             (Tokens(_), Question) => false,
@@ -187,7 +187,7 @@ impl BranchProduct<Element> for Element {
                     NfaBranch::new(b.clone(), Advance, Advance),
                     NfaBranch::new(b.clone(), Advance, Stay),
                 ]
-            },
+            }
             (LoopNotTokens(_), Star) => {
                 vec![
                     NfaBranch::new(Star, Dropp, Advance),
@@ -195,7 +195,7 @@ impl BranchProduct<Element> for Element {
                     NfaBranch::new(b.clone(), Advance, Advance),
                     NfaBranch::new(b.clone(), Advance, Stay),
                 ]
-            },
+            }
             (Star, _) => {
                 // consume lr, consume left, or drop right...
                 vec![
@@ -297,15 +297,14 @@ impl BranchProduct<Element> for Element {
             (Question, LoopNotTokens(y)) => {
                 if y.len() == 1 {
                     vec![
-                        NfaBranch::new(Question, Advance, Dropp), 
+                        NfaBranch::new(Question, Advance, Dropp),
                         NfaBranch::new(b.clone(), Advance, Stay),
                         NfaBranch::new(b.clone(), Advance, Advance),
                     ]
                 } else {
                     diverge(a, b)
                 }
-
-            },
+            }
             (Tokens(x), LoopNotTokens(y)) => {
                 //  we really need some form of lookahead here!
                 if x == y {
@@ -320,14 +319,13 @@ impl BranchProduct<Element> for Element {
                 } else {
                     diverge(a, b)
                 }
-            },
+            }
             (NotTokens(x), LoopNotTokens(y)) => {
                 if x == y {
                     vec![
                         NfaBranch::new(a.clone(), Advance, Advance),
                         NfaBranch::new(a.clone(), Advance, Stay),
                     ]
-
                 } else if x.len() == y.len() {
                     vec![
                         NfaBranch::new(b.clone(), Dropp, Advance),
@@ -337,10 +335,8 @@ impl BranchProduct<Element> for Element {
                 } else {
                     diverge(a, b)
                 }
-            },
-            (LoopNotTokens(x), Question) => {
-                todo!()
-            },
+            }
+            (LoopNotTokens(_), Question) => todo!(),
             (LoopNotTokens(_), Tokens(_)) => todo!(),
             (LoopNotTokens(_), NotTokens(_)) => todo!(),
             (LoopNotTokens(_), LoopNotTokens(_)) => todo!(),
