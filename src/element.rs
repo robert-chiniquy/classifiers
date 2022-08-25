@@ -24,12 +24,24 @@ impl std::fmt::Display for Element {
             match self {
                 Element::Question => "?".to_string(),
                 Element::Star => "*".to_string(),
-                Element::NotTokens(c) =>
-                    format!("!{}", c.iter().map(|c| c.to_string()).collect::<String>()),
                 Element::Tokens(c) =>
                     format!("{}", c.iter().map(|c| c.to_string()).collect::<String>()),
-                Element::LoopNotTokens(c) =>
-                    format!("!{}°", c.iter().map(|c| c.to_string()).collect::<String>()),
+                Element::NotTokens(c) => {
+                    let s = c.iter().map(|c| c.to_string()).collect::<String>();
+                    if &s.len() > &1 {
+                        format!("!`{s}`")
+                    } else {
+                        format!("!{s}")
+                    }
+                }
+                Element::LoopNotTokens(c) =>{
+                    let s = c.iter().map(|c| c.to_string()).collect::<String>();
+                    if &s.len() > &1 {
+                        format!("!`{s}`°")
+                    } else {
+                        format!("!{s}°")
+                    }
+                }
             }
         ))
     }

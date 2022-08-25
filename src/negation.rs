@@ -51,30 +51,49 @@ enum Transform {
 fn test_negation() {
     setup();
     use Element::*;
-    let input = vec![Star, Tokens(vec!['a'])];
-    let negative = negation_of(input.clone());
-    pretty_print_path(&input, &negative);
-
-    let input = vec![Star, Tokens(vec!['a']), Star];
-    let negative = negation_of(input.clone());
-    pretty_print_path(&input,&negative);
-
-    // ?a -> ?, ?(not a), ??*
-    let input = vec![Question, Tokens(vec!['a'])];
-    let negative = negation_of(input.clone());
-    pretty_print_path(&input,&negative);
-
-    for p in negative {
-        assert!(p != vec![Star, Star, NotTokens(vec!['a'])]);
+    let examples = vec![
+        vec![Star, Tokens(vec!['a'])],
+        vec![Star, Tokens(vec!['a'])],
+        vec![Star, Tokens(vec!['a']), Star],
+        vec![Question, Tokens(vec!['a'])],
+        vec![Question, Tokens(vec!['a']), Star, Star],
+        vec![Star, Tokens(vec!['a', 'b'])],
+    ];
+    
+    for input in examples {
+        let negative = negation_of(input.clone());
+        pretty_print_path(&input, &negative);
     }
 
-    let input = vec![Question, Tokens(vec!['a']), Star, Star];
-    let negative = negation_of(input.clone());
-    pretty_print_path(&input,&negative);
+    
+    // let negative = negation_of(input.clone());
+    // pretty_print_path(&input, &negative);
 
-    for p in negative {
-        assert!(p != vec![Star, Star, NotTokens(vec!['a']), Star, Star]);
-    }
+    
+    // let negative = negation_of(input.clone());
+    // pretty_print_path(&input,&negative);
+
+    // // ?a -> ?, ?(not a), ??*
+    
+    // let negative = negation_of(input.clone());
+    // pretty_print_path(&input,&negative);
+
+    // for p in negative {
+    //     assert!(p != vec![Star, Star, NotTokens(vec!['a'])]);
+    // }
+
+    
+    // let negative = negation_of(input.clone());
+    // pretty_print_path(&input,&negative);
+
+    // for p in negative {
+    //     assert!(p != vec![Star, Star, NotTokens(vec!['a']), Star, Star]);
+    // }
+
+    
+    // let negative = negation_of(input.clone());
+    // pretty_print_path(&input,&negative);
+
 }
 
 // 2 methods which could call apply_negation_txms
@@ -451,6 +470,7 @@ fn test_tiny_star_a_star() {
 
     let (rest, txms) = r.unwrap();
     println!("{:?}", txms);
+
 
     assert!(rest.v().is_empty(), "has stuff: {rest:?}");
 }
