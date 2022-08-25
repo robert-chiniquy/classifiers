@@ -225,6 +225,7 @@ where
             paths.r.remove(path);
         }
 
+        #[allow(unused_assignments)]
         let mut move_stuff = Default::default();
         (move_stuff, paths.l) = paths.l.iter().cloned().partition(|path| {
             self.terminal_on::<E>(path, &|t| {
