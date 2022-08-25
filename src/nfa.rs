@@ -440,9 +440,9 @@ where
                                 new_node.clone(),
                             );
 
-                            if left == EdgeTransition::Stay && right == EdgeTransition::Advance {
-                                println!("🚗🚗🚗🚗{kind:?} {left_node_id:?} {right_node_id:?} {new_node:?} {next_working_node_id}");
-                            }
+                            // if left == EdgeTransition::Stay && right == EdgeTransition::Advance {
+                            //     println!("🚗🚗🚗🚗 {kind:?} {left_node_id:?} {right_node_id:?} {new_node:?} {next_working_node_id}");
+                            // }
 
                             // if one side is dropped, the other side just copies in from there
                             // either create a branch and recur to construct the union from that point
@@ -458,10 +458,10 @@ where
                                     union.copy_subtree(&next_working_node_id, self, left_node_id)
                                 }
                                 (Some(left_node_id), Some(right_node_id)) => {
-                                    println!(
-                                        "XOXOXOXO {:?}",
-                                        (left_node_id, right_node_id, next_working_node_id)
-                                    );
+                                    // println!(
+                                    //     "XOXOXOXO {:?}",
+                                    //     (left_node_id, right_node_id, next_working_node_id)
+                                    // );
                                     stack.push((left_node_id, right_node_id, next_working_node_id))
                                 }
                             }

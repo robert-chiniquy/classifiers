@@ -52,25 +52,25 @@ fn test_negation() {
     setup();
     use Element::*;
     let input = vec![Star, Tokens(vec!['a'])];
-    let negative = negation_of(input);
-    pretty_print_path(&negative);
+    let negative = negation_of(input.clone());
+    pretty_print_path(&input, &negative);
 
     let input = vec![Star, Tokens(vec!['a']), Star];
-    let negative = negation_of(input);
-    pretty_print_path(&negative);
+    let negative = negation_of(input.clone());
+    pretty_print_path(&input,&negative);
 
     // ?a -> ?, ?(not a), ??*
     let input = vec![Question, Tokens(vec!['a'])];
-    let negative = negation_of(input);
-    pretty_print_path(&negative);
+    let negative = negation_of(input.clone());
+    pretty_print_path(&input,&negative);
 
     for p in negative {
         assert!(p != vec![Star, Star, NotTokens(vec!['a'])]);
     }
 
     let input = vec![Question, Tokens(vec!['a']), Star, Star];
-    let negative = negation_of(input);
-    pretty_print_path(&negative);
+    let negative = negation_of(input.clone());
+    pretty_print_path(&input,&negative);
 
     for p in negative {
         assert!(p != vec![Star, Star, NotTokens(vec!['a']), Star, Star]);
@@ -182,7 +182,7 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
     // Vec of Vec of Element
     let mut rules: Vec<HashSet<Vec<Element>>> = Default::default();
     for txm in txms {
-        println!("txm: {txm:?}");
+        // println!("txm: {txm:?}");
         let mut set = match txm.clone() {
             // [ab, a?, ?b, ??]
             // negate(ab) -> [a(not b), (not a)b, (not a)(not b), ?] -> [a(not b), (not a)?, ?],
@@ -299,7 +299,6 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
         set.insert(txm.elements());
         rules.push(set);
     }
-    println!("rules {:?}", rules);
     // filter out empty hashsets
     rules.into_iter().filter(|h| !h.is_empty()).collect()
 }
@@ -698,13 +697,11 @@ impl<'a> InputIter for &'a ElementContainer {
     }
 }
 
-fn pretty_print_path(paths: &[Vec<Element>]) {
-    for p in paths {
-        println!(
-            "path: {}",
-            p.iter().map(|e| e.to_string()).collect::<String>()
-        );
-    }
+fn pretty_print_path(original: &Vec<Element>, paths: &[Vec<Element>]) {
+    let original = original.iter().map(|e| e.to_string()).collect::<String>();
+    let mut paths = paths.iter().map(|p| p.iter().map(|e| e.to_string()).collect::<String>()).collect::<Vec<_>>();
+    paths.sort_by(|a, b| a.len().partial_cmp(&b.len()).unwrap());
+    println!("\n{}\n{}\n{}\n", original, "-".repeat(original.len()), paths.join("\n"));
 }
 
 // #[tracing::instrument(ret)]
