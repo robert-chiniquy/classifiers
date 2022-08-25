@@ -72,6 +72,20 @@ fn test_negation() {
     pretty_print_path(negative);
 }
 
+
+#[test]
+fn test_star_a_star() {
+    setup();
+    
+    use Element::*;
+    let input = ElementContainer(vec![Star, Tokens(vec!['a']), Star]);
+    let (rest, txms) = transforms(input).unwrap();
+
+    println!("{:?}", txms);
+    assert!(rest.v().is_empty(), "has stuff: {rest:?}");
+
+
+}
 fn pretty_print_path(paths: Vec<Vec<Element>>) {
     for p in paths {
         println!("path: {}", p.iter().map(|e| e.to_string()).collect::<String>());
