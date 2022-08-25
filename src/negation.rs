@@ -23,15 +23,12 @@ use nom::{
 // one parser for rule, enum variant for each rule
 #[derive(Eq, PartialEq, Clone, Debug)]
 enum Transform {
-    // this would be cool
     StarAStar(Vec<Elementals>),
     Globulars(usize),
     Questions(usize),
     TokenSeq(Vec<char>),
     NotTokenSeq(Vec<char>),
     QNotLoopQ(Vec<Elementals>),
-    // OnlyTokenSeq(Vec<char>),
-    // LonelyStar,
 }
 impl Transform {
     fn elements(&self) -> Vec<Element> {
@@ -65,7 +62,12 @@ impl Transform {
 #[test]
 fn test_negation() {
     setup();
-    let input = vec![Element::Star, Element::Tokens(vec!['a'])];
+    use Element::*;
+    let input = vec![Star, Tokens(vec!['a'])];
+    let negative = negation_of(input);
+    pretty_print_path(negative);
+
+    let input = vec![Star, Tokens(vec!['a']), Star];
     let negative = negation_of(input);
     pretty_print_path(negative);
 }
@@ -80,7 +82,7 @@ fn pretty_print_path(paths: Vec<Vec<Element>>) {
 // #[tracing::instrument(ret)]
 pub fn negation_of(input: Vec<Element>) -> Vec<Vec<Element>> {
     let sequence_of_choices = interpret_negation_rules(ElementContainer(input.clone()));
-    let mut paths = visit_choices(&sequence_of_choices);
+    let mut paths = visit_choices(&input, &sequence_of_choices);
     // need to correct for length
     // for finite input, all longer paths
     // for looping input, all shorter paths
@@ -122,18 +124,16 @@ fn element_sequence_minimum_unit_length(input: &[Element]) -> usize {
 fn test_visit_choices() {
     setup();
     use Element::*;
-    let p = visit_choices(&[HashSet::from_iter(vec![vec![
-        Tokens(vec!['a']),
-        NotTokens(vec!['a']),
-    ]])]);
+    let path = vec![Tokens(vec!['a']), NotTokens(vec!['a'])];
+    let p = visit_choices(&path, &[HashSet::from_iter(vec![path.clone()])]);
     assert!(!p.is_empty());
 }
 
 // #[tracing::instrument(ret)]
-fn visit_choices(choices: &[HashSet<Vec<Element>>]) -> Vec<Vec<Element>> {
+fn visit_choices(original_input: &Vec<Element>, choices: &[HashSet<Vec<Element>>]) -> Vec<Vec<Element>> {
     let mut paths = vec![];
     if let Some(current) = choices.first() {
-        let mut positive = visit_choices(&choices[1..]);
+        let mut positive = visit_choices(original_input, &choices[1..]);
         if positive.is_empty() {
             paths.extend(current.iter().cloned().collect::<Vec<_>>());
             return paths;
@@ -151,7 +151,7 @@ fn visit_choices(choices: &[HashSet<Vec<Element>>]) -> Vec<Vec<Element>> {
             );
         }
     }
-    return paths;
+    return paths.into_iter().filter(|p| p != original_input).clone().collect();
 }
 
 // - returns an NFA
