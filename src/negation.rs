@@ -730,7 +730,7 @@ impl<'a> InputIter for &'a ElementContainer {
     }
 }
 
-fn pretty_print_path(original: &Vec<Element>, paths: &[Vec<Element>]) {
+fn pretty_print_path(original: &[Element], paths: &[Vec<Element>]) {
     let original = original.iter().map(|e| e.to_string()).collect::<String>();
     let mut paths = paths
         .iter()

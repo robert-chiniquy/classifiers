@@ -46,13 +46,19 @@ where
     }
 
     #[tracing::instrument(skip_all)]
-    pub fn from_symbols(l: &Vec<E>, m: M) -> Self {
+    pub fn from_symbols(l: &[E], m: M) -> Self {
         let mut nfa: Self = Default::default();
         let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
         nfa.entry.insert(prior);
-        for criteria in l.clone() {
+        for criteria in l {
             let target = nfa.add_node(NfaNode::new(Terminal::Not));
-            let _ = nfa.add_edge(NfaEdge { criteria }, prior, target);
+            let _ = nfa.add_edge(
+                NfaEdge {
+                    criteria: criteria.clone(),
+                },
+                prior,
+                target,
+            );
             prior = target;
         }
         nfa.node_mut(prior).state = Terminal::Accept(m);
