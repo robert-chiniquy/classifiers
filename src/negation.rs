@@ -1,9 +1,10 @@
 #![allow(unused)]
 use std::{
     collections::HashSet,
+    fmt::Debug,
     iter::{Copied, Enumerate},
     ops::RangeFrom,
-    slice::Iter, fmt::Debug,
+    slice::Iter,
 };
 
 #[cfg(test)]
@@ -72,25 +73,35 @@ fn test_negation() {
     pretty_print_path(negative);
 }
 
-
 #[test]
 fn test_star_a_star() {
     setup();
-    
+
     use Element::*;
     let input = ElementContainer(vec![Star, Tokens(vec!['a']), Star]);
-    let (rest, txms) = transforms(input).unwrap();
+    let (rest, txms) = transforms(input.clone()).unwrap();
 
     println!("{:?}", txms);
     assert!(rest.v().is_empty(), "has stuff: {rest:?}");
 
+    let r = star_a_star_rule(input);
+    assert!(r.is_ok(), "{r:?}");
 
+    let (rest, txms) = r.unwrap();
+    println!("{:?}", txms);
+
+    assert!(rest.v().is_empty(), "has stuff: {rest:?}");
 }
+
 fn pretty_print_path(paths: Vec<Vec<Element>>) {
     for p in paths {
-        println!("path: {}", p.iter().map(|e| e.to_string()).collect::<String>());
+        println!(
+            "path: {}",
+            p.iter().map(|e| e.to_string()).collect::<String>()
+        );
     }
 }
+
 // 2 methods which could call apply_negation_txms
 // - returns a Vec<Vec<Element>>, a set of paths to union into a graph
 // #[tracing::instrument(ret)]
@@ -144,7 +155,10 @@ fn test_visit_choices() {
 }
 
 // #[tracing::instrument(ret)]
-fn visit_choices(original_input: &Vec<Element>, choices: &[HashSet<Vec<Element>>]) -> Vec<Vec<Element>> {
+fn visit_choices(
+    original_input: &Vec<Element>,
+    choices: &[HashSet<Vec<Element>>],
+) -> Vec<Vec<Element>> {
     let mut paths = vec![];
     if let Some(current) = choices.first() {
         let mut positive = visit_choices(original_input, &choices[1..]);
@@ -165,7 +179,11 @@ fn visit_choices(original_input: &Vec<Element>, choices: &[HashSet<Vec<Element>>
             );
         }
     }
-    return paths.into_iter().filter(|p| p != original_input).clone().collect();
+    paths
+        .into_iter()
+        .filter(|p| p != original_input)
+        .clone()
+        .collect()
 }
 
 // - returns an NFA
@@ -192,7 +210,10 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
     // todo: construct ElementContainer here?
     let (rest, txms) = transforms(input).unwrap();
     // Consider returning an error here?
-    debug_assert!(rest.v().is_empty(), "🌮🌮🌮🌮🌮 Did not consume everything {rest:?}");
+    debug_assert!(
+        rest.v().is_empty(),
+        "🌮🌮🌮🌮🌮 Did not consume everything {rest:?}"
+    );
     // Vec of Vec of Element
     let mut rules: Vec<HashSet<Vec<Element>>> = Default::default();
     for txm in txms {
@@ -282,10 +303,10 @@ fn transforms(input: ElementContainer) -> IResult<ElementContainer, Vec<Transfor
             not_tokens_rule,
         )),
         eof,
-    )(input.clone());
+    )(input);
 
     match r {
-        Ok((rest, (elementals, _) )) => Ok((rest, elementals.into_iter().flatten().collect())),
+        Ok((rest, (elementals, _))) => Ok((rest, elementals.into_iter().flatten().collect())),
         Err(e) => {
             println!("Error parsing: {e:?}");
             Err(e)
@@ -328,6 +349,38 @@ fn flatten_only_questions_rule(
     Ok((rest, vec![Transform::Questions(q)]))
 }
 
+#[test]
+fn test_tiny_star_a_star() {
+    setup();
+
+    use Element::*;
+    let input = ElementContainer(vec![Star]);
+
+    let r = tuple((globulars,))(input.clone());
+
+    assert!(r.is_ok(), "{r:?}");
+
+    let input = ElementContainer(vec![Tokens(vec!['a'])]);
+
+    let r = tokens(input.clone());
+    assert!(r.is_ok(), "{r:?}");
+
+    let input = ElementContainer(vec![Tokens(vec!['a']), Star]);
+
+    let r = pair(tokens, globulars)(input.clone());
+    assert!(r.is_ok(), "{r:?}");
+
+    let input = ElementContainer(vec![Star, Tokens(vec!['a']), Star]);
+
+    let r = star_a_star_rule(input.clone());
+    assert!(r.is_ok(), "{r:?}");
+
+    let (rest, txms) = r.unwrap();
+    println!("{:?}", txms);
+
+    assert!(rest.v().is_empty(), "has stuff: {rest:?}");
+}
+
 // *a*
 // *a**b*c*
 // only contains terms separates by stars and bounded on the outside by stars
@@ -346,9 +399,10 @@ fn star_a_star_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Tr
 // concatenate any initial sequence of Element::TokenSeq() into a single Vec and return
 fn tokens(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
     let mut chars: Vec<_> = vec![];
-    let mut elements = input.v().iter();
-    while let Some(Element::Tokens(c)) = elements.next() {
+    let mut elements = input.v().iter().peekable();
+    while let Some(Element::Tokens(c)) = elements.peek() {
         chars.extend(c);
+        elements.next(); // consume
     }
     if chars.is_empty() {
         return fail(input);
@@ -442,19 +496,21 @@ fn our_one_of<'list>(
     list: &'list ElementContainer,
 ) -> impl Fn(
     ElementContainer,
-) -> IResult<ElementContainer, Element, nom::error::Error<ElementContainer>> + 'list {
-    move |i: ElementContainer| match (&i).iter_elements().next().map(|c| {
-        (c, list.find_token(c.clone()))
-    }) {
+) -> IResult<ElementContainer, Element, nom::error::Error<ElementContainer>>
+       + 'list {
+    move |i: ElementContainer| match (&i)
+        .iter_elements()
+        .next()
+        .map(|c| (c, list.find_token(c.clone())))
+    {
         Some((c, true)) => {
             let r = i.slice(1..);
             Ok((r, c.clone()))
         }
-        e => {
-            Err(nom::Err::Error(nom::error::Error::new(
+        e => Err(nom::Err::Error(nom::error::Error::new(
             i,
             nom::error::ErrorKind::Fail,
-        )))}
+        ))),
     }
 }
 
