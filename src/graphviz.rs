@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 pub use super::*;
 
 impl<N, E> Nfa<N, E>

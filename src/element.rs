@@ -103,7 +103,7 @@ impl Accepts<&char> for Element {
 impl Accepts<char> for Element {
     #[tracing::instrument(skip_all, ret)]
     fn accepts(&self, l: char) -> bool {
-        return self.accepts(&l);
+        self.accepts(&l)
     }
 }
 
@@ -117,6 +117,7 @@ fn test_blah() {
     }
 }
 
+#[cfg(test)]
 fn path_from_str(s: &str) -> Vec<Element> {
     let mut negate_next = false;
     let mut v: Vec<_> = Default::default();

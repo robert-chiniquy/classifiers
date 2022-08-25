@@ -137,30 +137,3 @@ where
         }
     }
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum LRSemantics {
-    L,
-    R,
-    LR,
-    None,
-}
-
-impl Default for LRSemantics {
-    fn default() -> Self {
-        LRSemantics::None
-    }
-}
-
-impl LRSemantics {
-    #[tracing::instrument(ret)]
-    pub(crate) fn sum(&self, other: &LRSemantics) -> LRSemantics {
-        match (self, other) {
-            (x, y) if x == y => x.clone(),
-            (_x, LRSemantics::LR) | (LRSemantics::LR, _x) => LRSemantics::LR,
-            (LRSemantics::R, LRSemantics::L) | (LRSemantics::L, LRSemantics::R) => LRSemantics::LR,
-            (x, LRSemantics::None) | (LRSemantics::None, x) => x.clone(),
-            (_, _) => unreachable!(),
-        }
-    }
-}
