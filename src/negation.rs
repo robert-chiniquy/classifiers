@@ -181,6 +181,8 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
     );
     // Vec of Vec of Element
     let mut rules: Vec<HashSet<Vec<Element>>> = Default::default();
+    let multiple_txns = &txms.len() > &1;
+
     for txm in txms {
         // println!("txm: {txm:?}");
         let mut set = match txm.clone() {
@@ -224,7 +226,7 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
                     match e {
                         Elementals::Tokens(t) => items.push(Element::LoopNotTokens(t)),
                         Elementals::Globulars(g) => {
-                            for i in 1..g {
+                            for i in 1..g+1 {
                                 items.push(Element::Question);
                             }
                         }
@@ -295,8 +297,10 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
                 rule
             }
         };
-        // This line adds the original value for combinatorics with other negations
-        set.insert(txm.elements());
+        if multiple_txns {
+            // This line adds the original value for combinatorics with other negations
+            set.insert(txm.elements());    
+        }
         rules.push(set);
     }
     // filter out empty hashsets
@@ -419,6 +423,10 @@ fn flatten_only_questions_rule(
 fn test_tiny_star_a_star() {
     setup();
 
+    // let input = vec![Star, Tokens(vec!['a']), Star];
+    // let negative = negation_of(input.clone());
+    // pretty_print_path(&input,&negative);
+
     use Element::*;
     let input = ElementContainer(vec![Star]);
 
@@ -458,12 +466,15 @@ fn test_star_a_star() {
     println!("{:?}", txms);
     assert!(rest.v().is_empty(), "has stuff: {rest:?}");
 
-    let r = star_a_star_rule(input);
+    let r = star_a_star_rule(input.clone());
     assert!(r.is_ok(), "{r:?}");
 
     let (rest, txms) = r.unwrap();
     println!("{:?}", txms);
 
+
+    let stuff = negation_of(input.v().clone());
+    pretty_print_path(&input.v(), &stuff);
     assert!(rest.v().is_empty(), "has stuff: {rest:?}");
 }
 
