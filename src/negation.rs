@@ -60,7 +60,8 @@ fn test_negation() {
         vec![Star, Tokens(vec!['a', 'b'])],
         vec![Tokens(vec!['a']), Question, Tokens(vec!['b'])],
         vec![Question, Question, Tokens(vec!['a', 'b']), Question],
-        vec![Question, Question, LoopNotTokens(vec!['a', 'b']), Question],
+        vec![Question, LoopNotTokens(vec!['W', 'm']), Question],
+        vec![Question, Question, LoopNotTokens(vec!['q', 'U']), Question],
         vec![
             Question,
             Tokens(vec!['c']),
@@ -100,9 +101,13 @@ pub fn negation_of(input: Vec<Element>) -> Vec<Vec<Element>> {
     }
     if is_finite {
         // could be questions up front instead
-        paths.push(vec![ Element::Star; min_length + 1 ]);
+        paths.push(vec![Element::Star; min_length + 1]);
     }
-    paths.into_iter().collect::<HashSet<_>>().into_iter().collect()
+    paths
+        .into_iter()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 #[test]
@@ -739,6 +744,9 @@ fn pretty_print_path(original: &Vec<Element>, paths: &[Vec<Element>]) {
     );
 }
 
+// Note: Varying with the semantics of LoopNotTokens, the minimum unit length
+// for those types should likely be 1 rather than the length of the sequence
+// (if they match shorter values), so making that change now.
 // #[tracing::instrument(ret)]
 fn element_sequence_minimum_unit_length(input: &[Element]) -> usize {
     input
@@ -748,7 +756,7 @@ fn element_sequence_minimum_unit_length(input: &[Element]) -> usize {
             Element::Star => 1,
             Element::Tokens(s) => s.len(),
             Element::NotTokens(s) => s.len(),
-            Element::LoopNotTokens(s) => s.len(),
+            Element::LoopNotTokens(s) => 1,
         })
         .sum()
 }

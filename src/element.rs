@@ -34,7 +34,7 @@ impl std::fmt::Display for Element {
                         format!("!{s}")
                     }
                 }
-                Element::LoopNotTokens(c) =>{
+                Element::LoopNotTokens(c) => {
                     let s = c.iter().map(|c| c.to_string()).collect::<String>();
                     if &s.len() > &1 {
                         format!("!`{s}`°")
@@ -152,8 +152,8 @@ impl Invertible for Vec<Element> {
 fn diverge(a: &Element, b: &Element) -> Vec<NfaBranch<Element>> {
     use EdgeTransition::*;
     vec![
-        NfaBranch::new(a.clone(), Advance, Dropp),
-        NfaBranch::new(b.clone(), Dropp, Advance),
+        NfaBranch::new(a.clone(), Advance, Stop),
+        NfaBranch::new(b.clone(), Stop, Advance),
     ]
 }
 
@@ -179,7 +179,7 @@ impl BranchProduct<Element> for Element {
             }
             (Star, LoopNotTokens(_)) => {
                 vec![
-                    NfaBranch::new(Star, Advance, Dropp),
+                    NfaBranch::new(Star, Advance, Stop),
                     NfaBranch::new(b.clone(), Stay, Advance),
                     NfaBranch::new(b.clone(), Advance, Advance),
                     NfaBranch::new(b.clone(), Advance, Stay),
@@ -187,7 +187,7 @@ impl BranchProduct<Element> for Element {
             }
             (LoopNotTokens(_), Star) => {
                 vec![
-                    NfaBranch::new(Star, Dropp, Advance),
+                    NfaBranch::new(Star, Stop, Advance),
                     NfaBranch::new(b.clone(), Stay, Advance),
                     NfaBranch::new(b.clone(), Advance, Advance),
                     NfaBranch::new(b.clone(), Advance, Stay),
@@ -196,7 +196,7 @@ impl BranchProduct<Element> for Element {
             (Star, _) => {
                 // consume lr, consume left, or drop right...
                 vec![
-                    NfaBranch::new(Star, Advance, Dropp),
+                    NfaBranch::new(Star, Advance, Stop),
                     NfaBranch::new(b.clone(), Stay, Advance),
                     // NfaBranch::new(*a, Stay, Advance), //?
                     NfaBranch::new(b.clone(), Advance, Advance),
@@ -204,7 +204,7 @@ impl BranchProduct<Element> for Element {
             }
             (_, Star) => {
                 vec![
-                    NfaBranch::new(Star, Dropp, Advance),
+                    NfaBranch::new(Star, Stop, Advance),
                     NfaBranch::new(a.clone(), Advance, Stay),
                     //NfaBranch::new(*b, Advance, Stay), // ?
                     NfaBranch::new(a.clone(), Advance, Advance),
@@ -214,7 +214,7 @@ impl BranchProduct<Element> for Element {
             (Tokens(n), Question) => {
                 if n.len() == 1 {
                     vec![
-                        NfaBranch::new(Question, Dropp, Advance),
+                        NfaBranch::new(Question, Stop, Advance),
                         NfaBranch::new(a.clone(), Advance, Advance),
                     ]
                 } else {
@@ -235,7 +235,7 @@ impl BranchProduct<Element> for Element {
                     // a < b
                     vec![
                         NfaBranch::new(a.clone(), Advance, Advance),
-                        NfaBranch::new(b.clone(), Dropp, Advance),
+                        NfaBranch::new(b.clone(), Stop, Advance),
                     ]
                 } else {
                     diverge(a, b)
@@ -245,7 +245,7 @@ impl BranchProduct<Element> for Element {
                 if x.len() == 1 {
                     vec![
                         NfaBranch::new(a.clone(), Advance, Advance),
-                        NfaBranch::new(Element::Tokens(x.clone()), Dropp, Advance),
+                        NfaBranch::new(Element::Tokens(x.clone()), Stop, Advance),
                     ]
                 } else {
                     diverge(a, b)
@@ -257,7 +257,7 @@ impl BranchProduct<Element> for Element {
                 } else {
                     // x > y
                     vec![
-                        NfaBranch::new(a.clone(), Advance, Dropp),
+                        NfaBranch::new(a.clone(), Advance, Stop),
                         NfaBranch::new(b.clone(), Advance, Advance),
                     ]
                 }
@@ -273,7 +273,7 @@ impl BranchProduct<Element> for Element {
                 if y.len() == 1 {
                     // a > b
                     vec![
-                        NfaBranch::new(Question, Advance, Dropp),
+                        NfaBranch::new(Question, Advance, Stop),
                         NfaBranch::new(b.clone(), Advance, Advance),
                     ]
                 } else {
@@ -284,7 +284,7 @@ impl BranchProduct<Element> for Element {
                 if y.len() == 1 {
                     // a > b
                     vec![
-                        NfaBranch::new(Element::Tokens(y.clone()), Advance, Dropp),
+                        NfaBranch::new(Element::Tokens(y.clone()), Advance, Stop),
                         NfaBranch::new(b.clone(), Advance, Advance),
                     ]
                 } else {
@@ -294,7 +294,7 @@ impl BranchProduct<Element> for Element {
             (Question, LoopNotTokens(y)) => {
                 if y.len() == 1 {
                     vec![
-                        NfaBranch::new(Question, Advance, Dropp),
+                        NfaBranch::new(Question, Advance, Stop),
                         NfaBranch::new(b.clone(), Advance, Stay),
                         NfaBranch::new(b.clone(), Advance, Advance),
                     ]
@@ -309,7 +309,7 @@ impl BranchProduct<Element> for Element {
                 } else if x.len() == y.len() {
                     // a < b
                     vec![
-                        NfaBranch::new(b.clone(), Dropp, Advance),
+                        NfaBranch::new(b.clone(), Stop, Advance),
                         NfaBranch::new(a.clone(), Advance, Advance),
                         NfaBranch::new(a.clone(), Advance, Stay),
                     ]
@@ -325,9 +325,9 @@ impl BranchProduct<Element> for Element {
                     ]
                 } else if x.len() == y.len() {
                     vec![
-                        NfaBranch::new(b.clone(), Dropp, Advance),
+                        NfaBranch::new(b.clone(), Stop, Advance),
                         NfaBranch::new(a.clone(), Advance, Advance),
-                        NfaBranch::new(a.clone(), Advance, Dropp),
+                        NfaBranch::new(a.clone(), Advance, Stop),
                     ]
                 } else {
                     diverge(a, b)
