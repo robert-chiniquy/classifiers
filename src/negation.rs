@@ -52,48 +52,22 @@ fn test_negation() {
     setup();
     use Element::*;
     let examples = vec![
-        vec![Star, Tokens(vec!['a'])],
-        vec![Star, Tokens(vec!['a'])],
-        vec![Star, Tokens(vec!['a']), Star],
-        vec![Question, Tokens(vec!['a'])],
-        vec![Question, Tokens(vec!['a']), Star, Star],
-        vec![Star, Tokens(vec!['a', 'b'])],
+        // vec![Star, Tokens(vec!['a'])],
+        // vec![Star, Tokens(vec!['a'])],
+        // vec![Star, Tokens(vec!['a']), Star],
+        // vec![Question, Tokens(vec!['a'])],
+        // vec![Question, Tokens(vec!['a']), Star, Star],
+        // vec![Star, Tokens(vec!['a', 'b'])],
+        // vec![Tokens(vec!['a']), Question, Tokens(vec!['b'])],
+        // vec![Question, Question, Tokens(vec!['a', 'b']), Question],
+        vec![Question, Question, LoopNotTokens(vec!['a', 'b']), Question],
+        // **ab*
     ];
-    
+
     for input in examples {
         let negative = negation_of(input.clone());
         pretty_print_path(&input, &negative);
     }
-
-    
-    // let negative = negation_of(input.clone());
-    // pretty_print_path(&input, &negative);
-
-    
-    // let negative = negation_of(input.clone());
-    // pretty_print_path(&input,&negative);
-
-    // // ?a -> ?, ?(not a), ??*
-    
-    // let negative = negation_of(input.clone());
-    // pretty_print_path(&input,&negative);
-
-    // for p in negative {
-    //     assert!(p != vec![Star, Star, NotTokens(vec!['a'])]);
-    // }
-
-    
-    // let negative = negation_of(input.clone());
-    // pretty_print_path(&input,&negative);
-
-    // for p in negative {
-    //     assert!(p != vec![Star, Star, NotTokens(vec!['a']), Star, Star]);
-    // }
-
-    
-    // let negative = negation_of(input.clone());
-    // pretty_print_path(&input,&negative);
-
 }
 
 // 2 methods which could call apply_negation_txms
@@ -262,7 +236,7 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
                     match e {
                         Elementals::LoopNotTokens(t) => items.push(Element::Tokens(t)),
                         Elementals::Questions(g) => {
-                            for i in 1..g {
+                            for i in 1..g+1 {
                                 items.push(Element::Star);
                             }
                         }
@@ -401,6 +375,25 @@ fn end_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>
     Ok((rest, vec![Transform::EndAnchoredTokens(ret)]))
 }
 
+
+#[test]
+fn test_q_not_loop_q_rule() {
+    use Element::*;
+    let input = ElementContainer(vec![Question]);
+    let r = tuple((questions_count,))(input);
+    assert!(r.is_ok(), "{r:?}");
+
+    let input = ElementContainer(vec![Question, Question]);
+    let r = tuple((questions_count,))(input.clone());
+    assert!(r.is_ok(), "{r:?}");
+
+
+    let input = ElementContainer(vec![Question, Question, LoopNotTokens(vec!['a', 'b'])]);
+    let r = tuple((questions_count,))(input.clone());
+    assert!(r.is_ok(), "{r:?}");
+}
+
+
 fn q_not_loop_q_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
     let (rest, (first, pairs)) =
         tuple((questions_count, many1(pair(not_loops, questions_count))))(input)?;
@@ -535,9 +528,10 @@ fn tokens(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
 // Combine any consecutive NotLoops
 fn not_loops(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
     let mut chars: Vec<_> = vec![];
-    let mut elements = input.v().iter();
-    while let Some(Element::LoopNotTokens(c)) = elements.next() {
+    let mut elements = input.v().iter().peekable();
+    while let Some(Element::LoopNotTokens(c)) = elements.peek() {
         chars.extend(c);
+        elements.next();
     }
     if chars.is_empty() {
         return fail(input);
@@ -552,9 +546,10 @@ fn not_tokens_elementals(input: ElementContainer) -> IResult<ElementContainer, V
 
 fn not_tokens(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
     let mut chars: Vec<_> = vec![];
-    let mut elements = input.v().iter();
-    while let Some(Element::NotTokens(c)) = elements.next() {
+    let mut elements = input.v().iter().peekable();
+    while let Some(Element::NotTokens(c)) = elements.peek() {
         chars.extend(c);
+        elements.next();
     }
     if chars.is_empty() {
         return fail(input);
