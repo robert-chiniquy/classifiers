@@ -3,7 +3,7 @@ use std::{
     collections::HashSet,
     iter::{Copied, Enumerate},
     ops::RangeFrom,
-    slice::Iter,
+    slice::Iter, fmt::Debug,
 };
 
 #[cfg(test)]
@@ -67,10 +67,14 @@ fn test_negation() {
     setup();
     let input = vec![Element::Star, Element::Tokens(vec!['a'])];
     let negative = negation_of(input);
-
-    println!("{negative:?}");
+    pretty_print_path(negative);
 }
 
+fn pretty_print_path(paths: Vec<Vec<Element>>) {
+    for p in paths {
+        println!("path: {}", p.iter().map(|e| e.to_string()).collect::<String>());
+    }
+}
 // 2 methods which could call apply_negation_txms
 // - returns a Vec<Vec<Element>>, a set of paths to union into a graph
 // #[tracing::instrument(ret)]
@@ -191,13 +195,12 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
             // negate((not *)) -> union([]) (srsly)
             // negate(***) -> [??, ?]
             Transform::Globulars(n) => {
-                println!("Globulars {:?}", n);
                 // before doing this rule, matt wants to capture a* in a rule (different from star a star)
                 let mut rule: HashSet<_> = Default::default();
                 for i in 1..n {
                     rule.insert(vec![Element::Question; i]);
                 }
-                rule.insert(vec![Element::Tokens(vec![' '])]);
+                // rule.insert(vec![Element::Tokens(vec![' '])]);
                 rule
             }
             Transform::Questions(n) => {
@@ -276,25 +279,6 @@ fn transforms(input: ElementContainer) -> IResult<ElementContainer, Vec<Transfor
     }
 }
 
-// // a single star which is not in a star a star or a sequence of * and/or ?
-// fn lonely_star_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
-//     let (rest, t) = stars(input.clone())?;
-//     if t > 1 {
-//         return fail(input);
-//     }
-//     Ok((rest, vec![Transform::LonelyStar]))
-// }
-
-// requires that the remainder of the sequence be tokens
-// fn only_tokens_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
-//     let (rest, t) = tokens(input.clone())?;
-//     println!("only_tokens_rule: rest {rest:?}, t: {t:?}");
-//     if !rest.v().is_empty() {
-//         return fail(input);
-//     }
-//     Ok((rest, vec![Transform::OnlyTokenSeq(t)]))
-// }
-
 fn q_not_loop_q_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
     let (rest, (first, pairs)) = tuple((questions, many1(pair(not_loops, questions))))(input)?;
     // produce a transform
@@ -336,7 +320,6 @@ fn flatten_only_questions_rule(
 fn star_a_star_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
     let (rest, (first, pairs)) = tuple((globulars, many1(pair(tokens, globulars))))(input)?;
     // produce a transform
-    println!("_star_rule: rest: {rest:?}, {:?}, {:?}", first, pairs);
     let mut ret = vec![Elementals::Globulars(first)];
     for (token, last) in pairs {
         ret.push(Elementals::Tokens(token));
@@ -404,16 +387,13 @@ fn globulars(input: ElementContainer) -> IResult<ElementContainer, usize> {
 /// should ensure that if required in context
 // #[tracing::instrument(ret)]
 fn stars_or_questions(input: ElementContainer) -> IResult<ElementContainer, usize> {
-    println!("stars_or_questions?: {input:?}");
     if let Ok((rest, stars)) = many1(our_one_of(&ElementContainer(vec![
         Element::Question,
         Element::Star,
     ])))(input.clone())
     {
-        println!("stars_or_questions: yep! {:?}", stars.len());
         Ok((rest, stars.len()))
     } else {
-        println!("stars_or_questions: no");
         fail(input)
     }
 }
@@ -421,7 +401,6 @@ fn stars_or_questions(input: ElementContainer) -> IResult<ElementContainer, usiz
 /// returns the number of stars in the input
 // #[tracing::instrument(ret)]
 fn stars(input: ElementContainer) -> IResult<ElementContainer, usize> {
-    println!("stars?: {input:?}");
     if let Ok((rest, stars)) =
         many1(our_one_of(&ElementContainer(vec![Element::Star])))(input.clone())
     {
@@ -434,7 +413,6 @@ fn stars(input: ElementContainer) -> IResult<ElementContainer, usize> {
 /// returns the number of consecutive questions in the input
 
 fn questions(input: ElementContainer) -> IResult<ElementContainer, usize> {
-    println!("questions?: {input:?}");
     if let Ok((rest, questions)) =
         many1(our_one_of(&ElementContainer(vec![Element::Question])))(input.clone())
     {
@@ -443,18 +421,6 @@ fn questions(input: ElementContainer) -> IResult<ElementContainer, usize> {
         fail(input)
     }
 }
-
-// pub fn one_of<I, T, Error: ParseError<I>>(list: T) -> impl Fn(I) -> IResult<I, char, Error>
-// where
-//   I: Slice<RangeFrom<usize>> + InputIter,
-//   <I as InputIter>::Item: AsChar + Copy,
-//   T: FindToken<<I as InputIter>::Item>,
-// {
-//   move |i: I| match (i).iter_elements().next().map(|c| (c, list.find_token(c))) {
-//     Some((c, true)) => Ok((i.slice(c.len()..), c.as_char())),
-//     _ => Err(Err::Error(Error::from_error_kind(i, ErrorKind::OneOf))),
-//   }
-// }
 
 // not needless
 #[allow(clippy::needless_lifetimes)]

@@ -23,28 +23,13 @@ impl std::fmt::Display for Element {
             "{}",
             match self {
                 Element::Question => "?".to_string(),
-                Element::Star => "*°".to_string(),
-                Element::NotTokens(c) => {
-                    if c.len() > 1 {
-                        format!("!'{c:?}'")
-                    } else {
-                        format!("!{c:?}")
-                    }
-                }
-                Element::Tokens(c) => {
-                    if c.len() > 1 {
-                        format!("'{c:?}'")
-                    } else {
-                        format!("{c:?}")
-                    }
-                }
-                Element::LoopNotTokens(c) => {
-                    if c.len() > 1 {
-                        format!("!'{c:?}'°")
-                    } else {
-                        format!("!{c:?}°")
-                    }
-                }
+                Element::Star => "*".to_string(),
+                Element::NotTokens(c) =>
+                    format!("!{}", c.iter().map(|c| c.to_string()).collect::<String>()),
+                Element::Tokens(c) =>
+                    format!("{}", c.iter().map(|c| c.to_string()).collect::<String>()),
+                Element::LoopNotTokens(c) =>
+                    format!("!{}°", c.iter().map(|c| c.to_string()).collect::<String>()),
             }
         ))
     }
