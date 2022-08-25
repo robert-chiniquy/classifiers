@@ -102,7 +102,7 @@ pub fn negation_of(input: Vec<Element>) -> Vec<Vec<Element>> {
         // could be questions up front instead
         paths.push(vec![ Element::Star; min_length + 1 ]);
     }
-    paths
+    paths.into_iter().collect::<HashSet<_>>().into_iter().collect()
 }
 
 #[test]
