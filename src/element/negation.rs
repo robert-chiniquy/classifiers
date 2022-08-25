@@ -153,11 +153,6 @@ fn visit_choices(
         .collect()
 }
 
-// - returns an NFA
-pub fn nfa_negation_of(input: Vec<Element>) {
-    todo!()
-}
-
 // negation transforms must be collectively symmetrical - often individually
 // entry -path-> Reject
 // becomes ... entry -[some paths]-> Accept

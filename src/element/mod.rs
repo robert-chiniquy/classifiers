@@ -1,3 +1,7 @@
+mod negation;
+
+pub(crate) use negation::*;
+
 use super::*;
 use std::collections::HashSet;
 
@@ -10,95 +14,37 @@ pub enum Element {
     LoopNotTokens(Vec<char>),
 }
 
-// TODO: Remove the dep on Default for this stuff
-impl Default for Element {
-    fn default() -> Self {
-        Element::Star
+impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
+where
+    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
+{
+    pub fn accepts_string(&self, s: &str) -> bool {
+        self.accepts(&str_to_chars(s))
     }
-}
 
-impl std::fmt::Display for Element {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "{}",
-            match self {
-                Element::Question => "?".to_string(),
-                Element::Star => "*".to_string(),
-                Element::Tokens(c) => c.iter().map(|c| c.to_string()).collect::<String>(),
-                Element::NotTokens(c) => {
-                    let s = c.iter().map(|c| c.to_string()).collect::<String>();
-                    if s.len() > 1 {
-                        format!("!`{s}`")
-                    } else {
-                        format!("!{s}")
-                    }
-                }
-                Element::LoopNotTokens(c) => {
-                    let s = c.iter().map(|c| c.to_string()).collect::<String>();
-                    if s.len() > 1 {
-                        format!("!`{s}`°")
-                    } else {
-                        format!("!{s}°")
-                    }
-                }
-            }
-        ))
-    }
-}
-
-impl Accepts<Element> for Element {
-    #[tracing::instrument(ret)]
-    fn accepts(&self, l: Element) -> bool {
-        use Element::*;
-        match (self, &l) {
-            (x, y) if x == y => true,
-            // (Element::Question, Element::Question) => true,
-            (Star, _) => true,
-            (NotTokens(b), Tokens(a)) => {
-                // this should never happen
-                debug_assert!(!b.is_empty());
-                debug_assert!(!a.is_empty());
-                a != b
-            }
-            (Question, NotTokens(n)) => n.len() == 1,
-            (Question, Tokens(n)) => n.len() == 1,
-            (LoopNotTokens(a), Tokens(b)) => a != b,
-            (LoopNotTokens(a), NotTokens(b)) => a != b,
-            (_, Star) => false,
-            // if len(seq) == 1, Q can match seq.  Otherwise, Q can't match multi chars.
-            (LoopNotTokens(_), Question) => false,
-            (Tokens(_), NotTokens(_)) => false,
-            (NotTokens(_), Question) => false,
-            (Tokens(_), Question) => false,
-            (_, _) => false,
+    #[tracing::instrument(skip_all)]
+    pub fn from_str(s: &str, m: M) -> Self {
+        let mut nfa: Self = Default::default();
+        let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
+        nfa.entry.insert(prior);
+        for c in s.chars() {
+            let target = nfa.add_node(NfaNode::new(Terminal::Not));
+            let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
+            prior = target;
         }
+        nfa.node_mut(prior).state = Terminal::Accept(m);
+        nfa
     }
 }
 
-// TODO: FIXME: terminal_on needs to decompose seqs of len > 1 into component token/not token to call this method
-impl Accepts<&char> for Element {
-    #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: &char) -> bool {
-        match self {
-            Element::Question => true,
-            Element::Star => true,
-            Element::Tokens(n) if n.len() == 1 => n[0] == *l,
-            Element::NotTokens(n) if n.len() == 1 => n[0] != *l,
-            Element::LoopNotTokens(n) if n.len() == 1 => n[0] != *l,
-            _ => false,
-        }
-    }
-}
-
-impl Accepts<char> for Element {
-    #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: char) -> bool {
-        self.accepts(&l)
+impl Invertible for Vec<Element> {
+    fn inverse(&self) -> HashSet<Self> {
+        todo!()
     }
 }
 
 #[test]
-fn test_blah() {
+fn test_one() {
     let sources = vec![("a", ["!a", "**"])];
     for (s, v) in sources {
         let p = path_from_str(s);
@@ -124,20 +70,6 @@ fn path_from_str(s: &str) -> Vec<Element> {
         v.push(e);
     }
     v
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Elementals {
-    Tokens(Vec<char>),
-    NotTokens(Vec<char>),
-    Questions(usize),
-    Globulars(usize),
-}
-
-impl Invertible for Vec<Element> {
-    fn inverse(&self) -> HashSet<Self> {
-        todo!()
-    }
 }
 
 fn diverge(a: &Element, b: &Element) -> Vec<NfaBranch<Element>> {
@@ -332,29 +264,6 @@ impl BranchProduct<Element> for Element {
     }
 }
 
-impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
-where
-    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
-{
-    pub fn accepts_string(&self, s: &str) -> bool {
-        self.accepts(&str_to_chars(s))
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub fn from_str(s: &str, m: M) -> Self {
-        let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
-        nfa.entry.insert(prior);
-        for c in s.chars() {
-            let target = nfa.add_node(NfaNode::new(Terminal::Not));
-            let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
-            prior = target;
-        }
-        nfa.node_mut(prior).state = Terminal::Accept(m);
-        nfa
-    }
-}
-
 impl Universal for Element {
     fn universal() -> Self {
         Element::Star
@@ -378,5 +287,92 @@ impl From<&char> for Element {
             '?' => Element::Question,
             c => Element::Tokens(vec![*c]),
         }
+    }
+}
+
+impl Accepts<Element> for Element {
+    #[tracing::instrument(ret)]
+    fn accepts(&self, l: Element) -> bool {
+        use Element::*;
+        match (self, &l) {
+            (x, y) if x == y => true,
+            // (Element::Question, Element::Question) => true,
+            (Star, _) => true,
+            (NotTokens(b), Tokens(a)) => {
+                // this should never happen
+                debug_assert!(!b.is_empty());
+                debug_assert!(!a.is_empty());
+                a != b
+            }
+            (Question, NotTokens(n)) => n.len() == 1,
+            (Question, Tokens(n)) => n.len() == 1,
+            (LoopNotTokens(a), Tokens(b)) => a != b,
+            (LoopNotTokens(a), NotTokens(b)) => a != b,
+            (_, Star) => false,
+            // if len(seq) == 1, Q can match seq.  Otherwise, Q can't match multi chars.
+            (LoopNotTokens(_), Question) => false,
+            (Tokens(_), NotTokens(_)) => false,
+            (NotTokens(_), Question) => false,
+            (Tokens(_), Question) => false,
+            (_, _) => false,
+        }
+    }
+}
+
+// TODO: FIXME: terminal_on needs to decompose seqs of len > 1 into component token/not token to call this method
+impl Accepts<&char> for Element {
+    #[tracing::instrument(skip_all, ret)]
+    fn accepts(&self, l: &char) -> bool {
+        match self {
+            Element::Question => true,
+            Element::Star => true,
+            Element::Tokens(n) if n.len() == 1 => n[0] == *l,
+            Element::NotTokens(n) if n.len() == 1 => n[0] != *l,
+            Element::LoopNotTokens(n) if n.len() == 1 => n[0] != *l,
+            _ => false,
+        }
+    }
+}
+
+impl Accepts<char> for Element {
+    #[tracing::instrument(skip_all, ret)]
+    fn accepts(&self, l: char) -> bool {
+        self.accepts(&l)
+    }
+}
+
+// TODO: Remove the dep on Default for this stuff
+impl Default for Element {
+    fn default() -> Self {
+        Element::Star
+    }
+}
+
+impl std::fmt::Display for Element {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "{}",
+            match self {
+                Element::Question => "?".to_string(),
+                Element::Star => "*".to_string(),
+                Element::Tokens(c) => c.iter().map(|c| c.to_string()).collect::<String>(),
+                Element::NotTokens(c) => {
+                    let s = c.iter().map(|c| c.to_string()).collect::<String>();
+                    if s.len() > 1 {
+                        format!("!`{s}`")
+                    } else {
+                        format!("!{s}")
+                    }
+                }
+                Element::LoopNotTokens(c) => {
+                    let s = c.iter().map(|c| c.to_string()).collect::<String>();
+                    if s.len() > 1 {
+                        format!("!`{s}`°")
+                    } else {
+                        format!("!{s}°")
+                    }
+                }
+            }
+        ))
     }
 }

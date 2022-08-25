@@ -1,7 +1,6 @@
 mod classifiers;
 mod element;
 mod graphviz;
-mod negation;
 mod nfa;
 mod tests;
 
