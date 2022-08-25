@@ -36,13 +36,14 @@ fn test_graphviz_one() {
     let mut output = std::fs::File::create("./one.dot").unwrap();
     assert!(output.write_all(g.as_bytes()).is_ok());
 
-    let adsf: Vec<char> = "OOABC".chars().collect();
+    let _adsf: Vec<char> = "OOABC".chars().collect();
 
     assert_eq!(Relation::Disjoint, lhs.relation::<Element, char>(&rhs));
 }
 
 #[test]
 fn test_intersection_of_heterogenous_states() {
+    #![allow(unused)]
     let everything_but_tacos = Classifier::And(BTreeSet::from_iter([
         Classifier::not(Classifier::Literal(str_to_chars("tacos"))),
         Classifier::Literal(str_to_chars("*")),

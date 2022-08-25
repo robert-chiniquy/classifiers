@@ -24,11 +24,10 @@ impl std::fmt::Display for Element {
             match self {
                 Element::Question => "?".to_string(),
                 Element::Star => "*".to_string(),
-                Element::Tokens(c) =>
-                    format!("{}", c.iter().map(|c| c.to_string()).collect::<String>()),
+                Element::Tokens(c) => c.iter().map(|c| c.to_string()).collect::<String>(),
                 Element::NotTokens(c) => {
                     let s = c.iter().map(|c| c.to_string()).collect::<String>();
-                    if &s.len() > &1 {
+                    if s.len() > 1 {
                         format!("!`{s}`")
                     } else {
                         format!("!{s}")
@@ -36,7 +35,7 @@ impl std::fmt::Display for Element {
                 }
                 Element::LoopNotTokens(c) => {
                     let s = c.iter().map(|c| c.to_string()).collect::<String>();
-                    if &s.len() > &1 {
+                    if s.len() > 1 {
                         format!("!`{s}`°")
                     } else {
                         format!("!{s}°")
@@ -59,21 +58,12 @@ impl Accepts<Element> for Element {
                 // this should never happen
                 debug_assert!(!b.is_empty());
                 debug_assert!(!a.is_empty());
-                return a != b;
+                a != b
             }
-            (Question, NotTokens(n)) => {
-                return n.len() == 1;
-            }
-            (Question, Tokens(n)) => {
-                return n.len() == 1;
-            }
-            (LoopNotTokens(a), Tokens(b)) => {
-                return a != b;
-            }
-            (LoopNotTokens(a), NotTokens(b)) => {
-                return a != b;
-            }
-
+            (Question, NotTokens(n)) => n.len() == 1,
+            (Question, Tokens(n)) => n.len() == 1,
+            (LoopNotTokens(a), Tokens(b)) => a != b,
+            (LoopNotTokens(a), NotTokens(b)) => a != b,
             (_, Star) => false,
             // if len(seq) == 1, Q can match seq.  Otherwise, Q can't match multi chars.
             (LoopNotTokens(_), Question) => false,

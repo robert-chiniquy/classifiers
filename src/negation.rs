@@ -184,7 +184,7 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
     );
     // Vec of Vec of Element
     let mut rules: Vec<HashSet<Vec<Element>>> = Default::default();
-    let multiple_txns = &txms.len() > &1;
+    let multiple_txns = txms.len() > 1;
 
     for txm in txms {
         // println!("txm: {txm:?}");
@@ -387,6 +387,7 @@ fn end_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>
 
 #[test]
 fn test_q_not_loop_q_rule() {
+    #![allow(clippy::redundant_clone)]
     use Element::*;
     let input = ElementContainer(vec![Question]);
     let r = tuple((questions_count,))(input);
@@ -440,6 +441,7 @@ fn flatten_only_questions_rule(
 
 #[test]
 fn test_tiny_star_a_star() {
+    #![allow(clippy::redundant_clone)]
     setup();
 
     // let input = vec![Star, Tokens(vec!['a']), Star];
@@ -492,7 +494,7 @@ fn test_star_a_star() {
     println!("{:?}", txms);
 
     let stuff = negation_of(input.v().clone());
-    pretty_print_path(&input.v(), &stuff);
+    pretty_print_path(input.v(), &stuff);
     assert!(rest.v().is_empty(), "has stuff: {rest:?}");
 }
 
