@@ -34,6 +34,35 @@ use nom::{
 // !? -> ** ... -> **a*, ?(!a)*, ?a, ?(!a), **(!a)*, **a
 // there are intersections between the input: ?a* and the above
 
+// returns a Vec<Vec<Element>>, a set of paths to union into a graph
+// #[tracing::instrument(ret)]
+pub fn negation_of(input: Vec<Element>) -> Vec<Vec<Element>> {
+    let sequence_of_choices = interpret_negation_rules(ElementContainer(input.clone()));
+    let mut paths = visit_choices(&input, &sequence_of_choices);
+    // need to correct for length
+    // for finite input, all longer paths
+    // for looping input, all shorter paths
+    // detect looping in input, then add to paths based on input.len()
+    let min_length = element_sequence_minimum_unit_length(&input);
+    let is_finite = !input
+        .iter()
+        .any(|e| matches!(e, Element::Star | Element::LoopNotTokens(_)));
+
+    // always push smaller stuff, if it exists...
+    for i in 1..min_length {
+        paths.push(vec![Element::Question; i]);
+    }
+    if is_finite {
+        // could be questions up front instead
+        paths.push(vec![Element::Star; min_length + 1]);
+    }
+    paths
+        .into_iter()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect()
+}
+
 // one parser for rule, enum variant for each rule
 #[derive(Eq, PartialEq, Clone, Debug)]
 enum Transform {
@@ -78,36 +107,6 @@ fn test_negation() {
         let negative = negation_of(input.clone());
         pretty_print_path(&input, &negative);
     }
-}
-
-// 2 methods which could call apply_negation_txms
-// - returns a Vec<Vec<Element>>, a set of paths to union into a graph
-// #[tracing::instrument(ret)]
-pub fn negation_of(input: Vec<Element>) -> Vec<Vec<Element>> {
-    let sequence_of_choices = interpret_negation_rules(ElementContainer(input.clone()));
-    let mut paths = visit_choices(&input, &sequence_of_choices);
-    // need to correct for length
-    // for finite input, all longer paths
-    // for looping input, all shorter paths
-    // detect looping in input, then add to paths based on input.len()
-    let min_length = element_sequence_minimum_unit_length(&input);
-    let is_finite = !input
-        .iter()
-        .any(|e| matches!(e, Element::Star | Element::LoopNotTokens(_)));
-
-    // always push smaller stuff, if it exists...
-    for i in 1..min_length {
-        paths.push(vec![Element::Question; i]);
-    }
-    if is_finite {
-        // could be questions up front instead
-        paths.push(vec![Element::Star; min_length + 1]);
-    }
-    paths
-        .into_iter()
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect()
 }
 
 #[test]
