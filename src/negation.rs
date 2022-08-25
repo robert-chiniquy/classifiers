@@ -52,16 +52,25 @@ fn test_negation() {
     setup();
     use Element::*;
     let examples = vec![
-        // vec![Star, Tokens(vec!['a'])],
-        // vec![Star, Tokens(vec!['a'])],
-        // vec![Star, Tokens(vec!['a']), Star],
-        // vec![Question, Tokens(vec!['a'])],
-        // vec![Question, Tokens(vec!['a']), Star, Star],
-        // vec![Star, Tokens(vec!['a', 'b'])],
-        // vec![Tokens(vec!['a']), Question, Tokens(vec!['b'])],
-        // vec![Question, Question, Tokens(vec!['a', 'b']), Question],
+        vec![Star, Tokens(vec!['a'])],
+        vec![Star, Tokens(vec!['a'])],
+        vec![Star, Tokens(vec!['a']), Star],
+        vec![Question, Tokens(vec!['a'])],
+        vec![Question, Tokens(vec!['a']), Star, Star],
+        vec![Star, Tokens(vec!['a', 'b'])],
+        vec![Tokens(vec!['a']), Question, Tokens(vec!['b'])],
+        vec![Question, Question, Tokens(vec!['a', 'b']), Question],
         vec![Question, Question, LoopNotTokens(vec!['a', 'b']), Question],
-        // **ab*
+        vec![
+            Question,
+            Tokens(vec!['c']),
+            Question,
+            LoopNotTokens(vec!['a']),
+            Question,
+        ],
+        vec![Star, Star, Star, Star, Star],
+        vec![Star, Question, Star, Question, Star],
+        vec![Tokens(vec!['b']), NotTokens(vec!['c'])],
     ];
 
     for input in examples {
@@ -81,20 +90,17 @@ pub fn negation_of(input: Vec<Element>) -> Vec<Vec<Element>> {
     // for looping input, all shorter paths
     // detect looping in input, then add to paths based on input.len()
     let min_length = element_sequence_minimum_unit_length(&input);
-    match input
+    let is_finite = !input
         .iter()
-        .any(|e| matches!(e, Element::Star | Element::LoopNotTokens(_)))
-    {
-        true => {
-            for i in 1..min_length {
-                paths.push(vec![Element::Question; i]);
-            }
-        }
-        false => paths.push(vec![
-            // could be questions up front instead
-            Element::Star;
-            min_length + 1
-        ]),
+        .any(|e| matches!(e, Element::Star | Element::LoopNotTokens(_)));
+
+    // always push smaller stuff, if it exists...
+    for i in 1..min_length {
+        paths.push(vec![Element::Question; i]);
+    }
+    if is_finite {
+        // could be questions up front instead
+        paths.push(vec![ Element::Star; min_length + 1 ]);
     }
     paths
 }
@@ -219,7 +225,7 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
                     match e {
                         Elementals::Tokens(t) => items.push(Element::LoopNotTokens(t)),
                         Elementals::Globulars(g) => {
-                            for i in 1..g+1 {
+                            for i in 1..g + 1 {
                                 items.push(Element::Question);
                             }
                         }
@@ -236,7 +242,7 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
                     match e {
                         Elementals::LoopNotTokens(t) => items.push(Element::Tokens(t)),
                         Elementals::Questions(g) => {
-                            for i in 1..g+1 {
+                            for i in 1..g + 1 {
                                 items.push(Element::Star);
                             }
                         }
@@ -292,7 +298,7 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
         };
         if multiple_txns {
             // This line adds the original value for combinatorics with other negations
-            set.insert(txm.elements());    
+            set.insert(txm.elements());
         }
         rules.push(set);
     }
@@ -375,7 +381,6 @@ fn end_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>
     Ok((rest, vec![Transform::EndAnchoredTokens(ret)]))
 }
 
-
 #[test]
 fn test_q_not_loop_q_rule() {
     use Element::*;
@@ -387,12 +392,10 @@ fn test_q_not_loop_q_rule() {
     let r = tuple((questions_count,))(input.clone());
     assert!(r.is_ok(), "{r:?}");
 
-
     let input = ElementContainer(vec![Question, Question, LoopNotTokens(vec!['a', 'b'])]);
     let r = tuple((questions_count,))(input.clone());
     assert!(r.is_ok(), "{r:?}");
 }
-
 
 fn q_not_loop_q_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
     let (rest, (first, pairs)) =
@@ -464,7 +467,6 @@ fn test_tiny_star_a_star() {
     let (rest, txms) = r.unwrap();
     println!("{:?}", txms);
 
-
     assert!(rest.v().is_empty(), "has stuff: {rest:?}");
 }
 
@@ -484,7 +486,6 @@ fn test_star_a_star() {
 
     let (rest, txms) = r.unwrap();
     println!("{:?}", txms);
-
 
     let stuff = negation_of(input.v().clone());
     pretty_print_path(&input.v(), &stuff);
@@ -725,9 +726,17 @@ impl<'a> InputIter for &'a ElementContainer {
 
 fn pretty_print_path(original: &Vec<Element>, paths: &[Vec<Element>]) {
     let original = original.iter().map(|e| e.to_string()).collect::<String>();
-    let mut paths = paths.iter().map(|p| p.iter().map(|e| e.to_string()).collect::<String>()).collect::<Vec<_>>();
+    let mut paths = paths
+        .iter()
+        .map(|p| p.iter().map(|e| e.to_string()).collect::<String>())
+        .collect::<Vec<_>>();
     paths.sort_by(|a, b| a.len().partial_cmp(&b.len()).unwrap());
-    println!("\n{}\n{}\n{}\n", original, "-".repeat(original.len()), paths.join("\n"));
+    println!(
+        "\n{}\n{}\n{}\n",
+        original,
+        "-".repeat(original.len()),
+        paths.join("\n")
+    );
 }
 
 // #[tracing::instrument(ret)]
