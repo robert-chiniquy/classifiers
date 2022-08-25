@@ -17,9 +17,22 @@ use nom::{
     combinator::{eof, fail, opt},
     error::{ErrorKind, ParseError},
     multi::{many1, many_till},
-    sequence::{delimited, pair, tuple},
+    sequence::{delimited, pair, terminated, tuple},
     FindToken, IResult, InputIter, InputLength, Needed, Slice,
 };
+
+// anything not captured by a larger rule is evaluated piecewise
+// negate(?a) -> (!?)a, ?(!a), !?!a, ?
+// !? -> ** ... !a -> !a
+// **a, ?!a, **!a -> ?!a, ***
+// negate(*a) -> *(!a), ?
+// negate(*) -> !* ... but is this necessary? only if every case cannot be captured in a larger rule
+// ... (!*)a, *!a, !*!a, ?
+// drop !* from results -> .. *!a, !a, ?
+// negate(?a*) -> (!?)a*, ?(!a)*, ?a(!*), ?(!a)!*, !?(!a)*, (!?)a!*
+// drop !* from results -> (!?)a*, ?(!a)*, ?a, ?(!a), !?(!a)*, (!?)a
+// !? -> ** ... -> **a*, ?(!a)*, ?a, ?(!a), **(!a)*, **a
+// there are intersections between the input: ?a* and the above
 
 // one parser for rule, enum variant for each rule
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -30,75 +43,37 @@ enum Transform {
     TokenSeq(Vec<char>),
     NotTokenSeq(Vec<char>),
     QNotLoopQ(Vec<Elementals>),
+    FrontAnchoredTokens(Vec<Elementals>),
+    EndAnchoredTokens(Vec<Elementals>),
 }
-impl Transform {
-    fn elements(&self) -> Vec<Element> {
-        use Element::*;
-        match self {
-            Transform::StarAStar(v) => v
-                .iter()
-                .flat_map(|e| match e {
-                    Elementals::Tokens(v) => vec![Tokens(v.clone())],
-                    Elementals::NotTokens(v) => vec![NotTokens(v.clone())],
-                    Elementals::LoopNotTokens(v) => vec![LoopNotTokens(v.clone())],
-                    Elementals::Questions(n) => vec![Question; *n],
-                    Elementals::Globulars(n) => vec![Star; *n],
-                })
-                .collect(),
-            Transform::QNotLoopQ(v) => v
-                .iter()
-                .flat_map(|e| match e {
-                    Elementals::LoopNotTokens(v) => vec![LoopNotTokens(v.clone())],
-                    Elementals::Questions(n) => vec![Question; *n],
-                    _ => unreachable!(),
-                })
-                .collect(),
-            Transform::Globulars(n) => vec![Star; *n],
-            Transform::Questions(n) => vec![Question; *n],
-            Transform::TokenSeq(v) => vec![Tokens(v.clone())],
-            Transform::NotTokenSeq(v) => vec![NotTokens(v.clone())],
-        }
-    }
-}
+
 #[test]
 fn test_negation() {
     setup();
     use Element::*;
     let input = vec![Star, Tokens(vec!['a'])];
     let negative = negation_of(input);
-    pretty_print_path(negative);
+    pretty_print_path(&negative);
 
     let input = vec![Star, Tokens(vec!['a']), Star];
     let negative = negation_of(input);
-    pretty_print_path(negative);
-}
+    pretty_print_path(&negative);
 
-#[test]
-fn test_star_a_star() {
-    setup();
+    // ?a -> ?, ?(not a), ??*
+    let input = vec![Question, Tokens(vec!['a'])];
+    let negative = negation_of(input);
+    pretty_print_path(&negative);
 
-    use Element::*;
-    let input = ElementContainer(vec![Star, Tokens(vec!['a']), Star]);
-    let (rest, txms) = transforms(input.clone()).unwrap();
+    for p in negative {
+        assert!(p != vec![Star, Star, NotTokens(vec!['a'])]);
+    }
 
-    println!("{:?}", txms);
-    assert!(rest.v().is_empty(), "has stuff: {rest:?}");
+    let input = vec![Question, Tokens(vec!['a']), Star, Star];
+    let negative = negation_of(input);
+    pretty_print_path(&negative);
 
-    let r = star_a_star_rule(input);
-    assert!(r.is_ok(), "{r:?}");
-
-    let (rest, txms) = r.unwrap();
-    println!("{:?}", txms);
-
-    assert!(rest.v().is_empty(), "has stuff: {rest:?}");
-}
-
-fn pretty_print_path(paths: Vec<Vec<Element>>) {
-    for p in paths {
-        println!(
-            "path: {}",
-            p.iter().map(|e| e.to_string()).collect::<String>()
-        );
+    for p in negative {
+        assert!(p != vec![Star, Star, NotTokens(vec!['a']), Star, Star]);
     }
 }
 
@@ -131,20 +106,6 @@ pub fn negation_of(input: Vec<Element>) -> Vec<Vec<Element>> {
     paths
 }
 
-// #[tracing::instrument(ret)]
-fn element_sequence_minimum_unit_length(input: &[Element]) -> usize {
-    input
-        .iter()
-        .map(|i| match i {
-            Element::Question => 1,
-            Element::Star => 1,
-            Element::Tokens(s) => s.len(),
-            Element::NotTokens(s) => s.len(),
-            Element::LoopNotTokens(s) => s.len(),
-        })
-        .sum()
-}
-
 #[test]
 fn test_visit_choices() {
     setup();
@@ -161,15 +122,18 @@ fn visit_choices(
 ) -> Vec<Vec<Element>> {
     let mut paths = vec![];
     if let Some(current) = choices.first() {
-        let mut positive = visit_choices(original_input, &choices[1..]);
-        if positive.is_empty() {
+        let mut tail = visit_choices(original_input, &choices[1..]);
+        if tail.is_empty() {
             paths.extend(current.iter().cloned().collect::<Vec<_>>());
             return paths;
         }
+        // possible globulars condition? current len == 1 and the item is an empty vec?
+        // not the only item in the hashset no, so the special value is an empty vec in the hashset
+        // no not an empty vec in the hashset, the special value is an item in the vec
+        // todo figure out
         for alternative in current {
             paths.extend(
-                positive
-                    .iter()
+                tail.iter()
                     .map(|i| {
                         let mut a = alternative.clone();
                         a.extend(i.clone());
@@ -207,7 +171,8 @@ pub fn nfa_negation_of(input: Vec<Element>) {
 // Compose the sequence of hashsets into a sequence of choices of path fragments from the hashset
 // #[tracing::instrument(ret)]
 fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>>> {
-    // todo: construct ElementContainer here?
+    // todo: need a way to handle an error here
+    // ?
     let (rest, txms) = transforms(input).unwrap();
     // Consider returning an error here?
     debug_assert!(
@@ -231,10 +196,14 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
             // negate(***) -> [??, ?]
             Transform::Globulars(n) => {
                 // before doing this rule, matt wants to capture a* in a rule (different from star a star)
+                // insert ?..? for the shorter elements
                 let mut rule: HashSet<_> = Default::default();
                 for i in 1..n {
                     rule.insert(vec![Element::Question; i]);
                 }
+                // is the empty value here for an a* situation?
+                // .. otherwise dependent upon the larger context where this globulars was read
+
                 // rule.insert(vec![Element::Tokens(vec![' '])]);
                 rule
             }
@@ -265,7 +234,7 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
                 HashSet::from_iter(vec![items])
             }
             Transform::QNotLoopQ(v) => {
-                //  ![a*] -> [!a*], [a!*], [!a!*] -> [!a*], [a], [!a]
+                // ![a*] -> [!a*], [a!*], [!a!*] -> [!a*], [a], [!a]
                 // ![a**] -> !a** , a!(**), !a!(**) -> !a**, a?, a, !a?, !a
                 let mut items = vec![];
                 for e in v {
@@ -281,7 +250,52 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
                 }
                 HashSet::from_iter(vec![items])
             }
+            Transform::FrontAnchoredTokens(elementals)
+            | Transform::EndAnchoredTokens(elementals) => {
+                // ?a?b -> ?a?!b, ?!a?!b, ?!a?b, {???, ??, ?} -> ???!b, ?!a??
+                // ?ac?b -> ?ac?!b, ?(!ac)?!b, ?(!ac)?b -> ???!b, ?(!ac)??
+                // ?a?b?c ->
+                // Flip any one token and accept all others
+                // as if any one is missing, the expression does not match
+                let mut rule: HashSet<_> = Default::default();
+                // produce all valid permutations of negations of the input
+                // for each token, produce a flipped rule
+                // for each elemental, if a token,
+                // produce a path from input which flips it and otherwise is all ?
+                let length = elementals_fixed_width_sequence_unit_length(&elementals);
+                for (flip_index, to_flip) in elementals.iter().enumerate() {
+                    if !matches!(to_flip, Elementals::Tokens(_) | Elementals::NotTokens(_)) {
+                        // do not add a path
+                        continue;
+                    }
+                    // create the path here
+                    let mut new_path = vec![];
+                    for (i, e) in elementals.iter().enumerate() {
+                        match e {
+                            Elementals::Tokens(s) if i == flip_index => {
+                                new_path.push(Element::NotTokens(s.clone()))
+                            }
+                            Elementals::Tokens(s) if i != flip_index => {
+                                new_path.extend(vec![Element::Question; s.len()])
+                            }
+                            Elementals::NotTokens(s) if i == flip_index => {
+                                new_path.push(Element::Tokens(s.clone()))
+                            }
+                            Elementals::NotTokens(s) if i != flip_index => {
+                                new_path.extend(vec![Element::Question; s.len()])
+                            }
+                            Elementals::Questions(i) => {
+                                new_path.extend(vec![Element::Question; *i])
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    rule.insert(new_path);
+                }
+                rule
+            }
         };
+        // This line adds the original value for combinatorics with other negations
         set.insert(txm.elements());
         rules.push(set);
     }
@@ -292,30 +306,82 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
 
 // #[tracing::instrument(ret)]
 fn transforms(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
-    // need to ordered by precedence such that no prefix matches early
-    let r = many_till(
-        alt((
-            star_a_star_rule,
-            q_not_loop_q_rule,
-            q_to_s_rule,
-            flatten_only_questions_rule,
-            tokens_rule,
-            not_tokens_rule,
-        )),
-        eof,
-    )(input);
-
-    match r {
-        Ok((rest, (elementals, _))) => Ok((rest, elementals.into_iter().flatten().collect())),
-        Err(e) => {
-            println!("Error parsing: {e:?}");
-            Err(e)
-        }
+    let mut input = input;
+    let mut working_result: Vec<Transform> = vec![];
+    if let Ok((rest, front)) = front_rule(input.clone()) {
+        working_result.extend(front);
+        input = rest;
     }
+    if input.v().is_empty() {
+        return Ok((input, working_result));
+    }
+    // match the end of input (end_rule requires eof)
+    if let Ok((rest, (unanchored, end))) = many_till(opt(unanchored_rules), end_rule)(input.clone())
+    {
+        if let Some(unanchored) = unanchored.into_iter().collect::<Option<Vec<_>>>() {
+            working_result.extend(unanchored.into_iter().flatten());
+        }
+        working_result.extend(end);
+        return Ok((rest, working_result));
+    }
+    // insist on consuming the rest of the input with unanchored_rules
+    if let Ok((rest, (unanchored, _))) = many_till(unanchored_rules, eof)(input.clone()) {
+        working_result.extend(unanchored.into_iter().flatten());
+        return Ok((rest, working_result));
+    }
+    // the only place an error is returned
+    fail(input)
+}
+
+fn unanchored_rules(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
+    // need to ordered by precedence such that no prefix matches early
+    alt((
+        star_a_star_rule,
+        q_not_loop_q_rule,
+        q_to_s_rule,
+        flatten_only_questions_rule,
+        tokens_rule,
+        not_tokens_rule,
+    ))(input)
+}
+
+// rationale: negate(?a*) -> **!a* is wrong
+// need to capture any token which is anchored to the start or end by a fixed number of chars
+// ^ ... ?a.. also ?a?a ?ab ?ab?ab
+// should not capture the terminating ?* of ?a?*
+// must end in a token/nottoken
+// may need an equivalent rule for the end of the string
+// produce the same anchorings of ? with the combinations of negations of the tokens,
+// .. not including the input
+// also needs to handle not token
+// assume front of input
+fn front_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
+    let (rest, (v, w)) = pair(
+        alt((questions, tokens_elementals, not_tokens_elementals)),
+        alt((tokens_elementals, not_tokens_elementals)),
+    )(input)?;
+
+    let ret = Vec::from_iter(v.into_iter().chain(w));
+    Ok((rest, vec![Transform::FrontAnchoredTokens(ret)]))
+}
+
+// end rule does not need to end in a token, but needs to begin with a token
+fn end_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
+    let (rest, (v, w)) = terminated(
+        pair(
+            alt((tokens_elementals, not_tokens_elementals)),
+            alt((questions, tokens_elementals, not_tokens_elementals)),
+        ),
+        eof,
+    )(input)?;
+
+    let ret = Vec::from_iter(v.into_iter().chain(w));
+    Ok((rest, vec![Transform::EndAnchoredTokens(ret)]))
 }
 
 fn q_not_loop_q_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
-    let (rest, (first, pairs)) = tuple((questions, many1(pair(not_loops, questions))))(input)?;
+    let (rest, (first, pairs)) =
+        tuple((questions_count, many1(pair(not_loops, questions_count))))(input)?;
     // produce a transform
     let mut ret = vec![Elementals::Questions(first)];
     for (token, last) in pairs {
@@ -335,7 +401,8 @@ fn tokens_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transfo
     Ok((rest, vec![Transform::TokenSeq(t)]))
 }
 
-// `!?` -> `**` (number of questions)
+// `!?` -> `**` (number of questions)??
+// ?* -> **
 // #[tracing::instrument(ret)]
 fn q_to_s_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transform>> {
     let (rest, s) = globulars(input)?;
@@ -345,7 +412,7 @@ fn q_to_s_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Transfo
 fn flatten_only_questions_rule(
     input: ElementContainer,
 ) -> IResult<ElementContainer, Vec<Transform>> {
-    let (rest, q) = questions(input)?;
+    let (rest, q) = questions_count(input)?;
     Ok((rest, vec![Transform::Questions(q)]))
 }
 
@@ -381,6 +448,26 @@ fn test_tiny_star_a_star() {
     assert!(rest.v().is_empty(), "has stuff: {rest:?}");
 }
 
+#[test]
+fn test_star_a_star() {
+    setup();
+
+    use Element::*;
+    let input = ElementContainer(vec![Star, Tokens(vec!['a']), Star]);
+    let (rest, txms) = transforms(input.clone()).unwrap();
+
+    println!("{:?}", txms);
+    assert!(rest.v().is_empty(), "has stuff: {rest:?}");
+
+    let r = star_a_star_rule(input);
+    assert!(r.is_ok(), "{r:?}");
+
+    let (rest, txms) = r.unwrap();
+    println!("{:?}", txms);
+
+    assert!(rest.v().is_empty(), "has stuff: {rest:?}");
+}
+
 // *a*
 // *a**b*c*
 // only contains terms separates by stars and bounded on the outside by stars
@@ -395,6 +482,11 @@ fn star_a_star_rule(input: ElementContainer) -> IResult<ElementContainer, Vec<Tr
     Ok((rest, vec![Transform::StarAStar(ret)]))
 }
 // TODO: ?[TokenSeq self-loop]? ->
+
+fn tokens_elementals(input: ElementContainer) -> IResult<ElementContainer, Vec<Elementals>> {
+    let (rest, tokens) = tokens(input)?;
+    Ok((rest, vec![Elementals::Tokens(tokens)]))
+}
 
 // concatenate any initial sequence of Element::TokenSeq() into a single Vec and return
 fn tokens(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
@@ -423,6 +515,11 @@ fn not_loops(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
     Ok((ElementContainer(elements.cloned().collect()), chars))
 }
 
+fn not_tokens_elementals(input: ElementContainer) -> IResult<ElementContainer, Vec<Elementals>> {
+    let (rest, tokens) = not_tokens(input)?;
+    Ok((rest, vec![Elementals::NotTokens(tokens)]))
+}
+
 fn not_tokens(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
     let mut chars: Vec<_> = vec![];
     let mut elements = input.v().iter();
@@ -440,7 +537,7 @@ fn not_tokens(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
 // #[tracing::instrument(ret)]
 fn globulars(input: ElementContainer) -> IResult<ElementContainer, usize> {
     if let Ok((rest, (or1, stars, or2))) =
-        tuple((opt(questions), stars, opt(stars_or_questions)))(input.clone())
+        tuple((opt(questions_count), stars, opt(stars_or_questions)))(input.clone())
     {
         let number = stars + or1.unwrap_or(0) + or2.unwrap_or(0);
 
@@ -479,12 +576,22 @@ fn stars(input: ElementContainer) -> IResult<ElementContainer, usize> {
 }
 
 /// returns the number of consecutive questions in the input
-
-fn questions(input: ElementContainer) -> IResult<ElementContainer, usize> {
+fn questions_count(input: ElementContainer) -> IResult<ElementContainer, usize> {
     if let Ok((rest, questions)) =
         many1(our_one_of(&ElementContainer(vec![Element::Question])))(input.clone())
     {
         Ok((rest, questions.len()))
+    } else {
+        fail(input)
+    }
+}
+
+// directly maps questions to questions
+fn questions(input: ElementContainer) -> IResult<ElementContainer, Vec<Elementals>> {
+    if let Ok((rest, questions)) =
+        many1(our_one_of(&ElementContainer(vec![Element::Question])))(input.clone())
+    {
+        Ok((rest, vec![Elementals::Questions(questions.len())]))
     } else {
         fail(input)
     }
@@ -587,6 +694,80 @@ impl<'a> InputIter for &'a ElementContainer {
             Ok(count)
         } else {
             Err(Needed::new(count - self.v().len()))
+        }
+    }
+}
+
+fn pretty_print_path(paths: &[Vec<Element>]) {
+    for p in paths {
+        println!(
+            "path: {}",
+            p.iter().map(|e| e.to_string()).collect::<String>()
+        );
+    }
+}
+
+// #[tracing::instrument(ret)]
+fn element_sequence_minimum_unit_length(input: &[Element]) -> usize {
+    input
+        .iter()
+        .map(|i| match i {
+            Element::Question => 1,
+            Element::Star => 1,
+            Element::Tokens(s) => s.len(),
+            Element::NotTokens(s) => s.len(),
+            Element::LoopNotTokens(s) => s.len(),
+        })
+        .sum()
+}
+
+fn elementals_fixed_width_sequence_unit_length(input: &[Elementals]) -> usize {
+    input
+        .iter()
+        .map(|i| match i {
+            Elementals::Questions(i) => *i,
+            Elementals::Tokens(s) | Elementals::NotTokens(s) => s.len(),
+            Elementals::LoopNotTokens(_) | Elementals::Globulars(_) => unreachable!(),
+        })
+        .sum()
+}
+
+impl Transform {
+    fn elements(&self) -> Vec<Element> {
+        use Element::*;
+        match self {
+            Transform::StarAStar(v) => v
+                .iter()
+                .flat_map(|e| match e {
+                    Elementals::Tokens(v) => vec![Tokens(v.clone())],
+                    Elementals::NotTokens(v) => vec![NotTokens(v.clone())],
+                    Elementals::LoopNotTokens(v) => vec![LoopNotTokens(v.clone())],
+                    Elementals::Questions(n) => vec![Question; *n],
+                    Elementals::Globulars(n) => vec![Star; *n],
+                })
+                .collect(),
+            Transform::QNotLoopQ(v) => v
+                .iter()
+                .flat_map(|e| match e {
+                    Elementals::LoopNotTokens(v) => vec![LoopNotTokens(v.clone())],
+                    Elementals::Questions(n) => vec![Question; *n],
+                    _ => unreachable!(),
+                })
+                .collect(),
+            Transform::Globulars(n) => vec![Star; *n],
+            Transform::Questions(n) => vec![Question; *n],
+            Transform::TokenSeq(v) => vec![Tokens(v.clone())],
+            Transform::NotTokenSeq(v) => vec![NotTokens(v.clone())],
+            Transform::FrontAnchoredTokens(v) | Transform::EndAnchoredTokens(v) => v
+                .iter()
+                .flat_map(|e| match e {
+                    Elementals::Tokens(v) => vec![Tokens(v.clone())],
+                    Elementals::NotTokens(v) => vec![NotTokens(v.clone())],
+                    Elementals::LoopNotTokens(v) => vec![LoopNotTokens(v.clone())],
+                    Elementals::Questions(n) => vec![Question; *n],
+                    Elementals::Globulars(n) => vec![Star; *n],
+                })
+                .collect(),
         }
     }
 }
