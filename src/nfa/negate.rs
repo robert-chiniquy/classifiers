@@ -6,12 +6,11 @@ fn test_basic_classifier_negation() {
     n.graphviz_file("negation-1.dot", "aa");
     assert!(n.accepts_string("aa"));
 
-    
     println!("\n\nnegating n");
     let nn = n.negate();
     nn.graphviz_file("negation-2.dot", "not aa");
     assert!(!nn.accepts_string("aa"));
-    
+
     println!("\n\nnegating nn");
     let nnn = nn.negate();
     nnn.graphviz_file("negation-3.dot", "not not aa");
@@ -21,12 +20,15 @@ fn test_basic_classifier_negation() {
 
 #[test]
 fn test_a_v_q() {
+    tests::setup();
     use Element::*;
     let n = Nfa::from_symbols(&vec![Tokens(vec!['a', 'a'])], ());
     let i = n.intersection(&Nfa::from_str("??", ()));
+    i.graphviz_file("i.dot", "a_v_q");
     assert!(i.accepts_string("aa"));
     let thing = vec![vec![Tokens(vec!['a']), Tokens(vec!['a'])]];
-    assert!(i.accepting_paths().every_path() == HashSet::from_iter(thing));
+    let e = i.accepting_paths().every_path();
+    assert!(e == HashSet::from_iter(thing), "{e:?}");
     println!("accepting_paths: {:?}", i.accepting_paths().every_path());
 }
 
@@ -50,12 +52,10 @@ where
         // need to rationalize for empty input?
         let mut nfa: Option<Nfa<_, _>> = None;
 
-
         // intersect the union of all negations of all accepting paths of self
         let the_paths = self.accepting_paths().every_path();
         println!("accepting_paths: {the_paths:?}");
         for p in the_paths {
-
             // inversen is non deterministic in order!!
             // union is currently sensity to that.
             let inversen: Vec<Vec<E>> = p.inverse();
@@ -67,9 +67,13 @@ where
 
             nfa = Some(match nfa {
                 Some(n) => {
-                    println!("{:?} \n\tVS\n {:?}", inversion.accepting_paths().every_path(), n.accepting_paths().every_path());
+                    println!(
+                        "{:?} \n\tVS\n {:?}",
+                        inversion.accepting_paths().every_path(),
+                        n.accepting_paths().every_path()
+                    );
                     inversion.intersection(&n)
-                },
+                }
                 None => inversion,
             });
         }
