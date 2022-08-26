@@ -3,13 +3,13 @@ mod negate;
 mod nfa;
 mod node;
 mod traits;
-mod union;
+mod product;
 
 pub(crate) use negate::*;
 pub use nfa::*;
 pub use node::*;
 pub use traits::*;
-pub use union::*;
+pub use product::*;
 
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, HashSet};
 

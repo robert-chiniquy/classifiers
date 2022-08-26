@@ -78,7 +78,7 @@ where
         if let Some(first) = items.next() {
             let init = Self::from_symbols(first, Default::default());
             nfa = items.fold(init, |acc, cur| {
-                acc.union(&Self::from_symbols(&cur, Default::default()))
+                acc.product(&Self::from_symbols(&cur, Default::default()))
             })
         }
         nfa
@@ -205,7 +205,7 @@ where
         if a.size() == 0 || b.size() == 0 {
             return Default::default();
         }
-        let union = a.union(&b);
+        let union = a.product(&b);
         // println!("XXX\n{a:?}\n{b:?}\n{union:?}");
         // FIXME accepting_paths is illogical, this must respect all terminal states
         // ... .terminal_paths() -> Paths (where Paths additionally stores terminal state and/or M)
@@ -231,7 +231,7 @@ where
             Nfa::from_symbols(lr_paths[0], Default::default()),
             |acc, cur| {
                 println!("adding in {:?}", cur);
-                acc.union(&Nfa::from_symbols(cur, Default::default()))
+                acc.product(&Nfa::from_symbols(cur, Default::default()))
             }
         )
     }

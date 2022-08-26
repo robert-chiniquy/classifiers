@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn test_basic_classifier_negation() {
 
-    &Nfa::from_paths(vec![])
+    // &Nfa::from_paths(vec![])
     // tests::setup();
 
     // let nt1 = Nfa::from_str("***", ());

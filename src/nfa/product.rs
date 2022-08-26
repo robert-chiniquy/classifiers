@@ -16,7 +16,7 @@ where
     // Whatever invariant is enforced here, assume that the inputs have that invariant
     // Blindly copying states here allows M to vary widely
     #[tracing::instrument(skip(self, other))]
-    pub fn union(&self, other: &Self) -> Self {
+    pub fn product(&self, other: &Self) -> Self {
         if self.entry.is_empty() {
             return other.clone();
         } else if other.entry.is_empty() {

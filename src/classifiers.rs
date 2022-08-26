@@ -53,7 +53,7 @@ where
 
         s.set_chirality(LRSemantics::L);
         o.set_chirality(LRSemantics::R);
-        let union = s.union(&o);
+        let union = s.product(&o);
         let paths = union.accepting_paths();
         match (
             !paths.l.is_empty(),
@@ -123,7 +123,7 @@ where
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {
                     items.fold(Classifier::compile(acc, m.clone()), |acc, cur| {
-                        acc.union(&Classifier::compile(cur, m.clone()))
+                        acc.product(&Classifier::compile(cur, m.clone()))
                     })
                 } else {
                     Nfa::universal(m).negate()

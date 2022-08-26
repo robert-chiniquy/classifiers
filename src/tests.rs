@@ -151,7 +151,7 @@ fn test_rejection() {
     let c2: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile(&rhs, ());
 
     let i = c1.intersection(&c2);
-    let u = c1.union(&c2);
+    let u = c1.product(&c2);
 
     // assert that i has 1 edge
     assert_eq!(i.edges.len(), 1);
@@ -212,7 +212,7 @@ fn test_negate3() {
     let mut a = stara.compile(());
     a.set_chirality(LRSemantics::L);
     b.set_chirality(LRSemantics::R);
-    let union = a.union(&b);
+    let union = a.product(&b);
 
     write_graph(union.graphviz(), "union-negate3.dot");
 
