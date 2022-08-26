@@ -106,7 +106,6 @@ where
             + std::default::Default,
         E: Accepts<E>,
         C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
-        Nfa<NfaNode<M>, NfaEdge<E>>: NfaBuilder<E, M, C>,
         L: IntoIterator<Item = C>,
         M: std::fmt::Debug + Clone + PartialOrd + Ord + Default,
         Vec<E>: Invertible,
@@ -115,7 +114,7 @@ where
             Classifier::Universal => Nfa::universal(m),
             Classifier::Literal(l) => {
                 let arg = l.clone().into_iter().collect();
-                Nfa::build_nfa(arg, m)
+                Nfa::from_language(arg, m)
             }
             // NotToken?
             Classifier::Not(c) => Classifier::compile(c, m).negate(),

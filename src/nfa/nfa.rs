@@ -216,8 +216,8 @@ where
         // then each terminal state could be marked as in conjunction
         println!("\n\n🌮🌮🌮🌮 intersecting paths: {:?}\n\n", paths.lr);
 
-         // [*] ¥ [?, !aa, ***] -> ****, !aa, !aa***, ***, !aa*, !aa
-         // [*] ¥ [*** , !aa, ?] -> !aa, ?
+        // [*] ¥ [?, !aa, ***] -> ****, !aa, !aa***, ***, !aa*, !aa
+        // [*] ¥ [*** , !aa, ?] -> !aa, ?
 
         // match (paths.l.is_empty(), paths.lr.is_empty(), paths.r.is_empty());
         if paths.lr.is_empty() {
@@ -232,7 +232,7 @@ where
             |acc, cur| {
                 println!("adding in {:?}", cur);
                 acc.union(&Nfa::from_symbols(cur, Default::default()))
-            }
+            },
         )
     }
 
@@ -351,31 +351,31 @@ impl<N, E> Nfa<N, E>
 where
     E: Eq + Clone + std::hash::Hash + std::default::Default,
 {
-    #[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all)]
     pub(crate) fn index(&mut self) -> NfaIndex {
         self.count += 1;
         self.count as NfaIndex
     }
 
-    #[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all)]
     pub fn add_node(&mut self, n: N) -> NfaIndex {
         let i = self.index();
         self.nodes.insert(i, n);
         i
     }
 
-    #[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all)]
     pub fn node(&self, i: NfaIndex) -> &N {
         self.nodes.get(&i).unwrap()
     }
 
     /// Panic if unknown
-    #[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all)]
     pub fn node_mut(&mut self, i: NfaIndex) -> &mut N {
         self.nodes.get_mut(&i).unwrap()
     }
 
-    #[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all)]
     pub fn edge(&self, i: &NfaIndex) -> &E {
         self.edges.get(i).unwrap()
     }
@@ -397,7 +397,7 @@ where
     ///
     /// source node index -> (target node index, edge index)
     #[inline]
-    #[tracing::instrument(skip_all, ret)]
+    // #[tracing::instrument(skip_all, ret)]
     pub fn edges_from(&self, i: NfaIndex) -> Option<&Vec<(NfaIndex, NfaIndex)>> {
         self.transitions.get(&i)
     }
@@ -464,7 +464,7 @@ impl Default for LRSemantics {
 }
 
 impl LRSemantics {
-    #[tracing::instrument(ret)]
+    // #[tracing::instrument(ret)]
     pub(crate) fn sum(&self, other: &LRSemantics) -> LRSemantics {
         match (self, other) {
             (x, y) if x == y => x.clone(),
