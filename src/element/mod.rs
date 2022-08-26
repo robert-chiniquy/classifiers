@@ -3,15 +3,19 @@ mod negation;
 pub(crate) use negation::*;
 
 use super::*;
-use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Element {
+    // exactly 1 token
     Question,
+    // 1 or more or tokens
     Star,
+    // The literal token seqence
     Tokens(Vec<char>),
-    // Matches anything that is not literally Vec<char> (or could possibly be )
+    // Matches anything that is not literally Vec<char> (or could possibly be, like ??, *, etc)
     NotTokens(Vec<char>),
+    // Matches 1 or more tokens that don't contain the explicit sequence Vec<char>
+    // necessitated by the negation of paths like *a* which transforms into ?(!aloop)?
     LoopNotTokens(Vec<char>),
 }
 
