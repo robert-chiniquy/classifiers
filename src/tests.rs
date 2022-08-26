@@ -245,9 +245,12 @@ static TEST_SETUP: once_cell::sync::Lazy<bool> = once_cell::sync::Lazy::new(|| {
 });
 
 pub fn setup() {
-    let subscriber = tracing_subscriber::fmt()
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-        .finish();
+    #[cfg(feature = "trace")]
+    {
+        let subscriber = tracing_subscriber::fmt()
+            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+            .finish();
 
-    let _ = tracing::subscriber::set_global_default(subscriber);
+        let _ = tracing::subscriber::set_global_default(subscriber);
+    }
 }
