@@ -11,10 +11,6 @@ where
         + std::fmt::Display,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
-    /// A union is a non-mimimal NFA with the same resulting states for every input as
-    /// either of the two input NFAs.
-    // Whatever invariant is enforced here, assume that the inputs have that invariant
-    // Blindly copying states here allows M to vary widely
     #[tracing::instrument(skip(self, other))]
     pub fn product(&self, other: &Self) -> Self {
         if self.entry.is_empty() {
@@ -24,7 +20,12 @@ where
         }
 
         let mut union: Self = Default::default();
-        println!("I union stuff: {} {} {}", self.nodes.len(), other.nodes.len(), union.nodes.len());
+        // println!(
+        //     "I union stuff: {} {} {}",
+        //     self.nodes.len(),
+        //     other.nodes.len(),
+        //     union.nodes.len()
+        // );
         let _entry = union.add_node(Default::default());
         union.entry.insert(_entry);
         // for every edge on every node in self.enter,
@@ -73,9 +74,7 @@ where
 
             for (self_target_node_id, self_edge_id) in self.edges_from(*self_id).unwrap() {
                 let self_edge = self.edge(self_edge_id);
-                for (other_target_node_id, other_edge_id) in
-                    other.edges_from(*other_id).unwrap()
-                {
+                for (other_target_node_id, other_edge_id) in other.edges_from(*other_id).unwrap() {
                     // println!("{} {} {other_id}",self_edge_id, other_edge_id);
                     let other_edge = other.edge(other_edge_id);
                     let product = E::product(&self_edge.criteria, &other_edge.criteria);
@@ -93,22 +92,18 @@ where
                         };
                         let new_node = match (left_node_id, right_node_id) {
                             (None, None) => unreachable!(),
-                            (None, Some(right_node_id)) => {
-                                other.node(*right_node_id).clone()
-                            }
-                            (Some(left_node_id), None) => {
-                                self.node(*left_node_id).clone()
-                            }
+                            (None, Some(right_node_id)) => other.node(*right_node_id).clone(),
+                            (Some(left_node_id), None) => self.node(*left_node_id).clone(),
                             (Some(left_node_id), Some(right_node_id)) => {
                                 self.node(*left_node_id).sum(other.node(*right_node_id))
                             }
                         };
-                        let next_working_node_id = union.branch(
-                            &working_union_node_id,
-                            kind.clone(),
-                            new_node.clone(),
+                        let next_working_node_id =
+                            union.branch(&working_union_node_id, kind.clone(), new_node.clone());
+                        debug_assert!(
+                            working_union_node_id != next_working_node_id,
+                            "working_union_node_id == next_working_node_id"
                         );
-                        debug_assert!(working_union_node_id != next_working_node_id, "working_union_node_id == next_working_node_id");
 
                         // if one side is dropped, the other side just copies in from there
                         // either create a branch and recur to construct the union from that point
@@ -131,7 +126,7 @@ where
                 }
             }
         }
-        println!("I done union stuff");
+        // println!("I done union stuff");
         union
     }
 

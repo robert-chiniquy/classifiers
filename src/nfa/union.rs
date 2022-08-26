@@ -29,64 +29,95 @@ where
         // println!("I union stuff: {} {} {}", self.nodes.len(), other.nodes.len(), union.nodes.len());
         // let _entry = union.add_node(Default::default());
 
-        // for every edge on every node in self.enter,
-        // for every edge on every node in other.enter,
-        // now a 3-tuple, (self node id, other node id, union node id)
-        let mut stack: Vec<(&NfaIndex, NfaIndex)> = Default::default();
-        for id in &other.entry {
-            stack.push((id, _entry));
+        // for every edge from every entry node in other
+        // find a matching edge from an entry node in union
+        // walk from that edge either smashing or copying (pushing new nodes on the stack as you go)
+        // if no matching edge, create a new matching edge from an entry in union,
+        // and copy subtree of that edge from other to union.
+        // working target (union) node id, source (other) node id
+        let mut stack: Vec<(_, _)> = Default::default();
+        for other_id in &other.entry {
+            if let Some(edges) = other.edges_from(*other_id) {
+                for (other_edge_target, other_edge) in edges {
+                    let other_edge_kind = other.edge(other_edge);
+                    // is there a matching edge in union?
+                    let mut found = false;
+                    for union_id in &union.entry {
+                        let matching = union
+                            .edge_by_kind(*union_id, &other_edge_kind.criteria)
+                            .pop();
+                        match matching {
+                            Some((union_edge_target, _matching_edge)) => {
+                                found = true;
+                                // push initial nodes on the stack to smash the targets together
+                                stack.push((union_edge_target, other_edge_target));
+                                break;
+                            }
+                            None => (),
+                        }
+                    }
+                    if !found {
+                        // copy subtree to an arbitrary union entry node
+                        // need to create an edge of the appropriate type from entry to a new
+                        // copy target node in union, where then the subtree can be copied?
+                        let entry = union.entry.iter().next().unwrap();
+                        let new_node = union.add_node(other.node(*other_edge_target).clone());
+                        let _edge = union.add_edge(
+                            NfaEdge {
+                                criteria: other_edge_kind.criteria,
+                            },
+                            *entry,
+                            new_node,
+                        );
+                        union.copy_subtree(&new_node, other, other_edge_target);
+                    }
+                }
+            }
         }
-        // start
-        // stack: first left, first right, target, ignore target
-        // evaluate edges, each of the two nodes has 1 edge, you see like a * A product,
-        // next ... for each combo of edges, you get a vector
-        // for each branch in the vector, you should push onto the stack again,
-        // This currently assumes an acyclic graph
+        // The stack loop covers subtrees which require smashing at any given point,
+        // subtrees which diverge will be copied.
+        // This is order sensitive if there are multiple entry nodes which mostly does not happen
+        // (and they are stored in a vec)
         // Cycle detection can occur by tracking visited combinations on the stack
         let mut visited: HashSet<_> = Default::default();
-        while let Some((self_id, other_id, working_union_node_id)) = stack.pop() {
-            if visited.contains(&(self_id, other_id)) {
+        while let Some((union_id, other_id)) = stack.pop() {
+            if visited.contains(&(union_id, other_id)) {
                 // should this also validate working node id?
                 continue;
             }
-            visited.insert((self_id, other_id));
-            let self_edges = self.edges_from(*self_id);
+            visited.insert((union_id, other_id));
+            // smash these nodes together
+            // if no edges from either, consider them smashed
+            // where edges match from other to union, push the edge targets on the stack
+            // where edges do not match, create a new edge of the appropriate (other) kind and copy subtree to it.
+            //
+            let union_edges = union.edges_from(union_id);
             let other_edges = other.edges_from(*other_id);
-            if (self_edges == None && other_edges == None)
-                || (self_edges.is_some()
+            if (other_edges == None && other_edges == None)
+                || (other_edges.is_some()
                     && other_edges.is_some()
-                    && self_edges.as_ref().unwrap().is_empty()
+                    && other_edges.as_ref().unwrap().is_empty()
                     && other_edges.as_ref().unwrap().is_empty())
             {
                 continue;
             }
 
-            if self_edges == None || self_edges.as_ref().unwrap().is_empty() {
-                union.copy_subtree(&working_union_node_id, other, other_id);
+            if union_edges == None || union_edges.as_ref().unwrap().is_empty() {
+                union.copy_subtree(&union_id, other, other_id);
                 continue;
             }
 
-            if other_edges == None || other_edges.as_ref().unwrap().is_empty() {
-                union.copy_subtree(&working_union_node_id, self, self_id);
-                continue;
-            }
-
-            for (self_target_node_id, self_edge_id) in self.edges_from(*self_id).unwrap() {
+            for (self_target_node_id, self_edge_id) in self.edges_from(*union_id).unwrap() {
                 let self_edge = self.edge(self_edge_id);
 
-                for (other_target_node_id, other_edge_id) in
-                    other.edges_from(*other_id).unwrap()
-                {
+                for (other_target_node_id, other_edge_id) in other.edges_from(*other_id).unwrap() {
                     let other_edge = other.edge(other_edge_id);
                     if self_edge.criteria == other_edge.criteria {
-
                     } else {
-
                     }
 
-
                     // let next_working_node_id = union.branch(
-                    //     &working_union_node_id,
+                    //     &union_id,
                     //     kind.clone(),
                     //     new_node.clone(),
                     // );
@@ -109,7 +140,6 @@ where
                     //         stack.push((left_node_id, right_node_id, next_working_node_id))
                     //     }
                     // }
-
                 }
             }
         }
@@ -172,4 +202,4 @@ where
     //         //    copy-source edge-target node
     //         self.copy_subtree(&new_edge_endpoint, source, &source_edge_endpoint);
     //     }
-    }
+}
