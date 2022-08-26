@@ -5,9 +5,9 @@ use super::*;
 fn test_accepts() {
     let d1: Nfa<NfaNode<()>, NfaEdge<Element>> = Nfa::from_language(str_to_chars("abc"), ());
     assert!(d1.accepts_string("abc"));
-    assert!(!d1.accepts(&str_to_chars("ab")));
-    assert!(!d1.accepts(&str_to_chars("a")));
-    assert!(!d1.accepts(&str_to_chars("abcc")));
+    assert!(!d1.accepts(&str_to_chars("ab")).unwrap());
+    assert!(!d1.accepts(&str_to_chars("a")).unwrap());
+    assert!(!d1.accepts(&str_to_chars("abcc")).unwrap());
 }
 
 #[test]

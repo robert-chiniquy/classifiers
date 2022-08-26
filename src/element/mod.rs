@@ -12,8 +12,11 @@ pub enum Element {
     Star,
     // The literal token seqence
     Tokens(Vec<char>),
+    // This matches any single char but this one.
+    NotToken(char),
     // Matches anything that is not literally Vec<char> (or could possibly be, like ??, *, etc)
-    NotTokens(Vec<char>),
+    // NotTokens(Vec<char>),
+
     // Matches 1 or more tokens that don't contain the explicit sequence Vec<char>
     // necessitated by the negation of paths like `*substring*` which transforms into ?(!`substring`loop)?
     LoopNotTokens(Vec<char>),
@@ -24,7 +27,7 @@ where
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     pub fn accepts_string(&self, s: &str) -> bool {
-        self.accepts(&str_to_chars(s))
+        self.accepts(&str_to_chars(s)).unwrap()
     }
 
     #[tracing::instrument(skip_all)]
@@ -70,7 +73,7 @@ fn path_from_str(s: &str) -> Vec<Element> {
         }
         let mut e = c.into();
         if negate_next {
-            e = Element::NotTokens(vec![c]);
+            e = Element::NotToken(c);
             negate_next = false;
         }
         v.push(e);
@@ -90,14 +93,18 @@ fn converge(a: &Element) -> Vec<NfaBranch<Element>> {
     use EdgeTransition::*;
     vec![NfaBranch::new(a.clone(), Advance, Advance)]
 }
+// ![aa] accepts - ?, ***, a -> !a
+
+// 1. !a -> accept
 
 impl BranchProduct<Element> for Element {
     #[tracing::instrument(ret)]
-    fn product(a: &Self, b: &Self) -> Vec<NfaBranch<Element>> {
+    fn product(a: &Self, b: &Self) -> Result<Vec<NfaBranch<Element>>, MatchingError> {
         use EdgeTransition::*;
         use Element::*;
+        use MatchingError::*;
         // println!("{a} <-> {b}");
-        match (a, b) {
+        let r = match (a, b) {
             (Star, Star) => {
                 // three edges, L, R, L+R
                 vec![
@@ -147,52 +154,11 @@ impl BranchProduct<Element> for Element {
                         NfaBranch::new(a.clone(), Advance, Advance),
                     ]
                 } else {
-                    diverge(a, b)
+                    return Err(UnrollLeft);
                 }
             }
             (Tokens(x), Tokens(y)) => {
                 if x == y {
-                    converge(a)
-                } else {
-                    diverge(a, b)
-                }
-            }
-            (Tokens(x), NotTokens(y)) => {
-                if x == y {
-                    diverge(a, b)
-                } else if x.len() == y.len() {
-                    // a < b
-                    vec![
-                        NfaBranch::new(a.clone(), Advance, Advance),
-                        NfaBranch::new(b.clone(), Stop, Advance),
-                    ]
-                } else {
-                    diverge(a, b)
-                }
-            }
-            (NotTokens(x), Question) => {
-                if x.len() == 1 {
-                    vec![
-                        NfaBranch::new(a.clone(), Advance, Advance),
-                        NfaBranch::new(Element::Tokens(x.clone()), Stop, Advance),
-                    ]
-                } else {
-                    diverge(a, b)
-                }
-            }
-            (NotTokens(x), Tokens(y)) => {
-                if x == y {
-                    diverge(a, b)
-                } else {
-                    // x > y
-                    vec![
-                        NfaBranch::new(a.clone(), Advance, Stop),
-                        NfaBranch::new(b.clone(), Advance, Advance),
-                    ]
-                }
-            }
-            (NotTokens(n1), NotTokens(n2)) => {
-                if n1 == n2 {
                     converge(a)
                 } else {
                     diverge(a, b)
@@ -209,17 +175,7 @@ impl BranchProduct<Element> for Element {
                     diverge(a, b)
                 }
             }
-            (Question, NotTokens(y)) => {
-                if y.len() == 1 {
-                    // a > b
-                    vec![
-                        NfaBranch::new(Element::Tokens(y.clone()), Advance, Stop),
-                        NfaBranch::new(b.clone(), Advance, Advance),
-                    ]
-                } else {
-                    diverge(a, b)
-                }
-            }
+
             (Question, LoopNotTokens(y)) => {
                 if y.len() == 1 {
                     vec![
@@ -246,27 +202,107 @@ impl BranchProduct<Element> for Element {
                     diverge(a, b)
                 }
             }
-            (NotTokens(x), LoopNotTokens(y)) => {
-                if x == y {
-                    vec![
-                        NfaBranch::new(a.clone(), Advance, Advance),
-                        NfaBranch::new(a.clone(), Advance, Stay),
-                    ]
-                } else if x.len() == y.len() {
-                    vec![
-                        NfaBranch::new(b.clone(), Stop, Advance),
-                        NfaBranch::new(a.clone(), Advance, Advance),
-                        NfaBranch::new(a.clone(), Advance, Stop),
-                    ]
-                } else {
+            (Question, NotToken(_)) => {
+                vec![
+                    NfaBranch::new(b.clone(), Advance, Advance),
+                    NfaBranch::new(Question, Advance, Stop),
+                ]
+            },
+            (Tokens(x), NotToken(y)) => {
+                // aa v b
+                if x.len() != 1 {
+                    // unroll tokens
+                    return Err(UnrollLeft);
+                } else if x[0] == *y {
                     diverge(a, b)
+                } else {
+                    converge(a)
                 }
-            }
+            },
+            (NotToken(_), Question) => todo!(),
+            (NotToken(_), Tokens(_)) => todo!(),
+            (NotToken(_), NotToken(_)) => todo!(),
+            (NotToken(_), LoopNotTokens(_)) => todo!(),
+            (LoopNotTokens(_), NotToken(_)) => todo!(),
             (LoopNotTokens(_), Question) => todo!(),
             (LoopNotTokens(_), Tokens(_)) => todo!(),
-            (LoopNotTokens(_), NotTokens(_)) => todo!(),
             (LoopNotTokens(_), LoopNotTokens(_)) => todo!(),
-        }
+            // (NotToken(_), NotTokens(_)) => todo!(),
+            // (NotTokens(_), NotToken(_)) => todo!(),
+            // (LoopNotTokens(_), NotTokens(_)) => todo!(),
+            // (Tokens(x), NotTokens(y)) => {
+            //     // a == a
+            //     if x == y {
+            //         diverge(a, b)
+            //     } else if x.len() == y.len() && y.len() == 1 {
+            //     // a != b
+            //         vec![
+            //             NfaBranch::new(a.clone(), Advance, Advance),
+            //             NfaBranch::new(b.clone(), Advance, Stay),
+            //         ]
+            //     } else {
+            //         // y can match 1...x.len() of xs tokens, and possibly more!
+            //         return Err(UnrollLeftRight);
+            //     }
+            // }
+            // (NotTokens(x), Question) => {
+            //     if x.len() == 1 {
+            //         vec![
+            //             NfaBranch::new(NotToken(x[0].clone()), Advance, Advance),
+            //             NfaBranch::new(Element::Tokens(x.clone()), Stop, Advance),
+            //         ]
+            //     } else {
+            //         diverge(a, b)
+            //     }
+            // }
+            // (NotTokens(x), Tokens(y)) => {
+            //     if x == y {
+            //         diverge(a, b)
+            //     } else {
+            //         // x > y
+            //         vec![
+            //             NfaBranch::new(a.clone(), Advance, Stop),
+            //             NfaBranch::new(b.clone(), Advance, Advance),
+            //         ]
+            //     }
+            // }
+            // (NotTokens(n1), NotTokens(n2)) => {
+            //     if n1 == n2 {
+            //         converge(a)
+            //     } else {
+            //         diverge(a, b)
+            //     }
+            // }
+            // (Question, NotTokens(y)) => {
+            //     if y.len() == 1 {
+            //         // a > b
+            //         vec![
+            //             NfaBranch::new(Element::Tokens(y.clone()), Advance, Stop),
+            //             NfaBranch::new(b.clone(), Advance, Advance),
+            //         ]
+            //     } else {
+            //         diverge(a, b)
+            //     }
+            // }
+            // (NotTokens(x), LoopNotTokens(y)) => {
+            //     if x == y {
+            //         vec![
+            //             NfaBranch::new(a.clone(), Advance, Advance),
+            //             NfaBranch::new(a.clone(), Advance, Stay),
+            //         ]
+            //     } else if x.len() == y.len() {
+            //         vec![
+            //             NfaBranch::new(b.clone(), Stop, Advance),
+            //             NfaBranch::new(a.clone(), Advance, Advance),
+            //             NfaBranch::new(a.clone(), Advance, Stop),
+            //         ]
+            //     } else {
+            //         diverge(a, b)
+            //     }
+            // }
+            
+        };
+        Ok(r)
     }
 }
 
@@ -298,51 +334,73 @@ impl From<&char> for Element {
 
 impl Accepts<Element> for Element {
     #[tracing::instrument(ret)]
-    fn accepts(&self, l: Element) -> bool {
+    fn accepts(&self, l: Element) -> Result<bool, MatchingError> {
         use Element::*;
-        match (self, &l) {
+        let r = match (self, &l) {
             (x, y) if x == y => true,
             // (Element::Question, Element::Question) => true,
             (Star, _) => true,
-            (NotTokens(b), Tokens(a)) => {
+            (NotToken(b), Tokens(a)) => {
                 // this should never happen
-                debug_assert!(!b.is_empty());
-                debug_assert!(!a.is_empty());
-                a != b
+                // debug_assert!(!a.is_empty());
+                if a.len() == 1 {
+                   a[0] != *b
+                } else {
+                    return Err(MatchingError::UnrollRight);
+                }
             }
-            (Question, NotTokens(n)) => n.len() == 1,
+            (Question, NotToken(_)) => true,
             (Question, Tokens(n)) => n.len() == 1,
             (LoopNotTokens(a), Tokens(b)) => a != b,
-            (LoopNotTokens(a), NotTokens(b)) => a != b,
+            (LoopNotTokens(a), NotToken(b)) => {
+                if a.len() == 1 && a[0] == *b {
+                    true
+                } else if a.len() == 1 {
+                    false
+                } else {
+                    true
+                    // Maybe we need to unroll!?
+                    // return Err(MatchingError::UnrollLeft);
+                }
+            }
             (_, Star) => false,
             // if len(seq) == 1, Q can match seq.  Otherwise, Q can't match multi chars.
             (LoopNotTokens(_), Question) => false,
-            (Tokens(_), NotTokens(_)) => false,
-            (NotTokens(_), Question) => false,
+            (Tokens(x), NotToken(y)) => {
+                if x.len() == 1 && x[0] != *y {
+                    true
+                } else {
+                    return Err(MatchingError::UnrollLeft);
+                }
+            },
+            (NotToken(_), Question) => false,
             (Tokens(_), Question) => false,
             (_, _) => false,
-        }
+        };
+        Ok(r)
     }
 }
 
 // TODO: FIXME: terminal_on needs to decompose seqs of len > 1 into component token/not token to call this method
 impl Accepts<&char> for Element {
     #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: &char) -> bool {
-        match self {
+    fn accepts(&self, l: &char) -> Result<bool, MatchingError> {
+        let r = match self {
             Element::Question => true,
             Element::Star => true,
             Element::Tokens(n) if n.len() == 1 => n[0] == *l,
-            Element::NotTokens(n) if n.len() == 1 => n[0] != *l,
+            // Element::NotTokens(n) if n.len() == 1 => n[0] != *l,
+            Element::NotToken(n) => n != l,
             Element::LoopNotTokens(n) if n.len() == 1 => n[0] != *l,
             _ => false,
-        }
+        };
+        Ok(r)
     }
 }
 
 impl Accepts<char> for Element {
     #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: char) -> bool {
+    fn accepts(&self, l: char) -> Result<bool, MatchingError> {
         self.accepts(&l)
     }
 }
@@ -361,21 +419,22 @@ impl std::fmt::Display for Element {
             match self {
                 Element::Question => "?".to_string(),
                 Element::Star => "*".to_string(),
+                Element::NotToken(c) => format!("!{c}"),
                 Element::Tokens(c) => c.iter().map(|c| c.to_string()).collect::<String>(),
-                Element::NotTokens(c) => {
-                    let s = c.iter().map(|c| c.to_string()).collect::<String>();
-                    if s.len() > 1 {
-                        format!("!`{s}`")
-                    } else {
-                        format!("!{s}")
-                    }
-                }
+                // Element::NotToken(c) => {
+                //     let s = c.iter().map(|c| c.to_string()).collect::<String>();
+                //     if s.len() > 1 {
+                //         format!("!`{s}`")
+                //     } else {
+                //         format!("!`{s}`")
+                //     }
+                // }
                 Element::LoopNotTokens(c) => {
                     let s = c.iter().map(|c| c.to_string()).collect::<String>();
                     if s.len() > 1 {
-                        format!("!`{s}`°")
+                        format!("!`{s}`♻")
                     } else {
-                        format!("!{s}°")
+                        format!("!`{s}`♻")
                     }
                 }
             }

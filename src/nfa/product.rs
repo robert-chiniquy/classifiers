@@ -77,7 +77,7 @@ where
                 for (other_target_node_id, other_edge_id) in other.edges_from(*other_id).unwrap() {
                     // println!("{} {} {other_id}",self_edge_id, other_edge_id);
                     let other_edge = other.edge(other_edge_id);
-                    let product = E::product(&self_edge.criteria, &other_edge.criteria);
+                    let product = E::product(&self_edge.criteria, &other_edge.criteria).unwrap();
 
                     for NfaBranch { kind, left, right } in product {
                         let left_node_id = match left {

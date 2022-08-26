@@ -1,6 +1,6 @@
 /// E: Accepts<L> implies a C: Into<E> and L: IntoIterator<Item = C>
 pub trait Accepts<L> {
-    fn accepts(&self, l: L) -> bool;
+    fn accepts(&self, l: L) -> Result<bool, MatchingError>;
 }
 
 pub trait Universal {
@@ -20,8 +20,22 @@ where
     fn inverse(&self) -> Vec<Self>;
 }
 
+#[derive(Debug)]
+pub enum MatchingError {
+    Error(String),
+    UnrollLeft,
+    UnrollRight,
+    UnrollLeftRight,
+}
+
+impl std::fmt::Display for MatchingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("{:?}", self))
+    }
+}
+
 pub trait BranchProduct<E> {
-    fn product(a: &Self, b: &Self) -> Vec<NfaBranch<E>>;
+    fn product(a: &Self, b: &Self) -> Result<Vec<NfaBranch<E>>, MatchingError>;
 }
 
 #[derive(Debug, PartialEq, Eq)]

@@ -46,7 +46,7 @@ pub fn negation_of(input: &Vec<Element>) -> Vec<Vec<Element>> {
     let min_length = element_sequence_minimum_unit_length(&input);
     let is_finite = !input
         .iter()
-        .any(|e| matches!(e, Element::Star | Element::LoopNotTokens(_) | Element::NotTokens(_)));
+        .any(|e| matches!(e, Element::Star | Element::LoopNotTokens(_))); /*| Element::NotTokens(_))*/
 
     // always push smaller stuff, if it exists...
     for i in 1..min_length {
@@ -100,7 +100,7 @@ fn test_negation() {
         ],
         vec![Star, Star, Star, Star, Star],
         vec![Star, Question, Star, Question, Star],
-        vec![Tokens(vec!['b']), NotTokens(vec!['c'])],
+        vec![Tokens(vec!['b']), NotToken('c')],
     ];
 
     for input in examples {
@@ -113,7 +113,7 @@ fn test_negation() {
 fn test_visit_choices() {
     setup();
     use Element::*;
-    let path = vec![Tokens(vec!['a']), NotTokens(vec!['a'])];
+    let path = vec![Tokens(vec!['a']), NotToken('a')];
     let p = visit_choices(&path, &[HashSet::from_iter(vec![path.clone()])]);
     assert!(!p.is_empty());
 }
@@ -217,7 +217,10 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
                 }
                 rule
             }
-            Transform::TokenSeq(v) => HashSet::from_iter(vec![vec![Element::NotTokens(v)]]),
+            Transform::TokenSeq(v) => {
+                let elements = Vec::from_iter(v.iter().map(|c|Element::NotToken(*c)));
+                HashSet::from_iter(vec![elements])
+            },
             Transform::NotTokenSeq(v) => HashSet::from_iter(vec![vec![Element::Tokens(v)]]),
             Transform::StarAStar(v) => {
                 let mut items = vec![];
@@ -274,12 +277,12 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
                     for (i, e) in elementals.iter().enumerate() {
                         match e {
                             Elementals::Tokens(s) if i == flip_index => {
-                                new_path.push(Element::NotTokens(s.clone()))
+                                new_path.extend(s.into_iter().map(|c| Element::NotToken(*c)))
                             }
                             Elementals::Tokens(s) if i != flip_index => {
                                 new_path.extend(vec![Element::Question; s.len()])
                             }
-                            Elementals::NotTokens(s) if i == flip_index => {
+                            Elementals::NotTokens(s) if i == flip_index => { // ![aa]: literally anything but aa... a, aaa, ab... !a ->!a   ab, ba, [does not accpet a or aaa]
                                 new_path.push(Element::Tokens(s.clone()))
                             }
                             Elementals::NotTokens(s) if i != flip_index => {
@@ -550,8 +553,8 @@ fn not_tokens_elementals(input: ElementContainer) -> IResult<ElementContainer, V
 fn not_tokens(input: ElementContainer) -> IResult<ElementContainer, Vec<char>> {
     let mut chars: Vec<_> = vec![];
     let mut elements = input.v().iter().peekable();
-    while let Some(Element::NotTokens(c)) = elements.peek() {
-        chars.extend(c);
+    while let Some(Element::NotToken(c)) = elements.peek() {
+        chars.push(*c);
         elements.next();
     }
     if chars.is_empty() {
@@ -752,8 +755,9 @@ fn element_sequence_minimum_unit_length(input: &[Element]) -> usize {
             Element::Question => 1,
             Element::Star => 1,
             Element::Tokens(s) => s.len(),
-            Element::NotTokens(s) => 1,
+            // Element::NotTokens(s) => 1,
             Element::LoopNotTokens(s) => 1,
+            Element::NotToken(_) => 1,
         })
         .sum()
 }
@@ -777,7 +781,7 @@ impl Transform {
                 .iter()
                 .flat_map(|e| match e {
                     Elementals::Tokens(v) => vec![Tokens(v.clone())],
-                    Elementals::NotTokens(v) => vec![NotTokens(v.clone())],
+                    Elementals::NotTokens(v) => v.into_iter().map(|c|NotToken(*c)).collect(),
                     Elementals::LoopNotTokens(v) => vec![LoopNotTokens(v.clone())],
                     Elementals::Questions(n) => vec![Question; *n],
                     Elementals::Globulars(n) => vec![Star; *n],
@@ -794,17 +798,20 @@ impl Transform {
             Transform::Globulars(n) => vec![Star; *n],
             Transform::Questions(n) => vec![Question; *n],
             Transform::TokenSeq(v) => vec![Tokens(v.clone())],
-            Transform::NotTokenSeq(v) => vec![NotTokens(v.clone())],
+            // Transform::NotTokenSeq(v) => vec![NotTokens(v.clone())],
             Transform::FrontAnchoredTokens(v) | Transform::EndAnchoredTokens(v) => v
                 .iter()
                 .flat_map(|e| match e {
                     Elementals::Tokens(v) => vec![Tokens(v.clone())],
-                    Elementals::NotTokens(v) => vec![NotTokens(v.clone())],
+                    // Elementals::NotTokens(v) => vec![NotTokens(v.clone())],
+                    // Elementals::NotToken(v) => vec![NotTokens(v.clone())],
                     Elementals::LoopNotTokens(v) => vec![LoopNotTokens(v.clone())],
                     Elementals::Questions(n) => vec![Question; *n],
                     Elementals::Globulars(n) => vec![Star; *n],
+                    Elementals::NotTokens(v) => v.into_iter().map(|c|NotToken(*c)).collect()
                 })
                 .collect(),
+            Transform::NotTokenSeq(_) => todo!(),
         }
     }
 }

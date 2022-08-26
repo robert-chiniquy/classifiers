@@ -85,7 +85,7 @@ where
     }
 
     #[tracing::instrument(skip(self), ret)]
-    pub fn accepts<C>(&self, path: &Vec<C>) -> bool
+    pub fn accepts<C>(&self, path: &Vec<C>) -> Result<bool, MatchingError>
     where
         E: Accepts<C>,
         C: Into<E> + Clone + std::fmt::Debug,
@@ -100,7 +100,7 @@ where
         &self,
         single_path: &Vec<C>,
         filter: &impl Fn(&LRSemantics) -> bool,
-    ) -> bool
+    ) -> Result<bool, MatchingError>
     where
         E: Accepts<C>,
         C: Into<E> + Clone + std::fmt::Debug,
@@ -116,7 +116,8 @@ where
                         if let Some(v) = self.edges_from(i) {
                             for (target, edge) in v {
                                 let edge = self.edge(edge);
-                                if edge.accepts(c.clone().to_owned()) {
+                                let accepts = edge.accepts(c.clone().to_owned())?;
+                                if accepts {
                                     // push target onto stack
                                     stack.push((*target, l.clone().collect()));
                                 }
@@ -129,15 +130,15 @@ where
                     None => {
                         // todo: clarify, maybe accepting should not check for rejection
                         if self.node_rejecting(i) {
-                            return false;
+                            return Ok(false);
                         } else if self.node_accepting(i) {
-                            return filter(&self.node(i).chirality);
+                            return Ok(filter(&self.node(i).chirality));
                         }
                     }
                 }
             }
         }
-        false
+        Ok(false)
     }
 
     #[tracing::instrument(skip(self), ret)]
@@ -302,13 +303,13 @@ where
                     println!("found an r for l!?!? {path:?} {t:?}");
                 }
                 r
-            })
+            }).unwrap()
         });
 
         paths.lr.extend(move_stuff.into_iter());
 
         (move_stuff, paths.r) = paths.r.iter().cloned().partition(|path| {
-            self.terminal_on(path, &|t| t == &LRSemantics::L || t == &LRSemantics::LR)
+            self.terminal_on(path, &|t| t == &LRSemantics::L || t == &LRSemantics::LR).unwrap()
         });
 
         paths.lr.extend(move_stuff.into_iter());
