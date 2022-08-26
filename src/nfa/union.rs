@@ -118,6 +118,7 @@ where
                     .pop();
                 
                 if let Some ((union_edge_target, _)) = matching {
+                    union.node_mut(union_id).sum_mut(other.node(*other_id));
                     stack.push((union_edge_target, other_edge_target));
                     continue;
                 }
