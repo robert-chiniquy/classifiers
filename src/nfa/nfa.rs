@@ -78,7 +78,7 @@ where
         if let Some(first) = items.next() {
             let init = Self::from_symbols(first, Default::default());
             nfa = items.fold(init, |acc, cur| {
-                acc.product(&Self::from_symbols(&cur, Default::default()))
+                acc.union(&Self::from_symbols(&cur, Default::default()))
             })
         }
         nfa
@@ -231,7 +231,7 @@ where
             Nfa::from_symbols(lr_paths[0], Default::default()),
             |acc, cur| {
                 println!("adding in {:?}", cur);
-                acc.product(&Nfa::from_symbols(cur, Default::default()))
+                acc.union(&Nfa::from_symbols(cur, Default::default()))
             }
         )
     }
