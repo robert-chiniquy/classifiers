@@ -38,8 +38,9 @@ where
 }
 
 impl Invertible for Vec<Element> {
-    fn inverse(&self) -> HashSet<Self> {
-        todo!()
+    #[tracing::instrument(ret)]
+    fn inverse(&self) -> Vec<Self> {
+        negation_of(self)
     }
 }
 
@@ -48,7 +49,7 @@ fn test_one() {
     let sources = vec![("a", ["!a", "**"])];
     for (s, v) in sources {
         let p = path_from_str(s);
-        let expected_paths: HashSet<_> = v.into_iter().map(path_from_str).collect();
+        let expected_paths: Vec<_> = v.into_iter().map(path_from_str).collect();
         assert_eq!(p.inverse(), expected_paths);
     }
 }

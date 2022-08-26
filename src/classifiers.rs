@@ -33,6 +33,7 @@ where
     where
         C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
         L: IntoIterator<Item = C>,
+        Vec<E>: Invertible,
         E: Accepts<E>,
         E: std::fmt::Debug
             + Clone
@@ -73,6 +74,11 @@ where
     pub fn not(c: Classifier<L>) -> Self {
         Classifier::Not(Box::new(c))
     }
+
+    #[tracing::instrument]
+    pub fn and(items: &[Classifier<L>]) -> Self {
+        Classifier::And(BTreeSet::from_iter(items.iter().cloned()))
+    }
 }
 
 impl Classifier<Vec<char>> {
@@ -85,6 +91,7 @@ impl<L> Classifier<L>
 where
     L: std::fmt::Debug + std::hash::Hash + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
+    // TODO: make Element default? or more inferable
     #[tracing::instrument(skip_all)]
     pub fn compile<E, M, C>(&self, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>
     where
@@ -100,6 +107,7 @@ where
         Nfa<NfaNode<M>, NfaEdge<E>>: NfaBuilder<E, M, C>,
         L: IntoIterator<Item = C>,
         M: std::fmt::Debug + Clone + PartialOrd + Ord + Default,
+        Vec<E>: Invertible,
     {
         match self {
             Classifier::Universal => Nfa::universal(m),

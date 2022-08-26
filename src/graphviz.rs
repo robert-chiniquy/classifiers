@@ -7,7 +7,14 @@ where
     N: std::fmt::Display,
     E: std::fmt::Display + Eq + Clone + std::hash::Hash + std::default::Default,
 {
-    pub(crate) fn graphviz(&self) -> String {
+    pub fn graphviz_file(&self, filename: &str, label: &str) {
+        use std::io::Write;
+        let g = graphviz_wrap(self.graphviz(), label);
+        let mut output = std::fs::File::create(filename).unwrap();
+        assert!(output.write_all(g.as_bytes()).is_ok());
+    }
+
+    pub fn graphviz(&self) -> String {
         let mut ret = "".to_string();
         for (source, edges) in &self.transitions {
             for (target, edge) in edges {

@@ -24,7 +24,7 @@ where
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: Eq + Clone + std::hash::Hash + Default + std::fmt::Debug,
+    E: Eq + Clone + std::hash::Hash + Default + std::fmt::Debug + BranchProduct<E>,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     #[tracing::instrument(skip_all)]
@@ -62,6 +62,17 @@ where
             prior = target;
         }
         nfa.node_mut(prior).state = Terminal::Accept(m);
+        nfa
+    }
+
+    pub fn from_paths(paths: &[Vec<E>]) -> Self {
+        let mut nfa: Self = Default::default();
+        let mut items = paths.iter();
+        if let Some(acc) = items.next() {
+            nfa = items.fold(nfa, |acc, cur| {
+                acc.union(&Self::from_symbols(&cur, Default::default()))
+            })
+        }
         nfa
     }
 
@@ -140,8 +151,22 @@ where
     }
 }
 
+#[test]
+fn test_accepting_paths() {
+    tests::setup();
+    let c = Classifier::literal("a");
+
+    let n = c.compile::<Element, _, _>(());
+    // assert!(n.accepts_string("aa"));
+
+    let paths = n.accepting_paths();
+
+    assert!(!paths.every_path().is_empty());
+}
+
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
+    Vec<E>: Invertible,
     E: std::fmt::Debug + Clone + BranchProduct<E> + Eq + std::hash::Hash + Default + Universal,
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
 {
@@ -206,7 +231,7 @@ where
                         paths.lr.insert(current_path.clone());
                     }
                     LRSemantics::None => {
-                        println!("🏡🏡🏡🏡🏡🏡🏡🏡🏡🏡");
+                        paths.none.insert(current_path.clone());
                     }
                 }
             }
@@ -387,17 +412,6 @@ where
     }
 }
 
-#[derive(Default, Debug)]
-// ? 6 fields, 1 for accepting and 1 for rejecting ?
-// 1. need to visit all states and not return early
-// 2. .... assume heterogenous NFAs
-// 3. any path in L or R which is rejected is not in LR accepted
-pub(crate) struct Paths<E: std::hash::Hash> {
-    pub(crate) l: HashSet<Vec<E>>,
-    pub(crate) lr: HashSet<Vec<E>>,
-    pub(crate) r: HashSet<Vec<E>>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LRSemantics {
     L,
@@ -438,5 +452,33 @@ where
             transitions: Default::default(),
             // chirality: Default::default(),
         }
+    }
+}
+
+#[derive(Default, Debug)]
+// ? 6 fields, 1 for accepting and 1 for rejecting ?
+// 1. need to visit all states and not return early
+// 2. .... assume heterogenous NFAs
+// 3. any path in L or R which is rejected is not in LR accepted
+pub(crate) struct Paths<E: std::hash::Hash> {
+    pub(crate) l: HashSet<Vec<E>>,
+    pub(crate) lr: HashSet<Vec<E>>,
+    pub(crate) r: HashSet<Vec<E>>,
+    pub(crate) none: HashSet<Vec<E>>,
+}
+
+impl<E> Paths<E>
+where
+    E: std::hash::Hash + Clone + Eq + std::fmt::Debug,
+{
+    #[tracing::instrument(ret)]
+    pub(crate) fn every_path(&self) -> HashSet<Vec<E>> {
+        self.l
+            .iter()
+            .chain(self.lr.iter())
+            .chain(self.r.iter())
+            .chain(self.none.iter())
+            .cloned()
+            .collect()
     }
 }

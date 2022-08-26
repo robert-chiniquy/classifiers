@@ -36,7 +36,7 @@ use nom::{
 
 // returns a Vec<Vec<Element>>, a set of paths to union into a graph
 // #[tracing::instrument(ret)]
-pub fn negation_of(input: Vec<Element>) -> Vec<Vec<Element>> {
+pub fn negation_of(input: &Vec<Element>) -> Vec<Vec<Element>> {
     let sequence_of_choices = interpret_negation_rules(ElementContainer(input.clone()));
     let mut paths = visit_choices(&input, &sequence_of_choices);
     // need to correct for length
@@ -104,7 +104,7 @@ fn test_negation() {
     ];
 
     for input in examples {
-        let negative = negation_of(input.clone());
+        let negative = negation_of(&input);
         pretty_print_path(&input, &negative);
     }
 }
@@ -488,7 +488,7 @@ fn test_star_a_star() {
     let (rest, txms) = r.unwrap();
     println!("{:?}", txms);
 
-    let stuff = negation_of(input.v().clone());
+    let stuff = negation_of(input.v());
     pretty_print_path(input.v(), &stuff);
     assert!(rest.v().is_empty(), "has stuff: {rest:?}");
 }
