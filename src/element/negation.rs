@@ -209,6 +209,7 @@ fn interpret_negation_rules(input: ElementContainer) -> Vec<HashSet<Vec<Element>
             }
             Transform::Questions(n) => {
                 //  ??? -> [****, ??, ?]
+                // match more characters, or fewer...
                 let mut rule: HashSet<_> = Default::default();
                 rule.insert(vec![Element::Star; n + 1]);
                 for qs in 1..n - 1 {

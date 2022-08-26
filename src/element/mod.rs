@@ -15,7 +15,7 @@ pub enum Element {
     // Matches anything that is not literally Vec<char> (or could possibly be, like ??, *, etc)
     NotTokens(Vec<char>),
     // Matches 1 or more tokens that don't contain the explicit sequence Vec<char>
-    // necessitated by the negation of paths like *a* which transforms into ?(!aloop)?
+    // necessitated by the negation of paths like `*substring*` which transforms into ?(!`substring`loop)?
     LoopNotTokens(Vec<char>),
 }
 
