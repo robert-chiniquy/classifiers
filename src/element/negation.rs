@@ -46,7 +46,7 @@ pub fn negation_of(input: &Vec<Element>) -> Vec<Vec<Element>> {
     let min_length = element_sequence_minimum_unit_length(&input);
     let is_finite = !input
         .iter()
-        .any(|e| matches!(e, Element::Star | Element::LoopNotTokens(_)));
+        .any(|e| matches!(e, Element::Star | Element::LoopNotTokens(_) | Element::NotTokens(_)));
 
     // always push smaller stuff, if it exists...
     for i in 1..min_length {
@@ -751,7 +751,7 @@ fn element_sequence_minimum_unit_length(input: &[Element]) -> usize {
             Element::Question => 1,
             Element::Star => 1,
             Element::Tokens(s) => s.len(),
-            Element::NotTokens(s) => s.len(),
+            Element::NotTokens(s) => 1,
             Element::LoopNotTokens(s) => 1,
         })
         .sum()

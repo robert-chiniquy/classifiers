@@ -10,6 +10,7 @@ pub enum Element {
     Question,
     Star,
     Tokens(Vec<char>),
+    // Matches anything that is not literally Vec<char> (or could possibly be )
     NotTokens(Vec<char>),
     LoopNotTokens(Vec<char>),
 }
