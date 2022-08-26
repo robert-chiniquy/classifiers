@@ -58,7 +58,13 @@ impl<E: Clone> NfaBranch<E> {
 // / This is the default impl of build_nfa for any type where this works
 impl<E, M, C> NfaBuilder<E, M, C> for Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: Eq + Clone + std::hash::Hash + std::default::Default + std::fmt::Debug + BranchProduct<E>,
+    E: Eq
+        + Clone
+        + std::hash::Hash
+        + std::default::Default
+        + std::fmt::Debug
+        + BranchProduct<E>
+        + std::fmt::Display,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
     C: Into<E> + std::fmt::Debug,
 {

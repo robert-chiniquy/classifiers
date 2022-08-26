@@ -1,9 +1,15 @@
 use super::*;
 
-impl<N, E> Nfa<N, NfaEdge<E>>
+impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    N: std::fmt::Debug + Clone + Default + NodeSum,
-    E: std::fmt::Debug + Clone + BranchProduct<E> + Eq + std::hash::Hash + std::default::Default,
+    E: Eq
+        + Clone
+        + std::hash::Hash
+        + Default
+        + std::fmt::Debug
+        + BranchProduct<E>
+        + std::fmt::Display,
+    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     /// A union is a non-mimimal NFA with the same resulting states for every input as
     /// either of the two input NFAs.
@@ -11,13 +17,13 @@ where
     // Blindly copying states here allows M to vary widely
     #[tracing::instrument(skip(self, other))]
     pub fn union(&self, other: &Self) -> Self {
-        println!("I union stuff");
+        // println!("I union stuff");
         if self.entry.is_empty() {
             return other.clone();
         } else if other.entry.is_empty() {
             return self.clone();
         }
-        let mut union: Nfa<N, NfaEdge<E>> = Default::default();
+        let mut union: Self = Default::default();
         let _entry = union.add_node(Default::default());
         union.entry.insert(_entry);
         // for every edge on every node in self.enter,
@@ -36,7 +42,13 @@ where
         // for each branch in the vector, you should push onto the stack again,
         // This currently assumes an acyclic graph
         // Cycle detection can occur by tracking visited combinations on the stack
+        let mut visited: HashSet<_> = Default::default();
         while let Some((self_id, other_id, working_union_node_id)) = stack.pop() {
+            if visited.contains(&(self_id, other_id)) {
+                // should this also validate working node id?
+                continue;
+            }
+            visited.insert((self_id, other_id));
             // if *self_id == 1_usize && *other_id == 2_usize && working_union_node_id == 6_usize {
             // println!("{stack:?}");
             //     ()
@@ -55,6 +67,10 @@ where
             } else if other_edges == None || other_edges.as_ref().unwrap().is_empty() {
                 union.copy_subtree(&working_union_node_id, self, self_id);
             } else {
+                // if self.edges.len() > 1000 || self.nodes.len() > 500 {
+                //     self.graphviz_file("panic.dot", "too big");
+                //     panic!();
+                // }
                 for (self_target_node_id, self_edge_id) in self.edges_from(*self_id).unwrap() {
                     let self_edge = self.edge(self_edge_id);
                     for (other_target_node_id, other_edge_id) in
@@ -124,7 +140,7 @@ where
                 }
             }
         }
-        println!("I done union stuff");
+        // println!("I done union stuff");
         union
     }
 
@@ -134,8 +150,8 @@ where
     ///
     /// returns the index of the new node if an edge is created, or the pre-existing node
     /// which was rationalized to if not.
-    #[tracing::instrument]
-    fn branch(&mut self, working_node_id: &NfaIndex, kind: E, new_node: N) -> NfaIndex {
+    #[tracing::instrument(skip_all)]
+    fn branch(&mut self, working_node_id: &NfaIndex, kind: E, new_node: NfaNode<M>) -> NfaIndex {
         // rationalization: there should only be 1 branch of a given kind from a given node
         //
         // rationalize the potential branches against each other
@@ -162,7 +178,7 @@ where
     }
 
     // there is no convergence yet but this is convergence-safe
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn copy_subtree(
         &mut self,
         copy_target_node: &NfaIndex,

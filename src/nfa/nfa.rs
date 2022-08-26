@@ -24,7 +24,13 @@ where
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: Eq + Clone + std::hash::Hash + Default + std::fmt::Debug + BranchProduct<E>,
+    E: std::fmt::Display
+        + Eq
+        + Clone
+        + std::hash::Hash
+        + Default
+        + std::fmt::Debug
+        + BranchProduct<E>,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     #[tracing::instrument(skip_all)]
@@ -167,7 +173,14 @@ fn test_accepting_paths() {
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
     Vec<E>: Invertible,
-    E: std::fmt::Debug + Clone + BranchProduct<E> + Eq + std::hash::Hash + Default + Universal,
+    E: std::fmt::Display
+        + std::fmt::Debug
+        + Clone
+        + BranchProduct<E>
+        + Eq
+        + std::hash::Hash
+        + Default
+        + Universal,
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
 {
     pub fn size(&self) -> usize {
@@ -194,6 +207,7 @@ where
         // FIXME accepting_paths is illogical, this must respect all terminal states
         // ... .terminal_paths() -> Paths (where Paths additionally stores terminal state and/or M)
         let paths = union.accepting_paths();
+
         // if a method here returned all terminal states with their associated paths,
         // (matt says intersection is a conjunction)
         // then each terminal state could be marked as in conjunction
@@ -204,6 +218,7 @@ where
             return Default::default();
             // return Nfa::universal(Default::default()).negate();
         }
+        // TODO: reduce LR paths
         let lr_paths: Vec<_> = paths.lr.iter().collect();
         lr_paths[1..].iter().fold(
             Nfa::from_symbols(lr_paths[0], Default::default()),

@@ -3,6 +3,35 @@ use super::*;
 #[test]
 fn test_basic_classifier_negation() {
     // tests::setup();
+
+    let nt1 = Nfa::from_str("***", ());
+    nt1.graphviz_file("nt1.dot", ".");
+    let nt2 = nt1.union(&Nfa::from_str("****", ()));
+    nt2.graphviz_file("nt2.dot", ".");
+
+    panic!();
+
+    // let problem = [
+    //     Nfa::from_str("***", ()),
+    //     Nfa::from_str("?", ()),
+    //     Nfa::from_symbols(&[Element::NotTokens(vec!['a', 'a'])], ()),
+    // ];
+
+    // let step1 = Nfa::from_str("***", ());
+    // step1.graphviz_file("step1.dot", ".");
+    // let step2 = step1.union(&Nfa::from_str("?", ()));
+    // step2.graphviz_file("step2.dot", ".");
+    // let step3 = step2.union(&Nfa::from_symbols(
+    //     &[Element::NotTokens(vec!['a', 'a'])],
+    //     (),
+    // ));
+    // step3.graphviz_file("step3.dot", ".");
+    // let step4 = step1.intersection(&Nfa::universal(Default::default()));
+
+    // assert!(step4.nodes.len() < 100);
+
+    // step4.graphviz_file("step4.dot", ".");
+
     let c = Classifier::literal("aa");
 
     let n = c.compile::<Element, _, _>(());
@@ -45,7 +74,8 @@ impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
     Vec<E>: Invertible,
-    E: std::fmt::Debug
+    E: std::fmt::Display
+        + std::fmt::Debug
         + Clone
         + Eq
         + std::hash::Hash
@@ -56,24 +86,26 @@ where
 {
     #[tracing::instrument(skip(self), ret)]
     pub fn negate(&self) -> Self {
+        // universal is fine as an initial value for an intersection,
+        // need to rationalize for empty input?
         let mut nfa: Nfa<NfaNode<M>, NfaEdge<E>> = Nfa::universal(Default::default());
 
         // intersect the union of all negations of all accepting paths of self
-        let thePaths = self.accepting_paths().every_path();
-        for p in  thePaths{
-            println!("p: {:?}", p);
+        let the_paths = self.accepting_paths().every_path();
+        for p in the_paths {
+            // println!("p: {:?}", p);
 
             let inversen: Vec<Vec<E>> = p.inverse();
-            println!("inversen: {:?}", &inversen);
+            // println!("inversen: {:?}", &inversen);
             // unsafe {
-                // let newNFA: &Nfa<NfaNode<()>, NfaEdge<Element>> = &Nfa::from_paths(std::mem::transmute::<_, &Vec<Vec<Element>>>(&inversen));
-                // newNFA.graphviz_file("n.dot", "aa");
-                // println!("newNFA: {:?}", &newNFA);    
+            // let newNFA: &Nfa<NfaNode<()>, NfaEdge<Element>> = &Nfa::from_paths(std::mem::transmute::<_, &Vec<Vec<Element>>>(&inversen));
+            // newNFA.graphviz_file("n.dot", "aa");
+            // println!("newNFA: {:?}", &newNFA);
             // }
-            
+
             // for every element path, produce a set of element paths which collectively are the negation
             let asdf = &Nfa::from_paths(&inversen);
-            println!("asdf: {:?}", &asdf);
+            // println!("asdf: {:?}", &asdf);
             nfa = nfa.intersection(asdf);
         }
         nfa

@@ -35,7 +35,8 @@ where
         L: IntoIterator<Item = C>,
         Vec<E>: Invertible,
         E: Accepts<E>,
-        E: std::fmt::Debug
+        E: std::fmt::Display
+            + std::fmt::Debug
             + Clone
             + PartialEq
             + Eq
@@ -95,7 +96,8 @@ where
     #[tracing::instrument(skip_all)]
     pub fn compile<E, M, C>(&self, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>
     where
-        E: std::fmt::Debug
+        E: std::fmt::Display
+            + std::fmt::Debug
             + Clone
             + Universal
             + BranchProduct<E>

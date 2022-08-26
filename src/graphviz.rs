@@ -2,11 +2,18 @@
 
 pub use super::*;
 
-impl<N, E> Nfa<N, E>
+impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    N: std::fmt::Display,
-    E: std::fmt::Display + Eq + Clone + std::hash::Hash + std::default::Default,
+    E: Eq
+        + Clone
+        + std::hash::Hash
+        + Default
+        + std::fmt::Debug
+        + BranchProduct<E>
+        + std::fmt::Display,
+    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
+    #[tracing::instrument(skip_all)]
     pub fn graphviz_file(&self, filename: &str, label: &str) {
         use std::io::Write;
         let g = graphviz_wrap(self.graphviz(), label);
@@ -14,6 +21,7 @@ where
         assert!(output.write_all(g.as_bytes()).is_ok());
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn graphviz(&self) -> String {
         let mut ret = "".to_string();
         for (source, edges) in &self.transitions {
@@ -50,16 +58,22 @@ fn nodename(i: &NfaIndex) -> String {
 
 pub(crate) fn graphviz_wrap(s: String, label: &str) -> String {
     format!(
-        r#"
+        r##"
 strict digraph G {{
     rankdir = TB;
     remincross = true;
     splines = true;
     fontsize="40";
+
+    bgcolor = "#111111";
+    node[color = "#FFFFFF"];
+    node[fontcolor = "#FFFFFF"];
+    edge[color = "#1111EE", fontcolor="#2222AA"];
+
     label = "{label}";
     {}
 }}
-"#,
+"##,
         s
     )
 }
