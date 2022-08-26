@@ -88,6 +88,7 @@ where
 {
     #[tracing::instrument(ret)]
     pub fn negate(&self) -> Self {
+        println!("negate in NfaNode wtf");
         let mut node = self.clone();
         node.state = node.state.negate();
         node

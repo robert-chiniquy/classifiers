@@ -65,7 +65,7 @@ where
         nfa
     }
 
-    pub fn from_paths(paths: &[Vec<E>]) -> Self {
+    pub fn from_paths(paths: &Vec<Vec<E>>) -> Self {
         let mut nfa: Self = Default::default();
         let mut items = paths.iter();
         if let Some(acc) = items.next() {
@@ -170,6 +170,10 @@ where
     E: std::fmt::Debug + Clone + BranchProduct<E> + Eq + std::hash::Hash + Default + Universal,
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
 {
+    pub fn size(&self) -> usize {
+        return self.nodes.len();
+    }
+
     /// An intersection NFA only has accepting states where both input NFAs have accepting states
     #[tracing::instrument(skip_all)]
     pub fn intersection(&self, other: &Self) -> Self
@@ -181,6 +185,10 @@ where
         a.set_chirality(LRSemantics::L);
         let mut b = other.clone();
         b.set_chirality(LRSemantics::R);
+
+        if a.size() == 0 || b.size() == 0 {
+            return Default::default();
+        }
         let union = a.union(&b);
         // println!("XXX\n{a:?}\n{b:?}\n{union:?}");
         // FIXME accepting_paths is illogical, this must respect all terminal states
@@ -189,8 +197,12 @@ where
         // if a method here returned all terminal states with their associated paths,
         // (matt says intersection is a conjunction)
         // then each terminal state could be marked as in conjunction
+        println!("paths: {:?}", paths);
+        // match (paths.l.is_empty(), paths.lr.is_empty(), paths.r.is_empty());
         if paths.lr.is_empty() {
-            return Nfa::universal(Default::default()).negate();
+            println!("making default");
+            return Default::default();
+            // return Nfa::universal(Default::default()).negate();
         }
         let lr_paths: Vec<_> = paths.lr.iter().collect();
         lr_paths[1..].iter().fold(

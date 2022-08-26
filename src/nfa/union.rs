@@ -11,6 +11,7 @@ where
     // Blindly copying states here allows M to vary widely
     #[tracing::instrument(skip(self, other))]
     pub fn union(&self, other: &Self) -> Self {
+        println!("I union stuff");
         if self.entry.is_empty() {
             return other.clone();
         } else if other.entry.is_empty() {
@@ -123,6 +124,7 @@ where
                 }
             }
         }
+        println!("I done union stuff");
         union
     }
 

@@ -91,7 +91,7 @@ impl BranchProduct<Element> for Element {
     fn product(a: &Self, b: &Self) -> Vec<NfaBranch<Element>> {
         use EdgeTransition::*;
         use Element::*;
-
+        println!("{a} <-> {b}");
         match (a, b) {
             (Star, Star) => {
                 // three edges, L, R, L+R
