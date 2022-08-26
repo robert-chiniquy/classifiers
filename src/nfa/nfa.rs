@@ -74,8 +74,10 @@ where
     pub fn from_paths(paths: &Vec<Vec<E>>) -> Self {
         let mut nfa: Self = Default::default();
         let mut items = paths.iter();
-        if let Some(acc) = items.next() {
-            nfa = items.fold(nfa, |acc, cur| {
+
+        if let Some(first) = items.next() {
+            let init = Self::from_symbols(first, Default::default());
+            nfa = items.fold(init, |acc, cur| {
                 acc.union(&Self::from_symbols(&cur, Default::default()))
             })
         }
@@ -196,6 +198,7 @@ where
         // For DFAs this is the cross-product
         let mut a = self.clone();
         a.set_chirality(LRSemantics::L);
+
         let mut b = other.clone();
         b.set_chirality(LRSemantics::R);
 
@@ -211,7 +214,11 @@ where
         // if a method here returned all terminal states with their associated paths,
         // (matt says intersection is a conjunction)
         // then each terminal state could be marked as in conjunction
-        println!("paths: {:?}", paths);
+        println!("\n\n🌮🌮🌮🌮 intersecting paths: {:?}\n\n", paths.lr);
+
+         // [*] ¥ [?, !aa, ***] -> ****, !aa, !aa***, ***, !aa*, !aa
+         // [*] ¥ [*** , !aa, ?] -> !aa, ?
+
         // match (paths.l.is_empty(), paths.lr.is_empty(), paths.r.is_empty());
         if paths.lr.is_empty() {
             println!("making default");
@@ -222,7 +229,10 @@ where
         let lr_paths: Vec<_> = paths.lr.iter().collect();
         lr_paths[1..].iter().fold(
             Nfa::from_symbols(lr_paths[0], Default::default()),
-            |acc, cur| acc.union(&Nfa::from_symbols(cur, Default::default())),
+            |acc, cur| {
+                println!("adding in {:?}", cur);
+                acc.union(&Nfa::from_symbols(cur, Default::default()))
+            }
         )
     }
 

@@ -68,7 +68,7 @@ strict digraph G {{
     bgcolor = "#111111";
     node[color = "#FFFFFF"];
     node[fontcolor = "#FFFFFF"];
-    edge[color = "#1111EE", fontcolor="#2222AA"];
+    edge[color = "#FFFFFF", fontcolor="#FFFFFF"];
 
     label = "{label}";
     {}

@@ -2,14 +2,16 @@ use super::*;
 
 #[test]
 fn test_basic_classifier_negation() {
+
+    &Nfa::from_paths(vec![])
     // tests::setup();
 
-    let nt1 = Nfa::from_str("***", ());
-    nt1.graphviz_file("nt1.dot", ".");
-    let nt2 = nt1.union(&Nfa::from_str("****", ()));
-    nt2.graphviz_file("nt2.dot", ".");
+    // let nt1 = Nfa::from_str("***", ());
+    // nt1.graphviz_file("nt1.dot", ".");
+    // let nt2 = nt1.union(&Nfa::from_str("****", ()));
+    // nt2.graphviz_file("nt2.dot", ".");
 
-    panic!();
+    // panic!();
 
     // let problem = [
     //     Nfa::from_str("***", ()),
@@ -93,10 +95,12 @@ where
         // intersect the union of all negations of all accepting paths of self
         let the_paths = self.accepting_paths().every_path();
         for p in the_paths {
-            // println!("p: {:?}", p);
+            println!("p: {:?}", p);
 
+            // inversen is non deterministic in order!!
+            // union is currently sensity to that.
             let inversen: Vec<Vec<E>> = p.inverse();
-            // println!("inversen: {:?}", &inversen);
+            println!("inversen: {:?}", &inversen);
             // unsafe {
             // let newNFA: &Nfa<NfaNode<()>, NfaEdge<Element>> = &Nfa::from_paths(std::mem::transmute::<_, &Vec<Vec<Element>>>(&inversen));
             // newNFA.graphviz_file("n.dot", "aa");
@@ -105,7 +109,8 @@ where
 
             // for every element path, produce a set of element paths which collectively are the negation
             let asdf = &Nfa::from_paths(&inversen);
-            // println!("asdf: {:?}", &asdf);
+            asdf.graphviz_file("asdf.dot", "asdf");
+            println!("asdf: {:?}", &asdf);
             nfa = nfa.intersection(asdf);
         }
         nfa
