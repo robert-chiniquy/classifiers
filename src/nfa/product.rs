@@ -11,6 +11,18 @@ where
         + std::fmt::Display,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
+    fn unroll_edge(
+        &mut self,
+        edge_id: NfaIndex,
+        source_node: &NfaIndex,
+    ) -> Result<(), MatchingError> {
+        // source --edge--> target
+        // becomes
+        // source --new_edge--> intermediate --new_edge--> target
+
+        todo!()
+    }
+
     #[tracing::instrument(skip(self, other))]
     pub fn product(&self, other: &Self) -> Self {
         if self.entry.is_empty() {
@@ -19,7 +31,13 @@ where
             return self.clone();
         }
 
+        // TODO: handle unrolling here?
+        // make a copy of self to unroll and use in the remainder of product
+        // alternatives
+        // - for each edge in self, call unroll_edge, maybe it handles that edge kind, maybe no-op
+        // - visit each edge pair which would occur in product and only unroll the needed?
         let mut union: Self = Default::default();
+
         // println!(
         //     "I union stuff: {} {} {}",
         //     self.nodes.len(),
@@ -77,6 +95,7 @@ where
                 for (other_target_node_id, other_edge_id) in other.edges_from(*other_id).unwrap() {
                     // println!("{} {} {other_id}",self_edge_id, other_edge_id);
                     let other_edge = other.edge(other_edge_id);
+                    // Robert suggests: Do not unroll here.
                     let product = E::product(&self_edge.criteria, &other_edge.criteria).unwrap();
 
                     for NfaBranch { kind, left, right } in product {

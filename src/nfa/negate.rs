@@ -22,8 +22,9 @@ fn test_basic_classifier_negation() {
 fn test_a_v_q() {
     tests::setup();
     use Element::*;
-    let n = Nfa::from_symbols(&vec![Tokens(vec!['a', 'a'])], ());
+    let n = Nfa::from_symbols(&[Tokens(vec!['a', 'a'])], ());
     let i = n.intersection(&Nfa::from_str("??", ()));
+    assert!(!i.nodes.is_empty());
     i.graphviz_file("i.dot", "a_v_q");
     assert!(i.accepts_string("aa"));
     let thing = vec![vec![Tokens(vec!['a']), Tokens(vec!['a'])]];

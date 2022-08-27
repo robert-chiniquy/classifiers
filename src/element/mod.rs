@@ -207,7 +207,7 @@ impl BranchProduct<Element> for Element {
                     NfaBranch::new(b.clone(), Advance, Advance),
                     NfaBranch::new(Question, Advance, Stop),
                 ]
-            },
+            }
             (Tokens(x), NotToken(y)) => {
                 // aa v b
                 if x.len() != 1 {
@@ -218,7 +218,7 @@ impl BranchProduct<Element> for Element {
                 } else {
                     converge(a)
                 }
-            },
+            }
             (NotToken(_), Question) => todo!(),
             (NotToken(_), Tokens(_)) => todo!(),
             (NotToken(_), NotToken(_)) => todo!(),
@@ -300,7 +300,6 @@ impl BranchProduct<Element> for Element {
             //         diverge(a, b)
             //     }
             // }
-            
         };
         Ok(r)
     }
@@ -344,7 +343,7 @@ impl Accepts<Element> for Element {
                 // this should never happen
                 // debug_assert!(!a.is_empty());
                 if a.len() == 1 {
-                   a[0] != *b
+                    a[0] != *b
                 } else {
                     return Err(MatchingError::UnrollRight);
                 }
@@ -355,12 +354,9 @@ impl Accepts<Element> for Element {
             (LoopNotTokens(a), NotToken(b)) => {
                 if a.len() == 1 && a[0] == *b {
                     true
-                } else if a.len() == 1 {
-                    false
                 } else {
-                    true
-                    // Maybe we need to unroll!?
-                    // return Err(MatchingError::UnrollLeft);
+                    a.len() != 1
+                    // maybe unroll needed?
                 }
             }
             (_, Star) => false,
@@ -372,7 +368,7 @@ impl Accepts<Element> for Element {
                 } else {
                     return Err(MatchingError::UnrollLeft);
                 }
-            },
+            }
             (NotToken(_), Question) => false,
             (Tokens(_), Question) => false,
             (_, _) => false,
@@ -431,11 +427,7 @@ impl std::fmt::Display for Element {
                 // }
                 Element::LoopNotTokens(c) => {
                     let s = c.iter().map(|c| c.to_string()).collect::<String>();
-                    if s.len() > 1 {
-                        format!("!`{s}`♻")
-                    } else {
-                        format!("!`{s}`♻")
-                    }
+                    format!("!`{s}`♻")
                 }
             }
         ))
