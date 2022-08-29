@@ -1,6 +1,6 @@
 mod negation;
 
-pub(crate) use negation::*;
+// pub(crate) use negation::*;
 
 use super::*;
 
@@ -22,7 +22,7 @@ pub enum Element {
     // ^ This negation transform rule is only required by negation via conjunction of the negation
     // of all paths (Matt calls this the de morgan method)
     // If we negate via complementarity, not needed.
-    LoopNotTokens(Vec<char>),
+    // LoopNotTokens(Vec<char>),
     // Not the concern? How is NotCharClass modeled as a path element?
     // Q: How do we negate a loop back to an earlier state?
     // Negation as conjunction of negation of "all paths"
@@ -41,7 +41,7 @@ pub enum Element {
     // from a list of inputs
     // complementarity solves this issue
     // necessitated only by unrolling Loop Not Tokens
-    NotCharacterClass(Vec<char>),
+    // NotCharacterClass(Vec<char>),
 }
 
 impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
@@ -70,7 +70,7 @@ where
 impl Invertible for Vec<Element> {
     #[tracing::instrument(ret)]
     fn inverse(&self) -> Vec<Self> {
-        negation_of(self)
+        todo!();
     }
 }
 
@@ -135,22 +135,6 @@ impl BranchProduct<Element> for Element {
                     NfaBranch::new(Star, Advance, Advance),
                 ]
             }
-            (Star, LoopNotTokens(_)) => {
-                vec![
-                    NfaBranch::new(Star, Advance, Stop),
-                    NfaBranch::new(b.clone(), Stay, Advance),
-                    NfaBranch::new(b.clone(), Advance, Advance),
-                    NfaBranch::new(b.clone(), Advance, Stay),
-                ]
-            }
-            (LoopNotTokens(_), Star) => {
-                vec![
-                    NfaBranch::new(Star, Stop, Advance),
-                    NfaBranch::new(b.clone(), Stay, Advance),
-                    NfaBranch::new(b.clone(), Advance, Advance),
-                    NfaBranch::new(b.clone(), Advance, Stay),
-                ]
-            }
             (Star, _) => {
                 // consume lr, consume left, or drop right...
                 vec![
@@ -200,34 +184,6 @@ impl BranchProduct<Element> for Element {
                     diverge(a, b)
                 }
             }
-
-            (Question, LoopNotTokens(y)) => {
-                if y.len() == 1 {
-                    vec![
-                        // FIXME: expressly this should be a NotToken branch, then we have a DFA
-                        NfaBranch::new(Question, Advance, Stop),
-                        NfaBranch::new(b.clone(), Advance, Stay),
-                        NfaBranch::new(b.clone(), Advance, Advance),
-                    ]
-                } else {
-                    diverge(a, b)
-                }
-            }
-            (Tokens(x), LoopNotTokens(y)) => {
-                //  we really need some form of lookahead here!
-                if x == y {
-                    diverge(a, b)
-                } else if x.len() == y.len() {
-                    // a < b
-                    vec![
-                        NfaBranch::new(b.clone(), Stop, Advance),
-                        NfaBranch::new(a.clone(), Advance, Advance),
-                        NfaBranch::new(a.clone(), Advance, Stay),
-                    ]
-                } else {
-                    diverge(a, b)
-                }
-            }
             (Question, NotToken(_)) => {
                 vec![
                     NfaBranch::new(b.clone(), Advance, Advance),
@@ -248,84 +204,6 @@ impl BranchProduct<Element> for Element {
             (NotToken(_), Question) => todo!(),
             (NotToken(_), Tokens(_)) => todo!(),
             (NotToken(_), NotToken(_)) => todo!(),
-            (NotToken(_), LoopNotTokens(_)) => todo!(),
-            (LoopNotTokens(_), NotToken(_)) => todo!(),
-            (LoopNotTokens(_), Question) => todo!(),
-            (LoopNotTokens(_), Tokens(_)) => todo!(),
-            (LoopNotTokens(_), LoopNotTokens(_)) => todo!(),
-            // (NotToken(_), NotTokens(_)) => todo!(),
-            // (NotTokens(_), NotToken(_)) => todo!(),
-            // (LoopNotTokens(_), NotTokens(_)) => todo!(),
-            // (Tokens(x), NotTokens(y)) => {
-            //     // a == a
-            //     if x == y {
-            //         diverge(a, b)
-            //     } else if x.len() == y.len() && y.len() == 1 {
-            //     // a != b
-            //         vec![
-            //             NfaBranch::new(a.clone(), Advance, Advance),
-            //             NfaBranch::new(b.clone(), Advance, Stay),
-            //         ]
-            //     } else {
-            //         // y can match 1...x.len() of xs tokens, and possibly more!
-            //         return Err(UnrollLeftRight);
-            //     }
-            // }
-            // (NotTokens(x), Question) => {
-            //     if x.len() == 1 {
-            //         vec![
-            //             NfaBranch::new(NotToken(x[0].clone()), Advance, Advance),
-            //             NfaBranch::new(Element::Tokens(x.clone()), Stop, Advance),
-            //         ]
-            //     } else {
-            //         diverge(a, b)
-            //     }
-            // }
-            // (NotTokens(x), Tokens(y)) => {
-            //     if x == y {
-            //         diverge(a, b)
-            //     } else {
-            //         // x > y
-            //         vec![
-            //             NfaBranch::new(a.clone(), Advance, Stop),
-            //             NfaBranch::new(b.clone(), Advance, Advance),
-            //         ]
-            //     }
-            // }
-            // (NotTokens(n1), NotTokens(n2)) => {
-            //     if n1 == n2 {
-            //         converge(a)
-            //     } else {
-            //         diverge(a, b)
-            //     }
-            // }
-            // (Question, NotTokens(y)) => {
-            //     if y.len() == 1 {
-            //         // a > b
-            //         vec![
-            //             NfaBranch::new(Element::Tokens(y.clone()), Advance, Stop),
-            //             NfaBranch::new(b.clone(), Advance, Advance),
-            //         ]
-            //     } else {
-            //         diverge(a, b)
-            //     }
-            // }
-            // (NotTokens(x), LoopNotTokens(y)) => {
-            //     if x == y {
-            //         vec![
-            //             NfaBranch::new(a.clone(), Advance, Advance),
-            //             NfaBranch::new(a.clone(), Advance, Stay),
-            //         ]
-            //     } else if x.len() == y.len() {
-            //         vec![
-            //             NfaBranch::new(b.clone(), Stop, Advance),
-            //             NfaBranch::new(a.clone(), Advance, Advance),
-            //             NfaBranch::new(a.clone(), Advance, Stop),
-            //         ]
-            //     } else {
-            //         diverge(a, b)
-            //     }
-            // }
         };
         Ok(r)
     }
@@ -376,18 +254,8 @@ impl Accepts<Element> for Element {
             }
             (Question, NotToken(_)) => true,
             (Question, Tokens(n)) => n.len() == 1,
-            (LoopNotTokens(a), Tokens(b)) => a != b,
-            (LoopNotTokens(a), NotToken(b)) => {
-                if a.len() == 1 && a[0] == *b {
-                    true
-                } else {
-                    a.len() != 1
-                    // maybe unroll needed?
-                }
-            }
             (_, Star) => false,
             // if len(seq) == 1, Q can match seq.  Otherwise, Q can't match multi chars.
-            (LoopNotTokens(_), Question) => false,
             (Tokens(x), NotToken(y)) => {
                 if x.len() == 1 && x[0] != *y {
                     true
@@ -413,7 +281,6 @@ impl Accepts<&char> for Element {
             Element::Tokens(n) if n.len() == 1 => n[0] == *l,
             // Element::NotTokens(n) if n.len() == 1 => n[0] != *l,
             Element::NotToken(n) => n != l,
-            Element::LoopNotTokens(n) if n.len() == 1 => n[0] != *l,
             _ => false,
         };
         Ok(r)
@@ -443,18 +310,6 @@ impl std::fmt::Display for Element {
                 Element::Star => "*".to_string(),
                 Element::NotToken(c) => format!("!{c}"),
                 Element::Tokens(c) => c.iter().map(|c| c.to_string()).collect::<String>(),
-                // Element::NotToken(c) => {
-                //     let s = c.iter().map(|c| c.to_string()).collect::<String>();
-                //     if s.len() > 1 {
-                //         format!("!`{s}`")
-                //     } else {
-                //         format!("!`{s}`")
-                //     }
-                // }
-                Element::LoopNotTokens(c) => {
-                    let s = c.iter().map(|c| c.to_string()).collect::<String>();
-                    format!("!`{s}`♻")
-                }
             }
         ))
     }
