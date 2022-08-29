@@ -19,7 +19,29 @@ pub enum Element {
 
     // Matches 1 or more tokens that don't contain the explicit sequence Vec<char>
     // necessitated by the negation of paths like `*substring*` which transforms into ?(!`substring`loop)?
+    // ^ This negation transform rule is only required by negation via conjunction of the negation
+    // of all paths (Matt calls this the de morgan method)
+    // If we negate via complementarity, not needed.
     LoopNotTokens(Vec<char>),
+    // Not the concern? How is NotCharClass modeled as a path element?
+    // Q: How do we negate a loop back to an earlier state?
+    // Negation as conjunction of negation of "all paths"
+    // What is "All paths" with a loop back?
+    // In the star case we have an element for it, so we avoid
+    // having to model the more general loopiness quality.
+    // For looping on a non-self-loop graph,
+    // how can we express the set of accepted paths for negation?
+    // Q: Is there some other route to negation? (i.e. complementarity)
+    // What would expressing a loop back mean for a branch product,
+    // i.e. do you end up with BranchProduct::LoopToSeqStart
+    // loop back could be modeled with just advance ..
+    // Q: cycle detection? the visited hashmap should handle this there in product ...
+    // how do you enumerate the paths of a looping construct?
+    // this is the inverse problem of constructing a looping graph
+    // from a list of inputs
+    // complementarity solves this issue
+    // necessitated only by unrolling Loop Not Tokens
+    NotCharacterClass(Vec<char>),
 }
 
 impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
@@ -132,6 +154,7 @@ impl BranchProduct<Element> for Element {
             (Star, _) => {
                 // consume lr, consume left, or drop right...
                 vec![
+                    // FIXME: expressly this should be a NotToken branch, then we have a DFA
                     NfaBranch::new(Star, Advance, Stop),
                     NfaBranch::new(b.clone(), Stay, Advance),
                     // NfaBranch::new(*a, Stay, Advance), //?
@@ -140,6 +163,7 @@ impl BranchProduct<Element> for Element {
             }
             (_, Star) => {
                 vec![
+                    // FIXME: expressly this should be a NotToken branch
                     NfaBranch::new(Star, Stop, Advance),
                     NfaBranch::new(a.clone(), Advance, Stay),
                     //NfaBranch::new(*b, Advance, Stay), // ?
@@ -168,6 +192,7 @@ impl BranchProduct<Element> for Element {
                 if y.len() == 1 {
                     // a > b
                     vec![
+                        // FIXME: expressly this should be a NotToken branch, then we have a DFA
                         NfaBranch::new(Question, Advance, Stop),
                         NfaBranch::new(b.clone(), Advance, Advance),
                     ]
@@ -179,6 +204,7 @@ impl BranchProduct<Element> for Element {
             (Question, LoopNotTokens(y)) => {
                 if y.len() == 1 {
                     vec![
+                        // FIXME: expressly this should be a NotToken branch, then we have a DFA
                         NfaBranch::new(Question, Advance, Stop),
                         NfaBranch::new(b.clone(), Advance, Stay),
                         NfaBranch::new(b.clone(), Advance, Advance),

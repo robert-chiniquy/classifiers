@@ -2,9 +2,18 @@ pub type NfaIndex = usize;
 
 use super::*;
 
-// TODO
-// - remove NfaNode, NfaEdge?
-// - Not logic, inversion, compilation, intersection
+// Negation by Complementarity plan
+// - Drop 2 element types: NotLoopSeq and NotCharacterClass
+// - Element product must get smarter to make DFAs
+//   - Q: is a new element type needed here?
+//     - Define remainder types for every combination of elements
+// - Explicit rejecting state
+// - to_dfa() method on NFA which ensures exhaustivity of outbound edges from every node
+//   - all NFA nodes get a remainder edge which goes to a single dead end state.
+//      - a * has no remainder
+//      - ? has a remainder of * ?
+//   - runs of *..** must be compressed into ?..?*
+// Q: Validate logic around Accept/Reject semantics under complementation
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Nfa<N, E>
@@ -215,14 +224,14 @@ where
         // if a method here returned all terminal states with their associated paths,
         // (matt says intersection is a conjunction)
         // then each terminal state could be marked as in conjunction
-        println!("\n\n🌮🌮🌮🌮 intersecting paths: {:?}\n\n", paths.lr);
+        // println!("\n\n🌮🌮🌮🌮 intersecting paths: {:?}\n\n", paths.lr);
 
         // [*] ¥ [?, !aa, ***] -> ****, !aa, !aa***, ***, !aa*, !aa
         // [*] ¥ [*** , !aa, ?] -> !aa, ?
 
         // match (paths.l.is_empty(), paths.lr.is_empty(), paths.r.is_empty());
         if paths.lr.is_empty() {
-            println!("making default");
+            // println!("making default");
             return Default::default();
             // return Nfa::universal(Default::default()).negate();
         }
@@ -303,13 +312,15 @@ where
                     println!("found an r for l!?!? {path:?} {t:?}");
                 }
                 r
-            }).unwrap()
+            })
+            .unwrap()
         });
 
         paths.lr.extend(move_stuff.into_iter());
 
         (move_stuff, paths.r) = paths.r.iter().cloned().partition(|path| {
-            self.terminal_on(path, &|t| t == &LRSemantics::L || t == &LRSemantics::LR).unwrap()
+            self.terminal_on(path, &|t| t == &LRSemantics::L || t == &LRSemantics::LR)
+                .unwrap()
         });
 
         paths.lr.extend(move_stuff.into_iter());
