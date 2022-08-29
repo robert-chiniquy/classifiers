@@ -6,7 +6,7 @@ mod traits;
 mod product;
 mod union;
 
-pub(crate) use negate::*;
+// pub(crate) use negate::*;
 pub use nfa::*;
 pub use node::*;
 pub use traits::*;

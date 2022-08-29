@@ -11,17 +11,6 @@ where
         + std::fmt::Display,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
-    fn unroll_edge(
-        &mut self,
-        edge_id: NfaIndex,
-        source_node: &NfaIndex,
-    ) -> Result<(), MatchingError> {
-        // source --edge--> target
-        // becomes
-        // source --new_edge--> intermediate --new_edge--> target
-
-        todo!()
-    }
 
     #[tracing::instrument(skip(self, other))]
     pub fn product(&self, other: &Self) -> Self {

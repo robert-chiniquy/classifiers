@@ -245,6 +245,7 @@ static TEST_SETUP: once_cell::sync::Lazy<bool> = once_cell::sync::Lazy::new(|| {
 });
 
 pub fn setup() {
+    #[ignore]
     #[cfg(feature = "trace")]
     {
         let subscriber = tracing_subscriber::fmt()
