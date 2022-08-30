@@ -3,6 +3,12 @@ pub trait Accepts<L> {
     fn accepts(&self, l: L) -> Result<bool, MatchingError>;
 }
 
+pub trait Remaindery<L> {
+    fn remainder(a: L, b: L) -> Result<Option<L>, String>;
+
+    fn is_valid(a: L, b: L) -> bool;
+}
+
 pub trait Universal {
     fn universal() -> Self;
 }

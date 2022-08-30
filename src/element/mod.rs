@@ -12,8 +12,11 @@ pub enum Element {
     Star,
     // The literal token seqence
     Token(char),
+    TokenSet(Vec<char>),
     // This matches any single char but this one.
     NotToken(char),
+    // This matches any set of single chars but those in the vector
+    NotTokensSet(Vec<char>),
 }
 
 impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
@@ -87,116 +90,90 @@ fn converge(a: &Element) -> Vec<NfaBranch<Element>> {
     use EdgeTransition::*;
     vec![NfaBranch::new(a.clone(), Advance, Advance)]
 }
-// ![aa] accepts - ?, ***, a -> !a
-
-// 1. !a -> accept
 
 impl BranchProduct<Element> for Element {
     #[tracing::instrument(ret)]
     fn product(a: &Self, b: &Self) -> Result<Vec<NfaBranch<Element>>, MatchingError> {
         use EdgeTransition::*;
         use Element::*;
-        // println!("{a} <-> {b}");
+
         let r = match (a, b) {
-            (Star, Star) => {
-                // three edges, L, R, L+R
-                vec![
-                    NfaBranch::new(Star, Advance, Stay),
-                    NfaBranch::new(Star, Stay, Advance),
-                    NfaBranch::new(Star, Advance, Advance),
-                ]
-            }
-            (Question, Question) => converge(a),
-            (NotToken(y), NotToken(x)) => {
+            (Star, Star) => vec![
+                NfaBranch::new(Star, Advance, Stay),
+                NfaBranch::new(Star, Stay, Advance),
+                NfaBranch::new(Star, Advance, Advance),
+            ],
+            (Star, Question) => vec![
+                NfaBranch::new(Question, Stay, Advance),
+                NfaBranch::new(Question, Advance, Advance),
+            ],
+            (Question, Star) => vec![
+                NfaBranch::new(Question, Advance, Stay),
+                NfaBranch::new(Question, Advance, Advance),
+            ],
+            (Star, Token(y)) => vec![
+                NfaBranch::new(NotToken(*y), Advance, Stop),
+                NfaBranch::new(Token(*y), Stay, Advance),
+                NfaBranch::new(Token(*y), Advance, Advance),
+            ],
+            (Token(y), Star) => vec![
+                NfaBranch::new(NotToken(*y), Stop, Advance),
+                NfaBranch::new(Token(*y), Advance, Stay),
+                NfaBranch::new(Token(*y), Advance, Advance),
+            ],
+            (Star, NotToken(y)) => vec![
+                NfaBranch::new(Token(*y), Advance, Stop),
+                NfaBranch::new(NotToken(*y), Stay, Advance),
+                NfaBranch::new(NotToken(*y), Advance, Advance),
+            ],
+            (NotToken(y), Star) => vec![
+                NfaBranch::new(Token(*y), Stop, Advance),
+                NfaBranch::new(NotToken(*y), Advance, Stay),
+                NfaBranch::new(NotToken(*y), Advance, Advance),
+            ],
+
+            /* Question */
+            (Question, Question) => vec![NfaBranch::new(Question, Advance, Advance)],
+            (Question, Token(y)) => vec![
+                NfaBranch::new(NotToken(*y), Advance, Stop),
+                NfaBranch::new(Token(*y), Advance, Advance),
+            ],
+            (Token(x), Question) => vec![
+                NfaBranch::new(Token(*x), Advance, Advance),
+                NfaBranch::new(NotToken(*x), Stop, Advance),
+            ],
+            (Question, NotToken(y)) => vec![
+                NfaBranch::new(NotToken(*y), Advance, Advance),
+                NfaBranch::new(Token(*y), Advance, Stop),
+            ],
+
+            (NotToken(x), Question) => vec![
+                NfaBranch::new(NotToken(*x), Advance, Advance),
+                NfaBranch::new(Token(*x), Advance, Stop),
+            ],
+
+            (Token(x), Token(y)) | (NotToken(y), NotToken(x)) => {
                 if x == y {
-                    converge(a)
+                    vec![NfaBranch::new(a.clone(), Advance, Advance)]
                 } else {
-                    diverge(a, b)
-                }
-            },
-            (Token(x), Token(y)) => {
-                if x == y {
-                    converge(a)
-                } else {
-                    diverge(a, b)
+                    vec![
+                        NfaBranch::new(a.clone(), Advance, Stop),
+                        NfaBranch::new(b.clone(), Stop, Advance),
+                    ]
                 }
             }
 
-
-
-            // (Star, Token(y)) => {
-            //     // consume lr, consume left, or drop right...
-            //     vec![
-            //         // FIXME: expressly this should be a NotToken branch, then we have a DFA
-            //         NfaBranch::new(Star, Advance, Stop),
-            //         NfaBranch::new(b.clone(), Stay, Advance),
-            //         // NfaBranch::new(*a, Stay, Advance), //?
-            //         NfaBranch::new(b.clone(), Advance, Advance),
-            //     ]
-            // }
-            // (Token(y), Star) => {
-            //     vec![
-            //         // FIXME: expressly this should be a NotToken branch
-            //         NfaBranch::new(Star, Stop, Advance),
-            //         NfaBranch::new(a.clone(), Advance, Stay),
-            //         //NfaBranch::new(*b, Advance, Stay), // ?
-            //         NfaBranch::new(a.clone(), Advance, Advance),
-            //     ]
-            // }
-
-
-            (Star, _) => {
-                // consume lr, consume left, or drop right...
-                vec![
-                    // FIXME: expressly this should be a NotToken branch, then we have a DFA
-                    NfaBranch::new(Star, Advance, Stop),
-                    NfaBranch::new(b.clone(), Stay, Advance),
-                    // NfaBranch::new(*a, Stay, Advance), //?
-                    NfaBranch::new(b.clone(), Advance, Advance),
-                ]
-            }
-            (_, Star) => {
-                vec![
-                    // FIXME: expressly this should be a NotToken branch
-                    NfaBranch::new(Star, Stop, Advance),
-                    NfaBranch::new(a.clone(), Advance, Stay),
-                    //NfaBranch::new(*b, Advance, Stay), // ?
-                    NfaBranch::new(a.clone(), Advance, Advance),
-                ]
-            }
-            
-            (Question, Token(y)) => {
-                vec![
-                    // FIXME: expressly this should be a NotToken branch, then we have a DFA
-                    NfaBranch::new(NotToken(y.clone()), Advance, Stop),
-                    NfaBranch::new(Token(y.clone()), Advance, Advance),
-                ]
-            }
-
-            (Token(x), Question) => {
-                vec![
-                    NfaBranch::new(Token(x.clone()), Advance, Advance),
-                    NfaBranch::new(NotToken(x.clone()), Stop, Advance),
-                ]
-            }
-
-            (Question, NotToken(y)) => {
-                vec![
-                    NfaBranch::new(NotToken(y.clone()), Advance, Advance),
-                    NfaBranch::new(Token(y.clone()), Advance, Stop),
-                ]
-            }
-            (NotToken(x), Question) => {
-                vec![
-                    NfaBranch::new(NotToken(x.clone()), Advance, Advance),
-                    NfaBranch::new(Token(x.clone()), Advance, Stop),
-                ]
-            },
             (Token(x), NotToken(y)) => {
-                if x == y {
-                    diverge(a, b)
+                if x != y {
+                    vec![
+                        NfaBranch::new(a.clone(), Advance, Advance),
+                        NfaBranch::new(b.clone(), Stop, Advance),
+                    ]
                 } else {
-                    converge(a)
+                    vec![
+                        NfaBranch::new(a.clone(), Advance, Advance),
+                        NfaBranch::new(b.clone(), Stop, Advance),
+                    ]
                 }
             }
             (NotToken(x), Token(y)) => {
@@ -205,7 +182,7 @@ impl BranchProduct<Element> for Element {
                 } else {
                     converge(a)
                 }
-            },
+            }
         };
         Ok(r)
     }
@@ -234,6 +211,166 @@ impl From<&char> for Element {
             '?' => Element::Question,
             c => Element::Token(*c),
         }
+    }
+}
+impl Remaindery<Element> for Element {
+    fn is_valid(a: Element, b: Element) -> bool {
+        use Element::*;
+        match (a, b) {
+            (Token(_), Question)
+            | (NotToken(_), Question)
+            | (TokenSet(_), Question)
+            | (Token(_), Star)
+            | (NotToken(_), Star)
+            | (TokenSet(_), Star)
+            | (NotTokensSet(_), Question)
+            | (NotToken(_), NotToken(_))
+            | (NotToken(_), NotTokensSet(_))
+            | (NotTokensSet(_), NotToken(_))
+            | (NotTokensSet(_), NotTokensSet(_))
+            | (NotTokensSet(_), Star) => false,
+
+            (Question, Question) => true,
+            (Question, Star) => true,
+            (Star, Question) => true,
+            (Star, Star) => true,
+
+            (Star, Token(n)) | (Question, Token(n)) => true,
+            (Star, NotToken(n)) | (Question, NotToken(n)) => true,
+            (Star, NotTokensSet(v)) | (Question, NotTokensSet(v)) => true,
+            (Star, TokenSet(y)) | (Question, TokenSet(y)) => true,
+
+            (Token(x), Token(y)) => x != y,
+            (Token(x), NotToken(y)) => x == y,
+            (Token(x), NotTokensSet(y)) => y.len() == 1 && x == y[0],
+
+            (TokenSet(y), Token(x)) | (Token(x), TokenSet(y)) => !y.iter().any(|c| x == *c),
+            (TokenSet(x), TokenSet(y)) => !x.into_iter().any(|c| y.contains(&c)),
+            (TokenSet(x), NotToken(y)) => x.len() == 1 && x[0] == y,
+            (TokenSet(x), NotTokensSet(y)) => y.len() == 1 && y[0] == x[0],
+
+            (NotToken(x), Token(y)) => x == y,
+            (NotToken(x), TokenSet(y)) => y.len() == 1 && y[0] == x,
+
+            (NotTokensSet(x), Token(y)) => x.len() == 1 && y == x[0],
+            (NotTokensSet(x), TokenSet(y)) => x.len() == 1 && y.len() == 1 && y[0] == x[0],
+        }
+    }
+    fn remainder(a: Element, b: Element) -> Result<Option<Element>, String> {
+        let mut complete = false;
+        use Element::*;
+        let err = Err("to much stuff".to_string());
+
+        let d = match (a, b) {
+            (Token(_), Question)
+            | (Token(_), Star)
+            | (NotToken(_), Question)
+            | (NotToken(_), Star)
+            | (TokenSet(_), Question)
+            | (TokenSet(_), Star)
+            | (NotTokensSet(_), Question)
+            | (NotToken(_), NotToken(_))
+            | (NotToken(_), NotTokensSet(_))
+            | (NotTokensSet(_), NotToken(_))
+            | (NotTokensSet(_), NotTokensSet(_))
+            | (NotTokensSet(_), Star) => return err,
+
+            (Question, Question) => None,
+            (Question, Star) => None,
+            (Star, Question) => None,
+            (Star, Star) => None,
+
+            (Star, Token(n)) | (Question, Token(n)) => Some(NotToken(n)),
+            (Star, NotToken(n)) | (Question, NotToken(n)) => Some(Token(n)),
+            (Star, NotTokensSet(v)) | (Question, NotTokensSet(v)) => Some(TokenSet(v)),
+            (Star, TokenSet(y)) | (Question, TokenSet(y)) => Some(NotTokensSet(y)),
+
+            (Token(x), Token(y)) => {
+                if x == y {
+                    return err;
+                } else {
+                    Some(NotTokensSet(vec![x, y]))
+                }
+            }
+            (Token(x), NotToken(y)) => {
+                if x == y {
+                    None
+                } else {
+                    return err;
+                }
+            }
+            (Token(x), NotTokensSet(y)) => {
+                if y.len() == 0 {
+                    Some(NotToken(x))
+                } else if y.len() > 1 || x != y[0] {
+                    return err;
+                } else {
+                    None
+                }
+            }
+
+            (NotToken(x), Token(y)) => {
+                if x == y {
+                    None
+                } else {
+                    return err;
+                }
+            }
+
+            (NotTokensSet(x), Token(y)) => {
+                if x.len() == 0 {
+                    Some(NotToken(y))
+                } else if x.len() > 1 || y != x[0] {
+                    return err;
+                } else {
+                    None
+                }
+            }
+
+            (TokenSet(y), Token(x)) | (Token(x), TokenSet(y)) => {
+                if y.iter().any(|c| x == *c) {
+                    return err;
+                }
+                let mut y = y.clone();
+                y.push(x.clone());
+                Some(NotTokensSet(y))
+            }
+
+            (TokenSet(x), TokenSet(y)) => {
+                if x.into_iter().any(|c| y.contains(&c)) {
+                    return err;
+                }
+                let mut x = x.clone();
+                x.extend(y.iter());
+                Some(NotTokensSet(x))
+            }
+            (TokenSet(x), NotToken(y)) => {
+                if x.len() != 1 || x[0] != y {
+                    return err;
+                }
+                None
+            }
+            (TokenSet(x), NotTokensSet(y)) => {
+                if y.len() != 1 || y[0] != x[0] {
+                    return err;
+                }
+                None
+            }
+            (NotToken(x), TokenSet(y)) => {
+                if y.len() != 1 || y[0] != x {
+                    return err;
+                }
+                None
+            }
+            (NotTokensSet(x), TokenSet(y)) => {
+                if x.len() != 1 || y.len() != 1 || y[0] != x[0] {
+                    return err;
+                }
+                None
+            }
+        };
+
+        Ok(d)
     }
 }
 
@@ -267,8 +404,9 @@ impl Accepts<&char> for Element {
             Element::Question => true,
             Element::Star => true,
             Element::Token(n) => n == l,
-            // Element::NotTokens(n) if n.len() == 1 => n[0] != *l,
             Element::NotToken(n) => n != l,
+            Element::NotTokensSet(v) => !v.into_iter().any(|c| c == l),
+            Element::TokenSet(v) => v.into_iter().any(|c| c == l),
         };
         Ok(r)
     }
@@ -295,8 +433,10 @@ impl std::fmt::Display for Element {
             match self {
                 Element::Question => "?".to_string(),
                 Element::Star => "*".to_string(),
-                Element::NotToken(c) => format!("!{c}"),
                 Element::Token(c) => format!("{c}"),
+                Element::NotToken(c) => format!("!{c}"),
+                Element::NotTokensSet(v) => format!("!`{v:?}`"),
+                Element::TokenSet(v) => format!("`{v:?}`"),
             }
         ))
     }
