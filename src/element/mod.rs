@@ -21,13 +21,31 @@ pub enum Element {
 
 impl PartialEq for Element {
     fn eq(&self, other: &Self) -> bool {
+        use Element::*;
         match (self, other) {
-            (Element::Star, Element::Star) => true,
-            (Element::Question, Element::Question) => true,
-            (Element::Token(x), Element::Token(y)) => x == y,
-            (Element::NotToken(x), Element::NotToken(y)) => x == y,
-            (Element::TokenSet(x), Element::TokenSet(y))
-            | (Element::NotTokenSet(x), Element::NotTokenSet(y)) => {
+            (Star, Star) => true,
+            (Question, Question) => true,
+            (Token(x), Token(y)) => x == y,
+
+            (Token(x), TokenSet(y)) |
+            (TokenSet(y), Token(x)) => {
+                if y.is_empty() || y.len() != 1 {
+                    false
+                } else {
+                    &y[0] == x
+                }
+            },
+            (NotToken(x), NotTokenSet(y)) |
+            (NotTokenSet(y), NotToken(x)) => {
+                if y.is_empty() || y.len() != 1 {
+                    false
+                } else {
+                    &y[0] == x
+                }
+            }
+            (NotToken(x), NotToken(y)) => x == y,
+            (TokenSet(x), TokenSet(y))
+            | (NotTokenSet(x), NotTokenSet(y)) => {
                 x.iter().collect::<HashSet<_>>().eq(&HashSet::from_iter(y))
             }
             (_, _) => false,
@@ -313,7 +331,7 @@ impl BranchProduct<Element> for Element {
                 let mut v = vec![];
 
                 let mut sum = x.clone();
-                sum.extend(y.clone().iter());
+                sum.extend(y.clone());
                 sum.dedup();
 
                 if !sum.is_empty() {
@@ -466,6 +484,7 @@ impl BranchProduct<Element> for Element {
             (NotTokenSet(x), TokenSet(y)) => {
                 let mut v = vec![];
 
+
                 let mut sum = x.clone();
                 sum.extend(y.iter());
                 sum.dedup();
@@ -548,6 +567,7 @@ impl BranchProduct<Element> for Element {
                 v
             }
         };
+        // println!("productizing: {a:?} X {b:?} {r:?}");
         Ok(r)
     }
 }
@@ -622,7 +642,7 @@ impl Remaindery<Element> for Element {
     }
     fn remainder(a: &Element, b: &Element) -> Result<Option<Element>, String> {
         use Element::*;
-        println!("remainder: {a:?} v {b:?}");
+        // println!("remainder: {a:?} v {b:?}");
         let err = Err(format!("to much stuff {a:?} {b:?}").to_string());
 
         let d = match (a, b) {
