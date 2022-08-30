@@ -116,6 +116,27 @@ impl BranchProduct<Element> for Element {
                 NfaBranch::new(Token(*y), Stay, Advance),
                 NfaBranch::new(Token(*y), Advance, Advance),
             ],
+            (Star, TokenSet(y)) => vec![
+                NfaBranch::new(NotTokensSet(y.clone()), Advance, Stop),
+                NfaBranch::new(TokenSet(y.clone()), Stay, Advance),
+                NfaBranch::new(TokenSet(y.clone()), Advance, Advance),
+            ],
+            (Star, NotTokensSet(y)) => vec![
+                NfaBranch::new(TokenSet(y.clone()), Advance, Stop),
+                NfaBranch::new(NotTokensSet(y.clone()), Stay, Advance),
+                NfaBranch::new(NotTokensSet(y.clone()), Advance, Advance),
+            ],
+            (TokenSet(x), Star) => vec![
+                NfaBranch::new(NotTokensSet(x.clone()), Stop, Advance),
+                NfaBranch::new(TokenSet(x.clone()), Advance, Stay),
+                NfaBranch::new(TokenSet(x.clone()), Advance, Advance),
+            ],
+            (NotTokensSet(x), Star) => vec![
+                NfaBranch::new(TokenSet(x.clone()), Stop, Advance),
+                NfaBranch::new(NotTokensSet(x.clone()), Advance, Stay),
+                NfaBranch::new(NotTokensSet(x.clone()), Advance, Advance),
+            ],
+
             (Token(y), Star) => vec![
                 NfaBranch::new(NotToken(*y), Stop, Advance),
                 NfaBranch::new(Token(*y), Advance, Stay),
@@ -146,11 +167,27 @@ impl BranchProduct<Element> for Element {
                 NfaBranch::new(NotToken(*y), Advance, Advance),
                 NfaBranch::new(Token(*y), Advance, Stop),
             ],
-
             (NotToken(x), Question) => vec![
                 NfaBranch::new(NotToken(*x), Advance, Advance),
                 NfaBranch::new(Token(*x), Advance, Stop),
             ],
+            (Question, TokenSet(y)) => vec![
+                NfaBranch::new(TokenSet(y.clone()), Advance, Advance),
+                NfaBranch::new(NotTokensSet(y.clone()), Advance, Stop)
+            ],
+            (Question, NotTokensSet(y)) => vec![
+                NfaBranch::new(NotTokensSet(y.clone()), Advance, Advance),
+                NfaBranch::new(TokenSet(y.clone()), Advance, Stop)
+            ],
+            (TokenSet(x), Question) => vec![
+                NfaBranch::new(TokenSet(x.clone()), Advance, Advance),
+                NfaBranch::new(NotTokensSet(x.clone()), Stop, Advance),
+            ],
+            (NotTokensSet(x), Question) => vec![
+                NfaBranch::new(NotTokensSet(x.clone()), Advance, Advance),
+                NfaBranch::new(TokenSet(x.clone()), Stop, Advance),
+            ],
+
 
             (Token(x), Token(y)) | (NotToken(y), NotToken(x)) => {
                 if x == y {
@@ -162,6 +199,9 @@ impl BranchProduct<Element> for Element {
                     ]
                 }
             }
+            (Token(x), NotTokensSet(y)) => {
+                todo!()
+            },
 
             (Token(x), NotToken(y)) => {
                 if x != y {
@@ -183,6 +223,37 @@ impl BranchProduct<Element> for Element {
                     converge(a)
                 }
             }
+            (Token(x), TokenSet(y)) => {
+                if y.contains(x) {
+                    let y: Vec<_> = y.iter().filter(|c| *c != x).cloned().collect();
+                    if y.is_empty() {
+                        vec![
+                            NfaBranch::new(a.clone(), Advance, Advance),
+                        ]
+                    } else {
+                        vec![
+                            NfaBranch::new(a.clone(), Advance, Advance),
+                            NfaBranch::new(TokenSet(y), Stop, Advance),
+                        ]
+                    }
+                } else {
+                    vec![
+                        NfaBranch::new(a.clone(), Advance, Stop),
+                        NfaBranch::new(b.clone(), Stop, Advance),
+                    ]
+                }
+            },
+
+            (TokenSet(_), Token(_)) => todo!(),
+            (TokenSet(_), TokenSet(_)) => todo!(),
+            (TokenSet(_), NotToken(_)) => todo!(),
+            (TokenSet(_), NotTokensSet(_)) => todo!(),
+            (NotToken(_), TokenSet(_)) => todo!(),
+            (NotToken(_), NotTokensSet(_)) => todo!(),
+            (NotTokensSet(_), Token(_)) => todo!(),
+            (NotTokensSet(_), TokenSet(_)) => todo!(),
+            (NotTokensSet(_), NotToken(_)) => todo!(),
+            (NotTokensSet(_), NotTokensSet(_)) => todo!(),
         };
         Ok(r)
     }
@@ -235,10 +306,10 @@ impl Remaindery<Element> for Element {
             (Star, Question) => true,
             (Star, Star) => true,
 
-            (Star, Token(n)) | (Question, Token(n)) => true,
-            (Star, NotToken(n)) | (Question, NotToken(n)) => true,
-            (Star, NotTokensSet(v)) | (Question, NotTokensSet(v)) => true,
-            (Star, TokenSet(y)) | (Question, TokenSet(y)) => true,
+            (Star, Token(_)) | (Question, Token(_)) => true,
+            (Star, NotToken(_)) | (Question, NotToken(_)) => true,
+            (Star, NotTokensSet(_)) | (Question, NotTokensSet(_)) => true,
+            (Star, TokenSet(_)) | (Question, TokenSet(_)) => true,
 
             (Token(x), Token(y)) => x != y,
             (Token(x), NotToken(y)) => x == y,
@@ -257,7 +328,6 @@ impl Remaindery<Element> for Element {
         }
     }
     fn remainder(a: Element, b: Element) -> Result<Option<Element>, String> {
-        let mut complete = false;
         use Element::*;
         let err = Err("to much stuff".to_string());
 
@@ -337,7 +407,7 @@ impl Remaindery<Element> for Element {
             }
 
             (TokenSet(x), TokenSet(y)) => {
-                if x.into_iter().any(|c| y.contains(&c)) {
+                if x.clone().into_iter().any(|c| y.contains(&c)) {
                     return err;
                 }
                 let mut x = x.clone();
