@@ -34,7 +34,7 @@ where
         C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
         L: IntoIterator<Item = C>,
         Vec<E>: Invertible,
-        E: Accepts<E>,
+        E: Accepts<E> + Complement<E> + Remaindery<E>,
         E: std::fmt::Display
             + std::fmt::Debug
             + Clone
@@ -105,6 +105,7 @@ where
             + std::hash::Hash
             + std::default::Default,
         E: Accepts<E>,
+        E: Complement<E> + Remaindery<E>,
         C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
         L: IntoIterator<Item = C>,
         M: std::fmt::Debug + Clone + PartialOrd + Ord + Default,

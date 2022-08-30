@@ -18,24 +18,25 @@ pub enum Element {
     // This matches any set of single chars but those in the vector
     NotTokenSet(Vec<char>),
 }
+
 impl Complement<Element> for Element {
-    fn complement(self) -> Option<Self> {
+    fn complement(&self) -> Option<Self> {
         use Element::*;
         match self {
             Question => None,
             Star => None,
-            Token(n) => Some(NotToken(n.clone())),
+            Token(n) => Some(NotToken(*n)),
             TokenSet(n) => {
                 if n.len() == 1 {
                     Some(NotTokenSet(n.clone()))
                 } else {
-                    Some(NotToken(n[0].clone()))
+                    Some(NotToken(n[0]))
                 }
             }
-            NotToken(n) => Some(Token(n.clone())),
+            NotToken(n) => Some(Token(*n)),
             NotTokenSet(n) => {
                 if n.len() == 1 {
-                    Some(Token(n[0].clone()))
+                    Some(Token(n[0]))
                 } else {
                     Some(TokenSet(n.clone()))
                 }
@@ -516,7 +517,7 @@ impl From<&char> for Element {
     }
 }
 impl Remaindery<Element> for Element {
-    fn is_valid(a: Element, b: Element) -> bool {
+    fn is_valid(a: &Element, b: &Element) -> bool {
         use Element::*;
         match (a, b) {
             (Token(_), Question)
@@ -544,21 +545,21 @@ impl Remaindery<Element> for Element {
 
             (Token(x), Token(y)) => x != y,
             (Token(x), NotToken(y)) => x == y,
-            (Token(x), NotTokenSet(y)) => y.len() == 1 && x == y[0],
+            (Token(x), NotTokenSet(y)) => y.len() == 1 && x == &y[0],
 
-            (TokenSet(y), Token(x)) | (Token(x), TokenSet(y)) => !y.iter().any(|c| x == *c),
+            (TokenSet(y), Token(x)) | (Token(x), TokenSet(y)) => !y.iter().any(|c| x == c),
             (TokenSet(x), TokenSet(y)) => !x.into_iter().any(|c| y.contains(&c)),
-            (TokenSet(x), NotToken(y)) => x.len() == 1 && x[0] == y,
+            (TokenSet(x), NotToken(y)) => x.len() == 1 && &x[0] == y,
             (TokenSet(x), NotTokenSet(y)) => y.len() == 1 && y[0] == x[0],
 
             (NotToken(x), Token(y)) => x == y,
-            (NotToken(x), TokenSet(y)) => y.len() == 1 && y[0] == x,
+            (NotToken(x), TokenSet(y)) => y.len() == 1 && &y[0] == x,
 
-            (NotTokenSet(x), Token(y)) => x.len() == 1 && y == x[0],
+            (NotTokenSet(x), Token(y)) => x.len() == 1 && y == &x[0],
             (NotTokenSet(x), TokenSet(y)) => x.len() == 1 && y.len() == 1 && y[0] == x[0],
         }
     }
-    fn remainder(a: Element, b: Element) -> Result<Option<Element>, String> {
+    fn remainder(a: &Element, b: &Element) -> Result<Option<Element>, String> {
         use Element::*;
         let err = Err("to much stuff".to_string());
 
@@ -581,16 +582,16 @@ impl Remaindery<Element> for Element {
             (Star, Question) => None,
             (Star, Star) => None,
 
-            (Star, Token(n)) | (Question, Token(n)) => Some(NotToken(n)),
-            (Star, NotToken(n)) | (Question, NotToken(n)) => Some(Token(n)),
-            (Star, NotTokenSet(v)) | (Question, NotTokenSet(v)) => Some(TokenSet(v)),
-            (Star, TokenSet(y)) | (Question, TokenSet(y)) => Some(NotTokenSet(y)),
+            (Star, Token(n)) | (Question, Token(n)) => Some(NotToken(n.clone())),
+            (Star, NotToken(n)) | (Question, NotToken(n)) => Some(Token(n.clone())),
+            (Star, NotTokenSet(v)) | (Question, NotTokenSet(v)) => Some(TokenSet(v.clone())),
+            (Star, TokenSet(y)) | (Question, TokenSet(y)) => Some(NotTokenSet(y.clone())),
 
             (Token(x), Token(y)) => {
                 if x == y {
                     return err;
                 } else {
-                    Some(NotTokenSet(vec![x, y]))
+                    Some(NotTokenSet(vec![*x, *y]))
                 }
             }
             (Token(x), NotToken(y)) => {
@@ -602,8 +603,8 @@ impl Remaindery<Element> for Element {
             }
             (Token(x), NotTokenSet(y)) => {
                 if y.len() == 0 {
-                    Some(NotToken(x))
-                } else if y.len() > 1 || x != y[0] {
+                    Some(NotToken(*x))
+                } else if y.len() > 1 || x != &y[0] {
                     return err;
                 } else {
                     None
@@ -620,8 +621,8 @@ impl Remaindery<Element> for Element {
 
             (NotTokenSet(x), Token(y)) => {
                 if x.len() == 0 {
-                    Some(NotToken(y))
-                } else if x.len() > 1 || y != x[0] {
+                    Some(NotToken(*y))
+                } else if x.len() > 1 || y != &x[0] {
                     return err;
                 } else {
                     None
@@ -629,7 +630,7 @@ impl Remaindery<Element> for Element {
             }
 
             (TokenSet(y), Token(x)) | (Token(x), TokenSet(y)) => {
-                if y.iter().any(|c| x == *c) {
+                if y.iter().any(|c| x == c) {
                     return err;
                 }
                 let mut y = y.clone();
@@ -646,7 +647,7 @@ impl Remaindery<Element> for Element {
                 Some(NotTokenSet(x))
             }
             (TokenSet(x), NotToken(y)) => {
-                if x.len() != 1 || x[0] != y {
+                if x.len() != 1 || &x[0] != y {
                     return err;
                 }
                 None
@@ -658,7 +659,7 @@ impl Remaindery<Element> for Element {
                 None
             }
             (NotToken(x), TokenSet(y)) => {
-                if y.len() != 1 || y[0] != x {
+                if y.len() != 1 || &y[0] != x {
                     return err;
                 }
                 None

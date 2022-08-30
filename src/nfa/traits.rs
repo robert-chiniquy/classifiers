@@ -4,16 +4,16 @@ pub trait Accepts<L> {
 }
 
 pub trait Remaindery<L> {
-    fn remainder(a: L, b: L) -> Result<Option<L>, String>;
+    fn remainder(a: &L, b: &L) -> Result<Option<L>, String>;
 
-    fn is_valid(a: L, b: L) -> bool;
+    fn is_valid(a: &L, b: &L) -> bool;
 }
 
 pub trait Complement<L>
 where
     Self: Sized,
 {
-    fn complement(self) -> Option<Self>;
+    fn complement(&self) -> Option<Self>;
 }
 
 pub trait Universal {
