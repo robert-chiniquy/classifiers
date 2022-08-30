@@ -150,9 +150,11 @@ fn test_rejection() {
     let c1: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile::<Element, (), char>(&lhs, ());
     let c2: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile(&rhs, ());
 
+    c1.graphviz_file("test_rejection.1.dot", "![ab] X ![xy]");
     let i = c1.intersection(&c2);
     let u = c1.product(&c2);
 
+    i.graphviz_file("test_rejection.dot", "![ab],![xy] X ![ab],![cd]");
     // assert that i has 1 edge
     assert_eq!(i.edges.len(), 1);
 

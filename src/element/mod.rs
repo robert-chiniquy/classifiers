@@ -1,8 +1,10 @@
 // pub(crate) use negation::*;
 
+use std::collections::HashSet;
+
 use super::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Eq, PartialOrd, Ord, Hash)]
 pub enum Element {
     // exactly 1 token
     Question,
@@ -15,6 +17,22 @@ pub enum Element {
     NotToken(char),
     // This matches any set of single chars but those in the vector
     NotTokenSet(Vec<char>),
+}
+
+impl PartialEq for Element {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Element::Star, Element::Star) => true,
+            (Element::Question, Element::Question) => true,
+            (Element::Token(x), Element::Token(y)) => x == y,
+            (Element::NotToken(x), Element::NotToken(y)) => x == y,
+            (Element::TokenSet(x), Element::TokenSet(y))
+            | (Element::NotTokenSet(x), Element::NotTokenSet(y)) => {
+                x.iter().collect::<HashSet<_>>().eq(&HashSet::from_iter(y))
+            }
+            (_, _) => false,
+        }
+    }
 }
 
 impl Complement<Element> for Element {
@@ -167,7 +185,19 @@ impl BranchProduct<Element> for Element {
                 NfaBranch::new(a.clone().complement().unwrap(), Stop, Advance),
             ],
 
-            (Token(x), Token(y)) | (NotToken(y), NotToken(x)) => {
+            (NotToken(y), NotToken(x)) => {
+                if x == y {
+                    vec![NfaBranch::new(a.clone(), Advance, Advance)]
+                } else {
+                    vec![
+                        NfaBranch::new(Token(x.clone()), Advance, Stop),
+                        NfaBranch::new(NotTokenSet(vec![x.clone(), y.clone()]), Advance, Advance),
+                        NfaBranch::new(Token(y.clone()), Stop, Advance),
+                    ]
+                }
+            }
+
+            (Token(x), Token(y)) => {
                 if x == y {
                     vec![NfaBranch::new(a.clone(), Advance, Advance)]
                 } else {
@@ -178,7 +208,7 @@ impl BranchProduct<Element> for Element {
                 }
             }
 
-            (Token(x), NotToken(y)) | (NotToken(y), Token(x)) => {
+            (Token(x), NotToken(y)) => {
                 if x == y {
                     vec![
                         NfaBranch::new(a.clone(), Advance, Stop),
@@ -186,21 +216,54 @@ impl BranchProduct<Element> for Element {
                     ]
                 } else {
                     vec![
-                        NfaBranch::new(a.clone(), Advance, Advance),
+                        NfaBranch::new(Token(x.clone()), Advance, Advance),
+                        NfaBranch::new(NotTokenSet(vec![x.clone(), y.clone()]), Stop, Advance),
+                    ]
+                }
+            }
+
+            (NotToken(x), Token(y)) => {
+                if x == y {
+                    vec![
+                        NfaBranch::new(a.clone(), Advance, Stop),
+                        NfaBranch::new(b.clone(), Stop, Advance),
+                    ]
+                } else {
+                    vec![
+                        NfaBranch::new(Token(y.clone()), Advance, Advance),
+                        NfaBranch::new(NotTokenSet(vec![x.clone(), y.clone()]), Advance, Stop),
+                    ]
+                }
+            }
+
+            (Token(x), TokenSet(y)) => {
+                if y.contains(x) {
+                    if y.len() == 1 {
+                        vec![NfaBranch::new(Token(x.clone()), Advance, Advance)]
+                    } else {
+                        let exclude = y.iter().filter(|c| *c != x).cloned().collect();
+                        vec![
+                            NfaBranch::new(Token(x.clone()), Advance, Advance),
+                            NfaBranch::new(TokenSet(exclude), Stop, Advance),
+                        ]
+                    }
+                } else {
+                    vec![
+                        NfaBranch::new(a.clone(), Advance, Stop),
                         NfaBranch::new(b.clone(), Stop, Advance),
                     ]
                 }
             }
 
-            (Token(x), TokenSet(y)) | (TokenSet(y), Token(x)) => {
+            (TokenSet(y), Token(x)) => {
                 if y.contains(x) {
-                    let y: Vec<_> = y.iter().filter(|c| *c != x).cloned().collect();
-                    if y.is_empty() {
-                        vec![NfaBranch::new(a.clone(), Advance, Advance)]
+                    if y.len() == 1 {
+                        vec![NfaBranch::new(Token(x.clone()), Advance, Advance)]
                     } else {
+                        let exclude = y.iter().filter(|c| *c != x).cloned().collect();
                         vec![
-                            NfaBranch::new(a.clone(), Advance, Advance),
-                            NfaBranch::new(TokenSet(y), Stop, Advance),
+                            NfaBranch::new(Token(x.clone()), Advance, Advance),
+                            NfaBranch::new(TokenSet(exclude), Advance, Stop),
                         ]
                     }
                 } else {
@@ -672,8 +735,7 @@ impl Remaindery<Element> for Element {
                 None
             }
 
-            (NotTokenSet(y), NotToken(x)) |
-            (NotToken(x), NotTokenSet(y)) => {
+            (NotTokenSet(y), NotToken(x)) | (NotToken(x), NotTokenSet(y)) => {
                 if y.len() == 1 && x == &y[0] {
                     None
                 } else {
@@ -684,10 +746,9 @@ impl Remaindery<Element> for Element {
                 if x == y {
                     None
                 } else {
-                    return err
+                    return err;
                 }
             }
-
         };
 
         Ok(d)
