@@ -413,6 +413,18 @@ where
     pub fn edges_from(&self, i: NfaIndex) -> Option<&Vec<(NfaIndex, NfaIndex)>> {
         self.transitions.get(&i)
     }
+
+    #[inline]
+    // #[tracing::instrument(skip_all, ret)]
+    pub fn edges_to(&self, i: NfaIndex) -> Vec<(NfaIndex, NfaIndex)> {
+        self.transitions
+            .iter()
+            .filter(|(_, edges)| edges.iter().any(|(target, _)| target == &i))
+            .map(|(_, t)| t)
+            .cloned()
+            .flatten()
+            .collect()
+    }
 }
 
 impl<N, E> Nfa<N, NfaEdge<E>>

@@ -36,9 +36,15 @@ where
 #[derive(Debug)]
 pub enum MatchingError {
     Error(String),
-    UnrollLeft,
-    UnrollRight,
-    UnrollLeftRight,
+    // UnrollLeft,
+    // UnrollRight,
+    // UnrollLeftRight,
+}
+
+impl From<String> for MatchingError {
+    fn from(s: String) -> Self {
+        MatchingError::Error(s)
+    }
 }
 
 impl std::fmt::Display for MatchingError {

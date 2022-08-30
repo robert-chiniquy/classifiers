@@ -26,6 +26,7 @@ fn test_a_v_q() {
     let i = n.intersection(&Nfa::from_str("??", ()));
     assert!(!i.nodes.is_empty());
     i.graphviz_file("i.dot", "a_v_q");
+
     assert!(i.accepts_string("aa"));
     let thing = vec![vec![Token('a'), Token('a')]];
     let e = i.accepting_paths().every_path();
@@ -64,64 +65,51 @@ where
         //     // 1 ---> 3
 
         // create dead end node and edges to it
-        // (source node id, criteria)
-        let dead_end_edges: Result<Option<Vec<(NfaIndex, E)>>, _> = (&self.nodes)
+        let dead_end_edges: Result<Vec<Option<(NfaIndex, E)>>, _> = (&self.nodes)
             .iter()
-            .map(|(id, _node)| -> Result<_, _> {
-                let edges = self.edges_from(*id);
-
-                if edges.is_none() {
-                    return Ok(None);
+            .map(|(id, _node)| -> Result<_, String> {
+                match &self.edges_from(*id).unwrap_or(&vec![])[..] {
+                    [] => {
+                        if self.edges_to(*id).iter().any(|(_, e)| self.edge(e).criteria == E::universal()) {
+                            Ok(None)
+                        } else {
+                            Ok(Some((*id, E::universal())))
+                        }
+                    }
+                    list => list
+                        .iter()
+                        .map(|(_target, edge)| self.edge(edge).criteria.clone())
+                        .fold(Ok(Some(E::universal())), |acc, cur| match acc {
+                            Ok(None) => Ok(None),
+                            Ok(Some(acc)) => E::remainder(&acc, &cur),
+                            Err(_) => acc,
+                        })
+                        .map(|r| r.map(|r| {
+                            println!("r: {r:?}");
+                            return (*id, r)
+                        }))
                 }
-                // identify a non-empty complement of edges (use remainder for now)
-                // and create a least one edge from node to the dead end node to cover the complement
-                let ees: Vec<_> = edges.unwrap()
-                    .iter()
-                    .map(|(_target, edge)| self.edge(edge).criteria.clone())
-                    .collect();
-
-                if ees.is_empty() {
-                    return Ok(None);
-                }
-
-                return ees[1..]
-                    .iter()
-                    .fold(Ok(Some(ees[0].clone())), |acc, cur| match acc {
-                        Ok(None) => Ok(None),
-                        Ok(Some(acc)) => E::remainder(&acc, cur),
-                        Err(_) => acc,
-                    })
-                    .map(|r| r.map(|r| (*id, r)))
             })
             .collect();
 
-        if let Err(e) = dead_end_edges {
-            return Err(MatchingError::Error(e));
-        }
+        println!("dead_end_edges: {dead_end_edges:?}");
 
-        let dead_end_edges = dead_end_edges.unwrap();
-        if dead_end_edges.is_none() {
-            return Ok(complete_dfa);
-        }
-
-        let dead_end_edges = dead_end_edges.unwrap();
-        if dead_end_edges.is_empty() {
-            return Ok(complete_dfa);                
-        }
-
-        for (source_node_id, criteria) in dead_end_edges {
+        let stuff = dead_end_edges?.iter().flatten().cloned().collect::<Vec<(NfaIndex, E)>>();
+        println!("stuff: {stuff:?}");
+        for (source_node_id, criteria) in stuff {
             // TODO: M needs to be passed down to here...
             let n = NfaNode::new(Terminal::Reject(Default::default()));
             let target = self.add_node(n);
-            let is_universal = &criteria == &E::universal();
-            self.add_edge(NfaEdge{ criteria: criteria }, source_node_id, target);
+            self.add_edge(NfaEdge{ criteria: criteria.clone() }, source_node_id, target);
 
-            if is_universal {
+            if criteria != E::universal() {
                 let n = NfaNode::new(Terminal::Reject(Default::default()));
                 let final_target = self.add_node(n);
                 self.add_edge(NfaEdge{ criteria: E::universal() }, target, final_target);
             }
         }
+
+
 
         return Ok(complete_dfa);
     }
@@ -131,10 +119,10 @@ where
         // TODO: negate must take M and pass it down to create_all_transitions...
         let mut n = self.clone();
         n.create_all_transitions().unwrap();
-        n.nodes.iter_mut().for_each(|(_, n)| match &n.state {
-            Terminal::Not => (),
-            Terminal::Accept(m) => n.state = Terminal::Reject(m.clone()),
-            Terminal::Reject(m) => n.state = Terminal::Accept(m.clone()),
+        n.nodes.iter_mut().for_each(|(_, n)| n.state = match &n.state {
+            Terminal::Not => Terminal::Accept(Default::default()),
+            Terminal::Accept(_) => Terminal::Not,
+            Terminal::Reject(m) => Terminal::Accept(m.clone()),
         });
         n
     }

@@ -559,7 +559,8 @@ impl Remaindery<Element> for Element {
     }
     fn remainder(a: &Element, b: &Element) -> Result<Option<Element>, String> {
         use Element::*;
-        let err = Err("to much stuff".to_string());
+        println!("remainder: {a:?} v {b:?}");
+        let err = Err(format!("to much stuff {a:?} {b:?}").to_string());
 
         let d = match (a, b) {
             (Token(_), Question)
@@ -569,17 +570,19 @@ impl Remaindery<Element> for Element {
             | (TokenSet(_), Question)
             | (TokenSet(_), Star)
             | (NotTokenSet(_), Question)
-            | (NotToken(_), NotToken(_))
-            | (NotToken(_), NotTokenSet(_))
-            | (NotTokenSet(_), NotToken(_))
-            | (NotTokenSet(_), NotTokenSet(_))
             | (NotTokenSet(_), Star) => return err,
 
             (Question, Question) => None,
             (Question, Star) => None,
             (Star, Question) => None,
             (Star, Star) => None,
-
+            (NotToken(x), NotToken(y)) => {
+                if x == y {
+                    None
+                } else {
+                    return err;
+                }
+            }
             (Star, Token(n)) | (Question, Token(n)) => Some(NotToken(n.clone())),
             (Star, NotToken(n)) | (Question, NotToken(n)) => Some(Token(n.clone())),
             (Star, NotTokenSet(v)) | (Question, NotTokenSet(v)) => Some(TokenSet(v.clone())),
@@ -668,6 +671,23 @@ impl Remaindery<Element> for Element {
                 }
                 None
             }
+
+            (NotTokenSet(y), NotToken(x)) |
+            (NotToken(x), NotTokenSet(y)) => {
+                if y.len() == 1 && x == &y[0] {
+                    None
+                } else {
+                    return err;
+                }
+            }
+            (NotTokenSet(x), NotTokenSet(y)) => {
+                if x == y {
+                    None
+                } else {
+                    return err
+                }
+            }
+
         };
 
         Ok(d)
