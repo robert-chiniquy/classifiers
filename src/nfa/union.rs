@@ -8,6 +8,7 @@ where
         + Default
         + std::fmt::Debug
         + BranchProduct<E>
+        + Accepts<E>
         + std::fmt::Display,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
@@ -94,21 +95,20 @@ where
             let other_edges = other.edges_from(*other_id);
 
             if other_edges == None {
-                continue;   
+                continue;
             }
 
             if union_edges.is_some()
                 && union_edges.as_ref().unwrap().is_empty()
-                && other_edges.as_ref().unwrap().is_empty() {
+                && other_edges.as_ref().unwrap().is_empty()
+            {
                 continue;
             }
-
 
             if union_edges == None || union_edges.as_ref().unwrap().is_empty() {
                 union.copy_subtree(&union_id, other, other_id);
                 continue;
             }
-
 
             for (other_edge_target, other_edge) in other_edges.unwrap() {
                 let other_edge_kind = other.edge(other_edge);
@@ -116,8 +116,8 @@ where
                 let matching = union
                     .edge_by_kind(union_id, &other_edge_kind.criteria)
                     .pop();
-                
-                if let Some ((union_edge_target, _)) = matching {
+
+                if let Some((union_edge_target, _)) = matching {
                     union.node_mut(union_id).sum_mut(other.node(*other_id));
                     stack.push((union_edge_target, other_edge_target));
                     continue;
@@ -132,7 +132,6 @@ where
                     new_node,
                 );
                 union.copy_subtree(&new_node, other, other_edge_target);
-
             }
         }
         union

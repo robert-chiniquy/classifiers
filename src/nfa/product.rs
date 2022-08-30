@@ -8,10 +8,10 @@ where
         + Default
         + std::fmt::Debug
         + BranchProduct<E>
-        + std::fmt::Display,
+        + std::fmt::Display
+        + Accepts<E>,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
-
     #[tracing::instrument(skip(self, other))]
     pub fn product(&self, other: &Self) -> Self {
         if self.entry.is_empty() {
@@ -161,6 +161,27 @@ where
                 target_node_id
             }
             None => {
+                // the superset edge case
+                // When adding a new edge to a node, we need to ensure not only that there are no extant identical edges,
+                // but that no edge is a superset (accepting of the new edge kind). If an edge is a superset, we
+                // we need to visit it as if it were an identical edge type
+                let mut superset_edge = None;
+                if let Some(edges) = self.edges_from(*working_node_id) {
+                    for (t, e) in edges {
+                        let e = self.edge(e);
+                        if let Ok(true) = e.criteria.accepts(kind.clone()) {
+                            // superset case
+                            superset_edge = Some(*t);
+                        }
+                    }
+                }
+                if let Some(t) = superset_edge {
+                    self.node_mut(t).sum_mut(&new_node);
+                    return t;
+                }
+
+                // TODO: the intersection case
+
                 // new node
                 // caller must pass in node of correct chirality, usually this will
                 // be from NfaNode.sum()

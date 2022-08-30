@@ -53,7 +53,7 @@ impl std::fmt::Display for MatchingError {
     }
 }
 
-pub trait BranchProduct<E> {
+pub trait BranchProduct<E>: Accepts<E> {
     fn product(a: &Self, b: &Self) -> Result<Vec<NfaBranch<E>>, MatchingError>;
 }
 

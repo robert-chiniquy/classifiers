@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use super::*;
 
+// TODO: explicit Hash impl
 #[derive(Debug, Clone, Eq, PartialOrd, Ord, Hash)]
 pub enum Element {
     // exactly 1 token
@@ -27,16 +28,14 @@ impl PartialEq for Element {
             (Question, Question) => true,
             (Token(x), Token(y)) => x == y,
 
-            (Token(x), TokenSet(y)) |
-            (TokenSet(y), Token(x)) => {
+            (Token(x), TokenSet(y)) | (TokenSet(y), Token(x)) => {
                 if y.is_empty() || y.len() != 1 {
                     false
                 } else {
                     &y[0] == x
                 }
-            },
-            (NotToken(x), NotTokenSet(y)) |
-            (NotTokenSet(y), NotToken(x)) => {
+            }
+            (NotToken(x), NotTokenSet(y)) | (NotTokenSet(y), NotToken(x)) => {
                 if y.is_empty() || y.len() != 1 {
                     false
                 } else {
@@ -44,8 +43,7 @@ impl PartialEq for Element {
                 }
             }
             (NotToken(x), NotToken(y)) => x == y,
-            (TokenSet(x), TokenSet(y))
-            | (NotTokenSet(x), NotTokenSet(y)) => {
+            (TokenSet(x), TokenSet(y)) | (NotTokenSet(x), NotTokenSet(y)) => {
                 x.iter().collect::<HashSet<_>>().eq(&HashSet::from_iter(y))
             }
             (_, _) => false,
@@ -483,7 +481,6 @@ impl BranchProduct<Element> for Element {
             }
             (NotTokenSet(x), TokenSet(y)) => {
                 let mut v = vec![];
-
 
                 let mut sum = x.clone();
                 sum.extend(y.iter());
