@@ -16,7 +16,7 @@ pub enum Element {
     // This matches any single char but this one.
     NotToken(char),
     // This matches any set of single chars but those in the vector
-    NotTokensSet(Vec<char>),
+    NotTokenSet(Vec<char>),
 }
 impl Compliment<Element> for Element {
     fn compliment(self) -> Option<Self> {
@@ -27,13 +27,13 @@ impl Compliment<Element> for Element {
             Token(n) => Some(NotToken(n.clone())),
             TokenSet(n) => {
                 if n.len() == 1 {
-                    Some(NotTokensSet(n.clone()))
+                    Some(NotTokenSet(n.clone()))
                 } else {
                     Some(NotToken(n[0].clone()))
                 }
             }
             NotToken(n) => Some(Token(n.clone())),
-            NotTokensSet(n) => {
+            NotTokenSet(n) => {
                 if n.len() == 1 {
                     Some(Token(n[0].clone()))
                 } else {
@@ -119,7 +119,7 @@ impl BranchProduct<Element> for Element {
             | (Star, Token(_))
             | (Star, NotToken(_))
             | (Star, TokenSet(_))
-            | (Star, NotTokensSet(_)) => {
+            | (Star, NotTokenSet(_)) => {
                 let mut v = vec![
                     NfaBranch::new(b.clone(), Stay, Advance),
                     NfaBranch::new(b.clone(), Advance, Advance),
@@ -134,7 +134,7 @@ impl BranchProduct<Element> for Element {
             | (Question, Star)
             | (NotToken(_), Star)
             | (TokenSet(_), Star)
-            | (NotTokensSet(_), Star) => {
+            | (NotTokenSet(_), Star) => {
                 let mut v = vec![
                     NfaBranch::new(a.clone(), Advance, Stay),
                     NfaBranch::new(a.clone(), Advance, Advance),
@@ -151,7 +151,7 @@ impl BranchProduct<Element> for Element {
             | (Question, Token(_))
             | (Question, NotToken(_))
             | (Question, TokenSet(_))
-            | (Question, NotTokensSet(_)) => {
+            | (Question, NotTokenSet(_)) => {
                 let mut v = vec![NfaBranch::new(b.clone(), Advance, Advance)];
                 let c = b.clone().compliment();
                 if c.is_some() {
@@ -163,7 +163,7 @@ impl BranchProduct<Element> for Element {
             (Token(_), Question)
             | (NotToken(_), Question)
             | (TokenSet(_), Question)
-            | (NotTokensSet(_), Question) => vec![
+            | (NotTokenSet(_), Question) => vec![
                 NfaBranch::new(a.clone(), Advance, Advance),
                 NfaBranch::new(a.clone().compliment().unwrap(), Stop, Advance),
             ],
@@ -238,7 +238,7 @@ impl BranchProduct<Element> for Element {
                 v
             },
 
-            (NotTokensSet(x), NotTokensSet(y)) => {
+            (NotTokenSet(x), NotTokenSet(y)) => {
                 // [!a,!b] X [!a,!c] -> [c], [!a,!b,!c], [b]
                 let mut v = vec![];
 
@@ -247,7 +247,7 @@ impl BranchProduct<Element> for Element {
                 sum.dedup();
                 
                 if !sum.is_empty() {
-                    v.push(NfaBranch::new(NotTokensSet(sum), Advance, Advance));
+                    v.push(NfaBranch::new(NotTokenSet(sum), Advance, Advance));
                 }
                 
                 let left: Vec<_> = y.iter().filter(|c| !x.contains(c)).cloned().collect();
@@ -266,7 +266,7 @@ impl BranchProduct<Element> for Element {
 
                 v
             },
-            (NotTokensSet(x), Token(y)) => {
+            (NotTokenSet(x), Token(y)) => {
                 if x.contains(y) {
                     vec![
                         NfaBranch::new(a.clone(), Advance, Stop),
@@ -277,11 +277,11 @@ impl BranchProduct<Element> for Element {
                     expanded_set.push(y.clone());
                     vec![
                         NfaBranch::new(Token(y.clone()), Advance, Advance),
-                        NfaBranch::new(NotTokensSet(expanded_set), Advance, Stop),
+                        NfaBranch::new(NotTokenSet(expanded_set), Advance, Stop),
                     ]
                 }
             }
-            (Token(x), NotTokensSet(y)) => {
+            (Token(x), NotTokenSet(y)) => {
                 if y.contains(x) {
                     vec![
                         NfaBranch::new(a.clone(), Advance, Stop),
@@ -292,7 +292,7 @@ impl BranchProduct<Element> for Element {
                     expanded_set.push(x.clone());
                     vec![
                         NfaBranch::new(Token(x.clone()), Advance, Advance),
-                        NfaBranch::new(NotTokensSet(expanded_set), Stop, Advance),
+                        NfaBranch::new(NotTokenSet(expanded_set), Stop, Advance),
                     ]
                 }
             }
@@ -312,7 +312,7 @@ impl BranchProduct<Element> for Element {
                 if sum.len() == 1 {
                     v.push(NfaBranch::new(NotToken(sum[0].clone()), Advance, Stop));
                 } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokensSet(sum.into_iter().cloned().collect()), Advance, Stop));
+                    v.push(NfaBranch::new(NotTokenSet(sum.into_iter().cloned().collect()), Advance, Stop));
                 }
 
                 let excluded: Vec<_> = y.iter().filter(|c|*c != x).cloned().collect();
@@ -337,7 +337,7 @@ impl BranchProduct<Element> for Element {
                 if sum.len() == 1 {
                     v.push(NfaBranch::new(NotToken(sum[0].clone()), Stop, Advance));
                 } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokensSet(sum.into_iter().cloned().collect()), Stop, Advance));
+                    v.push(NfaBranch::new(NotTokenSet(sum.into_iter().cloned().collect()), Stop, Advance));
                 }
 
                 let excluded: Vec<_> = x.iter().filter(|c|*c != y).cloned().collect();
@@ -352,7 +352,7 @@ impl BranchProduct<Element> for Element {
                 }
                 v
             },
-            (TokenSet(x), NotTokensSet(y)) => {
+            (TokenSet(x), NotTokenSet(y)) => {
                 // [a,b] X [!a,!c] = [a] [b] [!a,!b,!c]
                 //  left is matching
                 //  things in left not in right
@@ -381,11 +381,11 @@ impl BranchProduct<Element> for Element {
                 if sum.len() == 1 {
                     v.push(NfaBranch::new(NotToken(sum[0].clone()), Stop, Advance));
                 } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokensSet(sum), Stop, Advance));
+                    v.push(NfaBranch::new(NotTokenSet(sum), Stop, Advance));
                 }
                 v
             },
-            (NotTokensSet(x), TokenSet(y)) => {
+            (NotTokenSet(x), TokenSet(y)) => {
 
                 let mut v = vec![];
 
@@ -396,7 +396,7 @@ impl BranchProduct<Element> for Element {
                 if sum.len() == 1 {
                     v.push(NfaBranch::new(NotToken(sum[0].clone()), Advance, Stop));
                 } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokensSet(sum), Advance, Stop));
+                    v.push(NfaBranch::new(NotTokenSet(sum), Advance, Stop));
                 }
 
                 let excluded: Vec<_> = y.iter().filter(|c|!x.contains(c)).cloned().collect();
@@ -415,7 +415,7 @@ impl BranchProduct<Element> for Element {
                 v
 
             },
-            (NotToken(x), NotTokensSet(y)) => {
+            (NotToken(x), NotTokenSet(y)) => {
                 // [!a] X [!b,!c] -> [c, b], [!a,!b,!c], [a]
                 //  left is stuff in y not in x
                 //  join is dedup sum
@@ -429,7 +429,7 @@ impl BranchProduct<Element> for Element {
                 if sum.len() == 1 {
                     v.push(NfaBranch::new(NotToken(sum[0]), Advance, Advance));
                 } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokensSet(sum), Advance, Advance));
+                    v.push(NfaBranch::new(NotTokenSet(sum), Advance, Advance));
                 }
                 
                 let excluded: Vec<_> = y.iter().filter(|c| *c != x).cloned().collect();
@@ -446,7 +446,7 @@ impl BranchProduct<Element> for Element {
             },
             
             
-            (NotTokensSet(x), NotToken(y)) => {
+            (NotTokenSet(x), NotToken(y)) => {
                 let mut v = vec![];
 
                 if !x.contains(y) {
@@ -460,7 +460,7 @@ impl BranchProduct<Element> for Element {
                 if sum.len() == 1 {
                     v.push(NfaBranch::new(NotToken(sum[0]), Advance, Advance));
                 } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokensSet(sum), Advance, Advance));
+                    v.push(NfaBranch::new(NotTokenSet(sum), Advance, Advance));
                 }
 
 
@@ -514,12 +514,12 @@ impl Remaindery<Element> for Element {
             | (Token(_), Star)
             | (NotToken(_), Star)
             | (TokenSet(_), Star)
-            | (NotTokensSet(_), Question)
+            | (NotTokenSet(_), Question)
             | (NotToken(_), NotToken(_))
-            | (NotToken(_), NotTokensSet(_))
-            | (NotTokensSet(_), NotToken(_))
-            | (NotTokensSet(_), NotTokensSet(_))
-            | (NotTokensSet(_), Star) => false,
+            | (NotToken(_), NotTokenSet(_))
+            | (NotTokenSet(_), NotToken(_))
+            | (NotTokenSet(_), NotTokenSet(_))
+            | (NotTokenSet(_), Star) => false,
 
             (Question, Question) => true,
             (Question, Star) => true,
@@ -528,23 +528,23 @@ impl Remaindery<Element> for Element {
 
             (Star, Token(_)) | (Question, Token(_)) => true,
             (Star, NotToken(_)) | (Question, NotToken(_)) => true,
-            (Star, NotTokensSet(_)) | (Question, NotTokensSet(_)) => true,
+            (Star, NotTokenSet(_)) | (Question, NotTokenSet(_)) => true,
             (Star, TokenSet(_)) | (Question, TokenSet(_)) => true,
 
             (Token(x), Token(y)) => x != y,
             (Token(x), NotToken(y)) => x == y,
-            (Token(x), NotTokensSet(y)) => y.len() == 1 && x == y[0],
+            (Token(x), NotTokenSet(y)) => y.len() == 1 && x == y[0],
 
             (TokenSet(y), Token(x)) | (Token(x), TokenSet(y)) => !y.iter().any(|c| x == *c),
             (TokenSet(x), TokenSet(y)) => !x.into_iter().any(|c| y.contains(&c)),
             (TokenSet(x), NotToken(y)) => x.len() == 1 && x[0] == y,
-            (TokenSet(x), NotTokensSet(y)) => y.len() == 1 && y[0] == x[0],
+            (TokenSet(x), NotTokenSet(y)) => y.len() == 1 && y[0] == x[0],
 
             (NotToken(x), Token(y)) => x == y,
             (NotToken(x), TokenSet(y)) => y.len() == 1 && y[0] == x,
 
-            (NotTokensSet(x), Token(y)) => x.len() == 1 && y == x[0],
-            (NotTokensSet(x), TokenSet(y)) => x.len() == 1 && y.len() == 1 && y[0] == x[0],
+            (NotTokenSet(x), Token(y)) => x.len() == 1 && y == x[0],
+            (NotTokenSet(x), TokenSet(y)) => x.len() == 1 && y.len() == 1 && y[0] == x[0],
         }
     }
     fn remainder(a: Element, b: Element) -> Result<Option<Element>, String> {
@@ -558,12 +558,12 @@ impl Remaindery<Element> for Element {
             | (NotToken(_), Star)
             | (TokenSet(_), Question)
             | (TokenSet(_), Star)
-            | (NotTokensSet(_), Question)
+            | (NotTokenSet(_), Question)
             | (NotToken(_), NotToken(_))
-            | (NotToken(_), NotTokensSet(_))
-            | (NotTokensSet(_), NotToken(_))
-            | (NotTokensSet(_), NotTokensSet(_))
-            | (NotTokensSet(_), Star) => return err,
+            | (NotToken(_), NotTokenSet(_))
+            | (NotTokenSet(_), NotToken(_))
+            | (NotTokenSet(_), NotTokenSet(_))
+            | (NotTokenSet(_), Star) => return err,
 
             (Question, Question) => None,
             (Question, Star) => None,
@@ -572,14 +572,14 @@ impl Remaindery<Element> for Element {
 
             (Star, Token(n)) | (Question, Token(n)) => Some(NotToken(n)),
             (Star, NotToken(n)) | (Question, NotToken(n)) => Some(Token(n)),
-            (Star, NotTokensSet(v)) | (Question, NotTokensSet(v)) => Some(TokenSet(v)),
-            (Star, TokenSet(y)) | (Question, TokenSet(y)) => Some(NotTokensSet(y)),
+            (Star, NotTokenSet(v)) | (Question, NotTokenSet(v)) => Some(TokenSet(v)),
+            (Star, TokenSet(y)) | (Question, TokenSet(y)) => Some(NotTokenSet(y)),
 
             (Token(x), Token(y)) => {
                 if x == y {
                     return err;
                 } else {
-                    Some(NotTokensSet(vec![x, y]))
+                    Some(NotTokenSet(vec![x, y]))
                 }
             }
             (Token(x), NotToken(y)) => {
@@ -589,7 +589,7 @@ impl Remaindery<Element> for Element {
                     return err;
                 }
             }
-            (Token(x), NotTokensSet(y)) => {
+            (Token(x), NotTokenSet(y)) => {
                 if y.len() == 0 {
                     Some(NotToken(x))
                 } else if y.len() > 1 || x != y[0] {
@@ -607,7 +607,7 @@ impl Remaindery<Element> for Element {
                 }
             }
 
-            (NotTokensSet(x), Token(y)) => {
+            (NotTokenSet(x), Token(y)) => {
                 if x.len() == 0 {
                     Some(NotToken(y))
                 } else if x.len() > 1 || y != x[0] {
@@ -623,7 +623,7 @@ impl Remaindery<Element> for Element {
                 }
                 let mut y = y.clone();
                 y.push(x.clone());
-                Some(NotTokensSet(y))
+                Some(NotTokenSet(y))
             }
 
             (TokenSet(x), TokenSet(y)) => {
@@ -632,7 +632,7 @@ impl Remaindery<Element> for Element {
                 }
                 let mut x = x.clone();
                 x.extend(y.iter());
-                Some(NotTokensSet(x))
+                Some(NotTokenSet(x))
             }
             (TokenSet(x), NotToken(y)) => {
                 if x.len() != 1 || x[0] != y {
@@ -640,7 +640,7 @@ impl Remaindery<Element> for Element {
                 }
                 None
             }
-            (TokenSet(x), NotTokensSet(y)) => {
+            (TokenSet(x), NotTokenSet(y)) => {
                 if y.len() != 1 || y[0] != x[0] {
                     return err;
                 }
@@ -652,7 +652,7 @@ impl Remaindery<Element> for Element {
                 }
                 None
             }
-            (NotTokensSet(x), TokenSet(y)) => {
+            (NotTokenSet(x), TokenSet(y)) => {
                 if x.len() != 1 || y.len() != 1 || y[0] != x[0] {
                     return err;
                 }
@@ -695,7 +695,7 @@ impl Accepts<&char> for Element {
             Element::Star => true,
             Element::Token(n) => n == l,
             Element::NotToken(n) => n != l,
-            Element::NotTokensSet(v) => !v.into_iter().any(|c| c == l),
+            Element::NotTokenSet(v) => !v.into_iter().any(|c| c == l),
             Element::TokenSet(v) => v.into_iter().any(|c| c == l),
         };
         Ok(r)
@@ -725,7 +725,7 @@ impl std::fmt::Display for Element {
                 Element::Star => "*".to_string(),
                 Element::Token(c) => format!("{c}"),
                 Element::NotToken(c) => format!("!{c}"),
-                Element::NotTokensSet(v) => format!("!`{v:?}`"),
+                Element::NotTokenSet(v) => format!("!`{v:?}`"),
                 Element::TokenSet(v) => format!("`{v:?}`"),
             }
         ))
