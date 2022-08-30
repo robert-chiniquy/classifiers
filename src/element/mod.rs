@@ -18,8 +18,8 @@ pub enum Element {
     // This matches any set of single chars but those in the vector
     NotTokenSet(Vec<char>),
 }
-impl Compliment<Element> for Element {
-    fn compliment(self) -> Option<Self> {
+impl Complement<Element> for Element {
+    fn complement(self) -> Option<Self> {
         use Element::*;
         match self {
             Question => None,
@@ -124,7 +124,7 @@ impl BranchProduct<Element> for Element {
                     NfaBranch::new(b.clone(), Stay, Advance),
                     NfaBranch::new(b.clone(), Advance, Advance),
                 ];
-                let c = b.clone().compliment();
+                let c = b.clone().complement();
                 if c.is_some() {
                     v.push(NfaBranch::new(c.unwrap(), Advance, Stop));
                 }
@@ -139,7 +139,7 @@ impl BranchProduct<Element> for Element {
                     NfaBranch::new(a.clone(), Advance, Stay),
                     NfaBranch::new(a.clone(), Advance, Advance),
                 ];
-                let c = a.clone().compliment();
+                let c = a.clone().complement();
                 if c.is_some() {
                     v.push(NfaBranch::new(c.unwrap(), Stop, Advance));
                 }
@@ -153,7 +153,7 @@ impl BranchProduct<Element> for Element {
             | (Question, TokenSet(_))
             | (Question, NotTokenSet(_)) => {
                 let mut v = vec![NfaBranch::new(b.clone(), Advance, Advance)];
-                let c = b.clone().compliment();
+                let c = b.clone().complement();
                 if c.is_some() {
                     v.push(NfaBranch::new(c.unwrap(), Advance, Stop));
                 }
@@ -165,7 +165,7 @@ impl BranchProduct<Element> for Element {
             | (TokenSet(_), Question)
             | (NotTokenSet(_), Question) => vec![
                 NfaBranch::new(a.clone(), Advance, Advance),
-                NfaBranch::new(a.clone().compliment().unwrap(), Stop, Advance),
+                NfaBranch::new(a.clone().complement().unwrap(), Stop, Advance),
             ],
 
             (Token(x), Token(y)) | (NotToken(y), NotToken(x)) => {
@@ -222,21 +222,29 @@ impl BranchProduct<Element> for Element {
                     v.push(NfaBranch::new(TokenSet(matching.clone()), Advance, Advance));
                 }
 
-                let left: Vec<_> = x.iter().filter(|c|!matching.contains(c)).cloned().collect();
+                let left: Vec<_> = x
+                    .iter()
+                    .filter(|c| !matching.contains(c))
+                    .cloned()
+                    .collect();
                 if left.len() == 1 {
                     v.push(NfaBranch::new(Token(left[0].clone()), Advance, Stop));
                 } else if matching.len() > 1 {
                     v.push(NfaBranch::new(TokenSet(left.clone()), Advance, Stop));
                 }
 
-                let right: Vec<_> = y.iter().filter(|c|!matching.contains(c)).cloned().collect();
+                let right: Vec<_> = y
+                    .iter()
+                    .filter(|c| !matching.contains(c))
+                    .cloned()
+                    .collect();
                 if right.len() == 1 {
                     v.push(NfaBranch::new(Token(right[0].clone()), Stop, Advance));
                 } else if matching.len() > 1 {
                     v.push(NfaBranch::new(TokenSet(right.clone()), Stop, Advance));
                 }
                 v
-            },
+            }
 
             (NotTokenSet(x), NotTokenSet(y)) => {
                 // [!a,!b] X [!a,!c] -> [c], [!a,!b,!c], [b]
@@ -245,11 +253,11 @@ impl BranchProduct<Element> for Element {
                 let mut sum = x.clone();
                 sum.extend(y.clone().iter());
                 sum.dedup();
-                
+
                 if !sum.is_empty() {
                     v.push(NfaBranch::new(NotTokenSet(sum), Advance, Advance));
                 }
-                
+
                 let left: Vec<_> = y.iter().filter(|c| !x.contains(c)).cloned().collect();
                 if left.len() == 1 {
                     v.push(NfaBranch::new(Token(left[0].clone()), Advance, Stop));
@@ -265,7 +273,7 @@ impl BranchProduct<Element> for Element {
                 }
 
                 v
-            },
+            }
             (NotTokenSet(x), Token(y)) => {
                 if x.contains(y) {
                     vec![
@@ -299,7 +307,7 @@ impl BranchProduct<Element> for Element {
 
             (NotToken(x), TokenSet(y)) => {
                 // [!a] X [a,b,c]
-                // join on non matching 
+                // join on non matching
                 // left on sum
                 // right on matching
 
@@ -312,10 +320,14 @@ impl BranchProduct<Element> for Element {
                 if sum.len() == 1 {
                     v.push(NfaBranch::new(NotToken(sum[0].clone()), Advance, Stop));
                 } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokenSet(sum.into_iter().cloned().collect()), Advance, Stop));
+                    v.push(NfaBranch::new(
+                        NotTokenSet(sum.into_iter().cloned().collect()),
+                        Advance,
+                        Stop,
+                    ));
                 }
 
-                let excluded: Vec<_> = y.iter().filter(|c|*c != x).cloned().collect();
+                let excluded: Vec<_> = y.iter().filter(|c| *c != x).cloned().collect();
                 if excluded.len() == 1 {
                     v.push(NfaBranch::new(Token(excluded[0].clone()), Advance, Advance));
                 } else if excluded.len() > 1 {
@@ -326,7 +338,7 @@ impl BranchProduct<Element> for Element {
                     v.push(NfaBranch::new(Token(x.clone()), Stop, Advance));
                 }
                 v
-            },
+            }
             (TokenSet(x), NotToken(y)) => {
                 let mut v = vec![];
 
@@ -337,10 +349,14 @@ impl BranchProduct<Element> for Element {
                 if sum.len() == 1 {
                     v.push(NfaBranch::new(NotToken(sum[0].clone()), Stop, Advance));
                 } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokenSet(sum.into_iter().cloned().collect()), Stop, Advance));
+                    v.push(NfaBranch::new(
+                        NotTokenSet(sum.into_iter().cloned().collect()),
+                        Stop,
+                        Advance,
+                    ));
                 }
 
-                let excluded: Vec<_> = x.iter().filter(|c|*c != y).cloned().collect();
+                let excluded: Vec<_> = x.iter().filter(|c| *c != y).cloned().collect();
                 if excluded.len() == 1 {
                     v.push(NfaBranch::new(Token(excluded[0].clone()), Advance, Advance));
                 } else if excluded.len() > 1 {
@@ -351,7 +367,7 @@ impl BranchProduct<Element> for Element {
                     v.push(NfaBranch::new(Token(y.clone()), Advance, Stop));
                 }
                 v
-            },
+            }
             (TokenSet(x), NotTokenSet(y)) => {
                 // [a,b] X [!a,!c] = [a] [b] [!a,!b,!c]
                 //  left is matching
@@ -360,14 +376,14 @@ impl BranchProduct<Element> for Element {
 
                 let mut v = vec![];
 
-                let excluded: Vec<_> = y.iter().filter(|c|x.contains(c)).cloned().collect();
+                let excluded: Vec<_> = y.iter().filter(|c| x.contains(c)).cloned().collect();
                 if excluded.len() == 1 {
                     v.push(NfaBranch::new(Token(excluded[0].clone()), Advance, Stop));
                 } else if excluded.len() > 1 {
                     v.push(NfaBranch::new(TokenSet(excluded), Advance, Stop));
                 }
 
-                let excluded: Vec<_> = x.iter().filter(|c|!y.contains(c)).cloned().collect();
+                let excluded: Vec<_> = x.iter().filter(|c| !y.contains(c)).cloned().collect();
                 if excluded.len() == 1 {
                     v.push(NfaBranch::new(Token(excluded[0].clone()), Advance, Advance));
                 } else if excluded.len() > 1 {
@@ -384,9 +400,8 @@ impl BranchProduct<Element> for Element {
                     v.push(NfaBranch::new(NotTokenSet(sum), Stop, Advance));
                 }
                 v
-            },
+            }
             (NotTokenSet(x), TokenSet(y)) => {
-
                 let mut v = vec![];
 
                 let mut sum = x.clone();
@@ -399,22 +414,21 @@ impl BranchProduct<Element> for Element {
                     v.push(NfaBranch::new(NotTokenSet(sum), Advance, Stop));
                 }
 
-                let excluded: Vec<_> = y.iter().filter(|c|!x.contains(c)).cloned().collect();
+                let excluded: Vec<_> = y.iter().filter(|c| !x.contains(c)).cloned().collect();
                 if excluded.len() == 1 {
                     v.push(NfaBranch::new(Token(excluded[0].clone()), Advance, Advance));
                 } else if excluded.len() > 1 {
                     v.push(NfaBranch::new(TokenSet(excluded), Advance, Advance));
                 }
 
-                let excluded: Vec<_> = x.iter().filter(|c|y.contains(c)).cloned().collect();
+                let excluded: Vec<_> = x.iter().filter(|c| y.contains(c)).cloned().collect();
                 if excluded.len() == 1 {
                     v.push(NfaBranch::new(Token(excluded[0].clone()), Stop, Advance));
                 } else if excluded.len() > 1 {
                     v.push(NfaBranch::new(TokenSet(excluded), Stop, Advance));
                 }
                 v
-
-            },
+            }
             (NotToken(x), NotTokenSet(y)) => {
                 // [!a] X [!b,!c] -> [c, b], [!a,!b,!c], [a]
                 //  left is stuff in y not in x
@@ -425,13 +439,13 @@ impl BranchProduct<Element> for Element {
                 let mut sum = y.clone();
                 sum.push(x.clone());
                 sum.dedup();
-                
+
                 if sum.len() == 1 {
                     v.push(NfaBranch::new(NotToken(sum[0]), Advance, Advance));
                 } else if sum.len() > 1 {
                     v.push(NfaBranch::new(NotTokenSet(sum), Advance, Advance));
                 }
-                
+
                 let excluded: Vec<_> = y.iter().filter(|c| *c != x).cloned().collect();
                 if excluded.len() == 1 {
                     v.push(NfaBranch::new(Token(excluded[0].clone()), Advance, Stop));
@@ -443,9 +457,8 @@ impl BranchProduct<Element> for Element {
                     v.push(NfaBranch::new(Token(x.clone()), Stop, Advance));
                 }
                 v
-            },
-            
-            
+            }
+
             (NotTokenSet(x), NotToken(y)) => {
                 let mut v = vec![];
 
@@ -456,13 +469,12 @@ impl BranchProduct<Element> for Element {
                 let mut sum = x.clone();
                 sum.push(y.clone());
                 sum.dedup();
-                
+
                 if sum.len() == 1 {
                     v.push(NfaBranch::new(NotToken(sum[0]), Advance, Advance));
                 } else if sum.len() > 1 {
                     v.push(NfaBranch::new(NotTokenSet(sum), Advance, Advance));
                 }
-
 
                 let excluded: Vec<_> = x.iter().filter(|c| *c != y).cloned().collect();
                 if excluded.len() == 1 {
@@ -472,8 +484,7 @@ impl BranchProduct<Element> for Element {
                 }
 
                 v
-            },
-            
+            }
         };
         Ok(r)
     }

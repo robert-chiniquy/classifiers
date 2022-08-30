@@ -9,11 +9,11 @@ pub trait Remaindery<L> {
     fn is_valid(a: L, b: L) -> bool;
 }
 
-pub trait Compliment<L>
+pub trait Complement<L>
 where
     Self: Sized,
 {
-    fn compliment(self) -> Option<Self>;
+    fn complement(self) -> Option<Self>;
 }
 
 pub trait Universal {
