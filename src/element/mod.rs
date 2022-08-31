@@ -232,21 +232,15 @@ impl Product<Element> for Element {
 
             (NotTokenSet(x), NotTokenSet(y)) => {
                 // [!a,!b] X [!a,!c] -> [c], [!a,!b,!c], [b]
-                let mut v = vec![];
-
-                let sum = x.clone().union(y).cloned().collect::<HashSet<char>>();
-
-                if !sum.is_empty() {
-                    v.push(NfaBranch::new(NotTokenSet(sum), Advance, Advance));
-                }
-
                 let left = y.iter().filter(|c| !x.contains(c)).cloned().collect();
-                v.push(NfaBranch::new(TokenSet(left), Advance, Stop));
-
+                let center = x.clone().union(y).cloned().collect::<HashSet<char>>();
                 let right = x.iter().filter(|c| !y.contains(c)).cloned().collect();
-                v.push(NfaBranch::new(TokenSet(right), Advance, Stop));
 
-                v
+                vec![
+                    NfaBranch::new(NotTokenSet(center), Advance, Advance),
+                    NfaBranch::new(TokenSet(left), Advance, Stop),
+                    NfaBranch::new(TokenSet(right), Advance, Stop),
+                ]
             }
 
             (TokenSet(x), NotTokenSet(y)) => {
@@ -254,33 +248,25 @@ impl Product<Element> for Element {
                 //  left is matching
                 //  things in left not in right
                 //  right is dedup sum
-
-                let mut v = vec![];
-
-                let excluded = y.iter().filter(|c| x.contains(c)).cloned().collect();
-                v.push(NfaBranch::new(TokenSet(excluded), Advance, Stop));
-
-                let excluded = x.iter().filter(|c| !y.contains(c)).cloned().collect();
-                v.push(NfaBranch::new(TokenSet(excluded), Advance, Advance));
-
-                let sum = y.clone().union(x).cloned().collect();
-                v.push(NfaBranch::new(NotTokenSet(sum), Stop, Advance));
-
-                v
+                let left = y.iter().filter(|c| x.contains(c)).cloned().collect();
+                let center = x.iter().filter(|c| !y.contains(c)).cloned().collect();
+                let right = y.clone().union(x).cloned().collect();
+                vec![
+                    NfaBranch::new(TokenSet(left), Advance, Stop),
+                    NfaBranch::new(TokenSet(center), Advance, Advance),
+                    NfaBranch::new(NotTokenSet(right), Stop, Advance),
+                ]
             }
             (NotTokenSet(x), TokenSet(y)) => {
-                let mut v = vec![];
+                let left = x.clone().union(y).cloned().collect();
+                let center = y.iter().filter(|c| !x.contains(c)).cloned().collect();
+                let right = x.iter().filter(|c| y.contains(c)).cloned().collect();
 
-                let sum = x.clone().union(y).cloned().collect();
-                v.push(NfaBranch::new(NotTokenSet(sum), Advance, Stop));
-
-                let excluded = y.iter().filter(|c| !x.contains(c)).cloned().collect();
-                v.push(NfaBranch::new(TokenSet(excluded), Advance, Advance));
-
-                let excluded = x.iter().filter(|c| y.contains(c)).cloned().collect();
-                v.push(NfaBranch::new(TokenSet(excluded), Stop, Advance));
-
-                v
+                vec![
+                    NfaBranch::new(NotTokenSet(left), Advance, Stop),
+                    NfaBranch::new(TokenSet(center), Advance, Advance),
+                    NfaBranch::new(TokenSet(right), Stop, Advance),
+                ]
             }
         };
         Ok(r)
