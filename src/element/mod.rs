@@ -155,11 +155,11 @@ impl std::fmt::Display for Element {
 
 impl Product<Element> for Element {
     #[tracing::instrument(ret)]
-    fn product(a: &Self, b: &Self) -> Result<Vec<NfaBranch<Element>>, GeneralError> {
+    fn product(a: &Self, b: &Self) -> Vec<NfaBranch<Element>> {
         use EdgeTransition::*;
         use Element::*;
 
-        let r = match (a, b) {
+        match (a, b) {
             (Star, Star) => vec![
                 NfaBranch::new(Star, Advance, Stay),
                 NfaBranch::new(Star, Stay, Advance),
@@ -225,7 +225,7 @@ impl Product<Element> for Element {
 
                 vec![
                     NfaBranch::new(TokenSet(left), Advance, Stop),
-                    NfaBranch::new(TokenSet(matching.clone()), Advance, Advance),
+                    NfaBranch::new(TokenSet(matching), Advance, Advance),
                     NfaBranch::new(TokenSet(right), Stop, Advance),
                 ]
             }
@@ -237,8 +237,8 @@ impl Product<Element> for Element {
                 let right = x.iter().filter(|c| !y.contains(c)).cloned().collect();
 
                 vec![
-                    NfaBranch::new(NotTokenSet(center), Advance, Advance),
                     NfaBranch::new(TokenSet(left), Advance, Stop),
+                    NfaBranch::new(NotTokenSet(center), Advance, Advance),
                     NfaBranch::new(TokenSet(right), Advance, Stop),
                 ]
             }
@@ -248,9 +248,11 @@ impl Product<Element> for Element {
                 //  left is matching
                 //  things in left not in right
                 //  right is dedup sum
+
                 let left = y.iter().filter(|c| x.contains(c)).cloned().collect();
                 let center = x.iter().filter(|c| !y.contains(c)).cloned().collect();
                 let right = y.clone().union(x).cloned().collect();
+
                 vec![
                     NfaBranch::new(TokenSet(left), Advance, Stop),
                     NfaBranch::new(TokenSet(center), Advance, Advance),
@@ -268,8 +270,7 @@ impl Product<Element> for Element {
                     NfaBranch::new(TokenSet(right), Stop, Advance),
                 ]
             }
-        };
-        Ok(r)
+        }
     }
 }
 

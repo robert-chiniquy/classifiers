@@ -52,7 +52,7 @@ pub trait Universal {
 }
 
 pub trait Product<E> {
-    fn product(a: &E, b: &E) -> Result<Vec<NfaBranch<E>>, GeneralError>;
+    fn product(a: &E, b: &E) -> Vec<NfaBranch<E>>;
 }
 
 
