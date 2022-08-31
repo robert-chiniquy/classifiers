@@ -163,18 +163,6 @@ where
     }
 }
 
-#[test]
-fn test_accepting_paths() {
-    tests::setup();
-    let c = Classifier::literal("a");
-
-    let n = c.compile::<Element, _, _>(());
-    // assert!(n.accepts_string("aa"));
-
-    let paths = n.accepting_paths();
-
-    assert!(!paths.every_path().is_empty());
-}
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
@@ -517,20 +505,4 @@ pub(crate) struct Paths<E: std::hash::Hash> {
     pub(crate) lr: HashSet<Vec<E>>,
     pub(crate) r: HashSet<Vec<E>>,
     pub(crate) none: HashSet<Vec<E>>,
-}
-
-impl<E> Paths<E>
-where
-    E: std::hash::Hash + Clone + Eq + std::fmt::Debug,
-{
-    #[tracing::instrument(ret)]
-    pub(crate) fn every_path(&self) -> HashSet<Vec<E>> {
-        self.l
-            .iter()
-            .chain(self.lr.iter())
-            .chain(self.r.iter())
-            .chain(self.none.iter())
-            .cloned()
-            .collect()
-    }
 }

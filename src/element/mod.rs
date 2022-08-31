@@ -1,7 +1,7 @@
 // pub(crate) use negation::*;
 
-use std::{collections::HashSet, ops::Sub};
 use std::hash::{Hash, Hasher};
+use std::{collections::HashSet, ops::Sub};
 
 use super::*;
 
@@ -14,14 +14,6 @@ pub enum Element {
     NotTokenSet(HashSet<char>),
 }
 
-#[test]
-fn print_hashset () {
-    let h: HashSet<_> = HashSet::from_iter(vec!['b', 'a', 'c']);
-    let mut asdf = h.iter().collect::<Vec<_>>();
-    asdf.sort();
-    println!("{:?}", asdf);
-}
-
 impl Hash for Element {
     // TODO: this is **really** inefficient
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -32,12 +24,12 @@ impl Hash for Element {
                 let mut v = v.iter().cloned().collect::<Vec<_>>();
                 v.sort();
                 format!("ts|{v:?}")
-            },
+            }
             Element::NotTokenSet(v) => {
                 let mut v = v.iter().cloned().collect::<Vec<_>>();
                 v.sort();
                 format!("nts|{v:?}")
-            },
+            }
         };
         state.write(s.as_bytes());
     }
@@ -106,7 +98,7 @@ impl Accepts<Element> for Element {
     fn accepts(&self, l: Element) -> Result<bool, GeneralError> {
         use Element::*;
         let r = match (self, &l) {
-            (x,y) if x == y =>true,
+            (x, y) if x == y => true,
             (Star, _) => true,
             (_, Star) => false,
             (Question, _) => true,
@@ -119,7 +111,6 @@ impl Accepts<Element> for Element {
         Ok(r)
     }
 }
-
 
 impl Accepts<&char> for Element {
     #[tracing::instrument(skip_all, ret)]
@@ -174,9 +165,7 @@ impl Product<Element> for Element {
                 NfaBranch::new(Star, Stay, Advance),
                 NfaBranch::new(Star, Advance, Advance),
             ],
-            (Star, Question)
-            | (Star, TokenSet(_))
-            | (Star, NotTokenSet(_)) => {
+            (Star, Question) | (Star, TokenSet(_)) | (Star, NotTokenSet(_)) => {
                 let mut v = vec![
                     NfaBranch::new(b.clone(), Stay, Advance),
                     NfaBranch::new(b.clone(), Advance, Advance),
@@ -187,10 +176,8 @@ impl Product<Element> for Element {
                 }
                 v
             }
-            
-            (Question, Star)
-            | (TokenSet(_), Star)
-            | (NotTokenSet(_), Star) => {
+
+            (Question, Star) | (TokenSet(_), Star) | (NotTokenSet(_), Star) => {
                 let mut v = vec![
                     NfaBranch::new(a.clone(), Advance, Stay),
                     NfaBranch::new(a.clone(), Advance, Advance),
@@ -203,9 +190,7 @@ impl Product<Element> for Element {
             }
 
             /* Question */
-            (Question, Question)
-            | (Question, TokenSet(_))
-            | (Question, NotTokenSet(_)) => {
+            (Question, Question) | (Question, TokenSet(_)) | (Question, NotTokenSet(_)) => {
                 let mut v = vec![NfaBranch::new(b.clone(), Advance, Advance)];
                 let c = b.clone().complement();
                 if c.is_some() {
@@ -214,15 +199,17 @@ impl Product<Element> for Element {
                 v
             }
 
-            (TokenSet(_), Question)
-            | (NotTokenSet(_), Question) => vec![
+            (TokenSet(_), Question) | (NotTokenSet(_), Question) => vec![
                 NfaBranch::new(a.clone(), Advance, Advance),
                 NfaBranch::new(a.clone().complement().unwrap(), Stop, Advance),
             ],
 
-
             (TokenSet(x), TokenSet(y)) => {
-                let matching = x.iter().filter(|c| y.contains(c)).cloned().collect::<HashSet<_>>();
+                let matching = x
+                    .iter()
+                    .filter(|c| y.contains(c))
+                    .cloned()
+                    .collect::<HashSet<_>>();
 
                 let left = x
                     .iter()
@@ -261,7 +248,7 @@ impl Product<Element> for Element {
 
                 v
             }
-          
+
             (TokenSet(x), NotTokenSet(y)) => {
                 // [a,b] X [!a,!c] = [a] [b] [!a,!b,!c]
                 //  left is matching
@@ -272,7 +259,7 @@ impl Product<Element> for Element {
 
                 let excluded = y.iter().filter(|c| x.contains(c)).cloned().collect();
                 v.push(NfaBranch::new(TokenSet(excluded), Advance, Stop));
-                
+
                 let excluded = x.iter().filter(|c| !y.contains(c)).cloned().collect();
                 v.push(NfaBranch::new(TokenSet(excluded), Advance, Advance));
 
@@ -302,7 +289,7 @@ impl Product<Element> for Element {
 
 #[test]
 fn asdfasdf() {
-    use Element::{*};
+    use Element::*;
     let nt = Element::not_token;
     let nts = Element::not_tokens;
     let ts = Element::tokens;
@@ -365,7 +352,7 @@ impl Subtraction<Element> for Element {
             (Question, Star) => None,
             (Star, Question) => None,
             (Star, Star) => None,
-            
+
             (Star, NotTokenSet(v)) | (Question, NotTokenSet(v)) => Some(TokenSet(v.clone())),
             (Star, TokenSet(y)) | (Question, TokenSet(y)) => Some(NotTokenSet(y.clone())),
 
