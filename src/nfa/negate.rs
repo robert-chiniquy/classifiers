@@ -21,14 +21,14 @@ fn test_basic_classifier_negation() {
 #[test]
 fn test_a_v_q() {
     tests::setup();
-    use Element::*;
-    let n = Nfa::from_symbols(&[Token('a'), Token('a')], ());
+
+    let n = Nfa::from_symbols(&[Element::token('a'), Element::token('a')], ());
     let i = n.intersection(&Nfa::from_str("??", ()));
     assert!(!i.nodes.is_empty());
     i.graphviz_file("i.dot", "a_v_q");
 
     assert!(i.accepts_string("aa"));
-    let thing = vec![vec![Token('a'), Token('a')]];
+    let thing = vec![vec![Element::token('a'), Element::token('a')]];
     let e = i.accepting_paths().every_path();
     assert!(e == HashSet::from_iter(thing), "{e:?}");
     println!("accepting_paths: {:?}", i.accepting_paths().every_path());

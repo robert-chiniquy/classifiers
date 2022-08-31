@@ -1,53 +1,63 @@
 // pub(crate) use negation::*;
 
-use std::collections::HashSet;
+use std::{collections::HashSet, ops::Sub};
+use std::hash::{Hash, Hasher};
 
 use super::*;
 
 // TODO: explicit Hash impl
-#[derive(Debug, Clone, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Element {
-    // exactly 1 token
     Question,
-    // 1 or more or tokens
     Star,
-    // The literal token seqence
-    Token(char),
-    TokenSet(Vec<char>),
-    // This matches any single char but this one.
-    NotToken(char),
-    // This matches any set of single chars but those in the vector
-    NotTokenSet(Vec<char>),
+    TokenSet(HashSet<char>),
+    NotTokenSet(HashSet<char>),
 }
 
-impl PartialEq for Element {
-    fn eq(&self, other: &Self) -> bool {
-        use Element::*;
-        match (self, other) {
-            (Star, Star) => true,
-            (Question, Question) => true,
-            (Token(x), Token(y)) => x == y,
+#[test]
+fn print_hashset () {
+    let h: HashSet<_> = HashSet::from_iter(vec!['b', 'a', 'c']);
+    let mut asdf = h.iter().collect::<Vec<_>>();
+    asdf.sort();
+    println!("{:?}", asdf);
+}
 
-            (Token(x), TokenSet(y)) | (TokenSet(y), Token(x)) => {
-                if y.is_empty() || y.len() != 1 {
-                    false
-                } else {
-                    &y[0] == x
-                }
-            }
-            (NotToken(x), NotTokenSet(y)) | (NotTokenSet(y), NotToken(x)) => {
-                if y.is_empty() || y.len() != 1 {
-                    false
-                } else {
-                    &y[0] == x
-                }
-            }
-            (NotToken(x), NotToken(y)) => x == y,
-            (TokenSet(x), TokenSet(y)) | (NotTokenSet(x), NotTokenSet(y)) => {
-                x.iter().collect::<HashSet<_>>().eq(&HashSet::from_iter(y))
-            }
-            (_, _) => false,
-        }
+impl Hash for Element {
+    // TODO: this is **really** inefficient
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let s = match self {
+            Element::Question => "?".to_string(),
+            Element::Star => "*".to_string(),
+            Element::TokenSet(v) => {
+                let mut v = v.iter().cloned().collect::<Vec<_>>();
+                v.sort();
+                format!("ts|{v:?}")
+            },
+            Element::NotTokenSet(v) => {
+                let mut v = v.iter().cloned().collect::<Vec<_>>();
+                v.sort();
+                format!("nts|{v:?}")
+            },
+        };
+        state.write(s.as_bytes());
+    }
+}
+
+impl Element {
+    pub fn token(c: char) -> Element {
+        Element::TokenSet(HashSet::from_iter(vec![c]))
+    }
+
+    pub fn not_token(c: char) -> Element {
+        Element::NotTokenSet(HashSet::from_iter(vec![c]))
+    }
+
+    pub fn tokens(v: Vec<char>) -> Element {
+        Element::TokenSet(HashSet::from_iter(v.into_iter()))
+    }
+
+    pub fn not_tokens(v: Vec<char>) -> Element {
+        Element::NotTokenSet(HashSet::from_iter(v.into_iter()))
     }
 }
 
@@ -57,22 +67,8 @@ impl Complement<Element> for Element {
         match self {
             Question => None,
             Star => None,
-            Token(n) => Some(NotToken(*n)),
-            TokenSet(n) => {
-                if n.len() == 1 {
-                    Some(NotTokenSet(n.clone()))
-                } else {
-                    Some(NotToken(n[0]))
-                }
-            }
-            NotToken(n) => Some(Token(*n)),
-            NotTokenSet(n) => {
-                if n.len() == 1 {
-                    Some(Token(n[0]))
-                } else {
-                    Some(TokenSet(n.clone()))
-                }
-            }
+            TokenSet(n) => Some(NotTokenSet(n.clone())),
+            NotTokenSet(n) => Some(TokenSet(n.clone())),
         }
     }
 }
@@ -90,7 +86,7 @@ impl From<char> for Element {
         match c {
             '*' => Element::Star,
             '?' => Element::Question,
-            c => Element::Token(c),
+            c => Element::token(c),
         }
     }
 }
@@ -100,7 +96,7 @@ impl From<&char> for Element {
         match c {
             '*' => Element::Star,
             '?' => Element::Question,
-            c => Element::Token(*c),
+            c => Element::token(*c),
         }
     }
 }
@@ -110,32 +106,27 @@ impl Accepts<Element> for Element {
     fn accepts(&self, l: Element) -> Result<bool, GeneralError> {
         use Element::*;
         let r = match (self, &l) {
-            (x, y) if x == y => true,
-            // (Element::Question, Element::Question) => true,
+            (x,y) if x == y =>true,
             (Star, _) => true,
-            (NotToken(b), Token(a)) => a != b,
-            (Question, NotToken(_)) => true,
-            (Question, Token(_)) => true,
             (_, Star) => false,
-            // if len(seq) == 1, Q can match seq.  Otherwise, Q can't match multi chars.
-            (Token(_), NotToken(_)) => false,
-            (NotToken(_), Question) => false,
-            (Token(_), Question) => false,
+            (Question, _) => true,
+            (_, Question) => false,
+            // Are all other ASCII characters specified in the not token set?
+            (TokenSet(x), NotTokenSet(y)) => 128 - y.len() == x.len() && y.sub(x).len() == y.len(),
+            (NotTokenSet(x), TokenSet(y)) => x.is_disjoint(y),
             (_, _) => false,
         };
         Ok(r)
     }
 }
 
-// TODO: FIXME: terminal_on needs to decompose seqs of len > 1 into component token/not token to call this method
+
 impl Accepts<&char> for Element {
     #[tracing::instrument(skip_all, ret)]
     fn accepts(&self, l: &char) -> Result<bool, GeneralError> {
         let r = match self {
             Element::Question => true,
             Element::Star => true,
-            Element::Token(n) => n == l,
-            Element::NotToken(n) => n != l,
             Element::NotTokenSet(v) => !v.into_iter().any(|c| c == l),
             Element::TokenSet(v) => v.into_iter().any(|c| c == l),
         };
@@ -164,8 +155,6 @@ impl std::fmt::Display for Element {
             match self {
                 Element::Question => "?".to_string(),
                 Element::Star => "*".to_string(),
-                Element::Token(c) => format!("{c}"),
-                Element::NotToken(c) => format!("!{c}"),
                 Element::NotTokenSet(v) => format!("!`{v:?}`"),
                 Element::TokenSet(v) => format!("`{v:?}`"),
             }
@@ -186,8 +175,6 @@ impl Product<Element> for Element {
                 NfaBranch::new(Star, Advance, Advance),
             ],
             (Star, Question)
-            | (Star, Token(_))
-            | (Star, NotToken(_))
             | (Star, TokenSet(_))
             | (Star, NotTokenSet(_)) => {
                 let mut v = vec![
@@ -200,9 +187,8 @@ impl Product<Element> for Element {
                 }
                 v
             }
-            (Token(_), Star)
-            | (Question, Star)
-            | (NotToken(_), Star)
+            
+            (Question, Star)
             | (TokenSet(_), Star)
             | (NotTokenSet(_), Star) => {
                 let mut v = vec![
@@ -218,8 +204,6 @@ impl Product<Element> for Element {
 
             /* Question */
             (Question, Question)
-            | (Question, Token(_))
-            | (Question, NotToken(_))
             | (Question, TokenSet(_))
             | (Question, NotTokenSet(_)) => {
                 let mut v = vec![NfaBranch::new(b.clone(), Advance, Advance)];
@@ -230,259 +214,54 @@ impl Product<Element> for Element {
                 v
             }
 
-            (Token(_), Question)
-            | (NotToken(_), Question)
-            | (TokenSet(_), Question)
+            (TokenSet(_), Question)
             | (NotTokenSet(_), Question) => vec![
                 NfaBranch::new(a.clone(), Advance, Advance),
                 NfaBranch::new(a.clone().complement().unwrap(), Stop, Advance),
             ],
 
-            (NotToken(y), NotToken(x)) => {
-                if x == y {
-                    vec![NfaBranch::new(NotToken(*y), Advance, Advance)]
-                } else {
-                    vec![
-                        NfaBranch::new(Token(*x), Advance, Stop),
-                        NfaBranch::new(NotTokenSet(vec![*x, *y]), Advance, Advance),
-                        NfaBranch::new(Token(*y), Stop, Advance),
-                    ]
-                }
-            }
-
-            (Token(x), Token(y)) => {
-                if x == y {
-                    vec![NfaBranch::new(Token(*x), Advance, Advance)]
-                } else {
-                    vec![
-                        NfaBranch::new(Token(*x), Advance, Stop),
-                        NfaBranch::new(Token(*y), Stop, Advance),
-                    ]
-                }
-            }
-
-            (Token(x), NotToken(y)) => {
-                if x == y {
-                    vec![
-                        NfaBranch::new(Token(*x), Advance, Stop),
-                        NfaBranch::new(NotToken(*y), Stop, Advance),
-                    ]
-                } else {
-                    vec![
-                        NfaBranch::new(Token(*x), Advance, Advance),
-                        NfaBranch::new(NotTokenSet(vec![*x, *y]), Stop, Advance),
-                    ]
-                }
-            }
-
-            (NotToken(x), Token(y)) => {
-                if x == y {
-                    vec![
-                        NfaBranch::new(NotToken(*x), Advance, Stop),
-                        NfaBranch::new(Token(*y), Stop, Advance),
-                    ]
-                } else {
-                    vec![
-                        NfaBranch::new(Token(*y), Advance, Advance),
-                        NfaBranch::new(NotTokenSet(vec![*x, *y]), Advance, Stop),
-                    ]
-                }
-            }
-
-            (Token(x), TokenSet(y)) => {
-                if y.contains(x) {
-                    if y.len() == 1 {
-                        vec![NfaBranch::new(Token(*x), Advance, Advance)]
-                    } else {
-                        let exclude = y.iter().filter(|c| *c != x).cloned().collect();
-                        vec![
-                            NfaBranch::new(Token(*x), Advance, Advance),
-                            NfaBranch::new(TokenSet(exclude), Stop, Advance),
-                        ]
-                    }
-                } else {
-                    vec![
-                        NfaBranch::new(Token(*x), Advance, Stop),
-                        NfaBranch::new(TokenSet(y.clone()), Stop, Advance),
-                    ]
-                }
-            }
-
-            (TokenSet(y), Token(x)) => {
-                if y.contains(x) {
-                    if y.len() == 1 {
-                        vec![NfaBranch::new(Token(*x), Advance, Advance)]
-                    } else {
-                        let exclude = y.iter().filter(|c| *c != x).cloned().collect();
-                        vec![
-                            NfaBranch::new(Token(*x), Advance, Advance),
-                            NfaBranch::new(TokenSet(exclude), Advance, Stop),
-                        ]
-                    }
-                } else {
-                    vec![
-                        NfaBranch::new(TokenSet(y.clone()), Advance, Stop),
-                        NfaBranch::new(Token(*x), Stop, Advance),
-                    ]
-                }
-            }
 
             (TokenSet(x), TokenSet(y)) => {
-                let mut v = vec![];
+                let matching = x.iter().filter(|c| y.contains(c)).cloned().collect::<HashSet<_>>();
 
-                let matching: Vec<_> = x.iter().filter(|c| y.contains(c)).cloned().collect();
-                if matching.len() == 1 {
-                    v.push(NfaBranch::new(Token(matching[0]), Advance, Advance));
-                } else if matching.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(matching.clone()), Advance, Advance));
-                }
-
-                let left: Vec<_> = x
+                let left = x
                     .iter()
                     .filter(|c| !matching.contains(c))
                     .cloned()
                     .collect();
-                if left.len() == 1 {
-                    v.push(NfaBranch::new(Token(left[0]), Advance, Stop));
-                } else if matching.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(left.clone()), Advance, Stop));
-                }
 
-                let right: Vec<_> = y
+                let right = y
                     .iter()
                     .filter(|c| !matching.contains(c))
                     .cloned()
                     .collect();
-                if right.len() == 1 {
-                    v.push(NfaBranch::new(Token(right[0]), Stop, Advance));
-                } else if matching.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(right.clone()), Stop, Advance));
-                }
-                v
+
+                vec![
+                    NfaBranch::new(TokenSet(left), Advance, Stop),
+                    NfaBranch::new(TokenSet(matching.clone()), Advance, Advance),
+                    NfaBranch::new(TokenSet(right), Stop, Advance),
+                ]
             }
 
             (NotTokenSet(x), NotTokenSet(y)) => {
                 // [!a,!b] X [!a,!c] -> [c], [!a,!b,!c], [b]
                 let mut v = vec![];
 
-                let mut sum = x.clone();
-                sum.extend(y.clone());
-                sum.dedup();
+                let sum = x.clone().union(y).cloned().collect::<HashSet<char>>();
 
                 if !sum.is_empty() {
                     v.push(NfaBranch::new(NotTokenSet(sum), Advance, Advance));
                 }
 
-                let left: Vec<_> = y.iter().filter(|c| !x.contains(c)).cloned().collect();
-                if left.len() == 1 {
-                    v.push(NfaBranch::new(Token(left[0]), Advance, Stop));
-                } else if left.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(left), Advance, Stop));
-                }
+                let left = y.iter().filter(|c| !x.contains(c)).cloned().collect();
+                v.push(NfaBranch::new(TokenSet(left), Advance, Stop));
 
-                let right: Vec<_> = x.iter().filter(|c| !y.contains(c)).cloned().collect();
-                if right.len() == 1 {
-                    v.push(NfaBranch::new(Token(right[0]), Advance, Stop));
-                } else if right.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(right), Advance, Stop));
-                }
+                let right = x.iter().filter(|c| !y.contains(c)).cloned().collect();
+                v.push(NfaBranch::new(TokenSet(right), Advance, Stop));
 
                 v
             }
-            (NotTokenSet(x), Token(y)) => {
-                if x.contains(y) {
-                    vec![
-                        NfaBranch::new(a.clone(), Advance, Stop),
-                        NfaBranch::new(b.clone(), Stop, Advance),
-                    ]
-                } else {
-                    let mut expanded_set = x.clone();
-                    expanded_set.push(y.clone());
-                    vec![
-                        NfaBranch::new(Token(y.clone()), Advance, Advance),
-                        NfaBranch::new(NotTokenSet(expanded_set), Advance, Stop),
-                    ]
-                }
-            }
-            (Token(x), NotTokenSet(y)) => {
-                if y.contains(x) {
-                    vec![
-                        NfaBranch::new(Token(*x), Advance, Stop),
-                        NfaBranch::new(NotTokenSet(y.clone()), Stop, Advance),
-                    ]
-                } else {
-                    let mut expanded_set = y.clone();
-                    expanded_set.push(*x);
-                    vec![
-                        NfaBranch::new(Token(*x), Advance, Advance),
-                        NfaBranch::new(NotTokenSet(expanded_set), Stop, Advance),
-                    ]
-                }
-            }
-
-            (NotToken(x), TokenSet(y)) => {
-                // [!a] X [a,b,c]
-                // join on non matching
-                // left on sum
-                // right on matching
-
-                let mut v = vec![];
-
-                let mut sum = vec![x];
-                sum.extend(y.iter());
-                sum.dedup();
-
-                if sum.len() == 1 {
-                    v.push(NfaBranch::new(NotToken(*sum[0]), Advance, Stop));
-                } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(
-                        NotTokenSet(sum.into_iter().cloned().collect()),
-                        Advance,
-                        Stop,
-                    ));
-                }
-
-                let excluded: Vec<_> = y.iter().filter(|c| *c != x).cloned().collect();
-                if excluded.len() == 1 {
-                    v.push(NfaBranch::new(Token(excluded[0]), Advance, Advance));
-                } else if excluded.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(excluded), Advance, Advance));
-                }
-
-                if y.contains(x) {
-                    v.push(NfaBranch::new(Token(*x), Stop, Advance));
-                }
-                v
-            }
-            (TokenSet(x), NotToken(y)) => {
-                let mut v = vec![];
-
-                let mut sum = vec![y];
-                sum.extend(x.iter());
-                sum.dedup();
-
-                if sum.len() == 1 {
-                    v.push(NfaBranch::new(NotToken(*sum[0]), Stop, Advance));
-                } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(
-                        NotTokenSet(sum.into_iter().cloned().collect()),
-                        Stop,
-                        Advance,
-                    ));
-                }
-
-                let excluded: Vec<_> = x.iter().filter(|c| *c != y).cloned().collect();
-                if excluded.len() == 1 {
-                    v.push(NfaBranch::new(Token(excluded[0]), Advance, Advance));
-                } else if excluded.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(excluded), Advance, Advance));
-                }
-
-                if x.contains(y) {
-                    v.push(NfaBranch::new(Token(*y), Advance, Stop));
-                }
-                v
-            }
+          
             (TokenSet(x), NotTokenSet(y)) => {
                 // [a,b] X [!a,!c] = [a] [b] [!a,!b,!c]
                 //  left is matching
@@ -491,155 +270,72 @@ impl Product<Element> for Element {
 
                 let mut v = vec![];
 
-                let excluded: Vec<_> = y.iter().filter(|c| x.contains(c)).cloned().collect();
-                if excluded.len() == 1 {
-                    v.push(NfaBranch::new(Token(excluded[0]), Advance, Stop));
-                } else if excluded.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(excluded), Advance, Stop));
-                }
+                let excluded = y.iter().filter(|c| x.contains(c)).cloned().collect();
+                v.push(NfaBranch::new(TokenSet(excluded), Advance, Stop));
+                
+                let excluded = x.iter().filter(|c| !y.contains(c)).cloned().collect();
+                v.push(NfaBranch::new(TokenSet(excluded), Advance, Advance));
 
-                let excluded: Vec<_> = x.iter().filter(|c| !y.contains(c)).cloned().collect();
-                if excluded.len() == 1 {
-                    v.push(NfaBranch::new(Token(excluded[0]), Advance, Advance));
-                } else if excluded.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(excluded), Advance, Advance));
-                }
+                let sum = y.clone().union(x).cloned().collect();
+                v.push(NfaBranch::new(NotTokenSet(sum), Stop, Advance));
 
-                let mut sum = y.clone();
-                sum.extend(x.iter());
-                sum.dedup();
-
-                if sum.len() == 1 {
-                    v.push(NfaBranch::new(NotToken(sum[0]), Stop, Advance));
-                } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokenSet(sum), Stop, Advance));
-                }
                 v
             }
             (NotTokenSet(x), TokenSet(y)) => {
                 let mut v = vec![];
 
-                let mut sum = x.clone();
-                sum.extend(y.iter());
-                sum.dedup();
+                let sum = x.clone().union(y).cloned().collect();
+                v.push(NfaBranch::new(NotTokenSet(sum), Advance, Stop));
 
-                if sum.len() == 1 {
-                    v.push(NfaBranch::new(NotToken(sum[0]), Advance, Stop));
-                } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokenSet(sum), Advance, Stop));
-                }
+                let excluded = y.iter().filter(|c| !x.contains(c)).cloned().collect();
+                v.push(NfaBranch::new(TokenSet(excluded), Advance, Advance));
 
-                let excluded: Vec<_> = y.iter().filter(|c| !x.contains(c)).cloned().collect();
-                if excluded.len() == 1 {
-                    v.push(NfaBranch::new(Token(excluded[0]), Advance, Advance));
-                } else if excluded.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(excluded), Advance, Advance));
-                }
-
-                let excluded: Vec<_> = x.iter().filter(|c| y.contains(c)).cloned().collect();
-                if excluded.len() == 1 {
-                    v.push(NfaBranch::new(Token(excluded[0]), Stop, Advance));
-                } else if excluded.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(excluded), Stop, Advance));
-                }
-                v
-            }
-            (NotToken(x), NotTokenSet(y)) => {
-                // [!a] X [!b,!c] -> [c, b], [!a,!b,!c], [a]
-                //  left is stuff in y not in x
-                //  join is dedup sum
-                //  right x if x not in y
-                let mut v = vec![];
-
-                let mut sum = y.clone();
-                sum.push(x.clone());
-                sum.dedup();
-
-                if sum.len() == 1 {
-                    v.push(NfaBranch::new(NotToken(sum[0]), Advance, Advance));
-                } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokenSet(sum), Advance, Advance));
-                }
-
-                let excluded: Vec<_> = y.iter().filter(|c| *c != x).cloned().collect();
-                if excluded.len() == 1 {
-                    v.push(NfaBranch::new(Token(excluded[0]), Advance, Stop));
-                } else if excluded.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(excluded), Advance, Stop));
-                }
-
-                if !y.contains(x) {
-                    v.push(NfaBranch::new(Token(*x), Stop, Advance));
-                }
-                v
-            }
-
-            (NotTokenSet(x), NotToken(y)) => {
-                let mut v = vec![];
-
-                if !x.contains(y) {
-                    v.push(NfaBranch::new(Token(*y), Advance, Stop));
-                }
-
-                let mut sum = x.clone();
-                sum.push(y.clone());
-                sum.dedup();
-
-                if sum.len() == 1 {
-                    v.push(NfaBranch::new(NotToken(sum[0]), Advance, Advance));
-                } else if sum.len() > 1 {
-                    v.push(NfaBranch::new(NotTokenSet(sum), Advance, Advance));
-                }
-
-                let excluded: Vec<_> = x.iter().filter(|c| *c != y).cloned().collect();
-                if excluded.len() == 1 {
-                    v.push(NfaBranch::new(Token(excluded[0]), Stop, Advance));
-                } else if excluded.len() > 1 {
-                    v.push(NfaBranch::new(TokenSet(excluded), Stop, Advance));
-                }
+                let excluded = x.iter().filter(|c| y.contains(c)).cloned().collect();
+                v.push(NfaBranch::new(TokenSet(excluded), Stop, Advance));
 
                 v
             }
         };
-        // println!("productizing: {a:?} X {b:?} {r:?}");
         Ok(r)
     }
 }
 
 #[test]
 fn asdfasdf() {
-    use Element::*;
+    use Element::{*};
+    let nt = Element::not_token;
+    let nts = Element::not_tokens;
+    let ts = Element::tokens;
+    let t = Element::token;
 
-    let mut r = NotToken('c');
-    r = Element::difference(&r, &Token('a')).unwrap();
-    r = Element::difference(&r, &Token('b')).unwrap();
-    assert_eq!(r, NotTokenSet(vec!['a', 'b', 'c']));
+    let mut r = nt('c');
+    r = Element::difference(&r, &t('a')).unwrap();
+    r = Element::difference(&r, &t('b')).unwrap();
+    assert_eq!(r, Element::not_tokens(vec!['a', 'b', 'c']));
 
     let mut r = Star;
-    r = Element::difference(&r, &Token('a')).unwrap();
-    r = Element::difference(&r, &Token('b')).unwrap();
-    assert_eq!(r, NotTokenSet(vec!['a', 'b']));
+    r = Element::difference(&r, &t('a')).unwrap();
+    r = Element::difference(&r, &t('b')).unwrap();
+    assert_eq!(r, nts(vec!['a', 'b']));
 
     let mut r = Question;
-    r = Element::difference(&r, &Token('a')).unwrap();
-    r = Element::difference(&r, &Token('b')).unwrap();
-    assert_eq!(r, NotTokenSet(vec!['a', 'b']));
+    r = Element::difference(&r, &t('a')).unwrap();
+    r = Element::difference(&r, &t('b')).unwrap();
+    assert_eq!(r, nts(vec!['a', 'b']));
 
-    let mut r = TokenSet(vec!['a', 'b']);
-    r = Element::difference(&r, &Token('a')).unwrap();
-    assert_eq!(None, Element::difference(&r, &Token('b')));
+    let mut r = ts(vec!['a', 'b']);
+    r = Element::difference(&r, &t('a')).unwrap();
+    assert_eq!(None, Element::difference(&r, &t('b')));
 }
 
 impl Element {
     fn simplify(&self) -> Option<Element> {
         use Element::*;
         match &self {
-            Question | Star | Token(_) | NotToken(_) => Some(self.clone()),
+            Question | Star => Some(self.clone()),
             TokenSet(x) => {
                 if x.is_empty() {
                     None
-                } else if x.len() == 1 {
-                    Some(Token(x[0]))
                 } else {
                     Some(self.clone())
                 }
@@ -647,8 +343,6 @@ impl Element {
             NotTokenSet(x) => {
                 if x.is_empty() {
                     None
-                } else if x.len() == 1 {
-                    Some(NotToken(x[0]))
                 } else {
                     Some(self.clone())
                 }
@@ -662,11 +356,7 @@ impl Subtraction<Element> for Element {
         use Element::*;
 
         match (a, b) {
-            (Token(_), Question)
-            | (Token(_), Star)
-            | (NotToken(_), Question)
-            | (NotToken(_), Star)
-            | (TokenSet(_), Question)
+            (TokenSet(_), Question)
             | (TokenSet(_), Star)
             | (NotTokenSet(_), Question)
             | (NotTokenSet(_), Star) => None,
@@ -675,82 +365,9 @@ impl Subtraction<Element> for Element {
             (Question, Star) => None,
             (Star, Question) => None,
             (Star, Star) => None,
-            (NotToken(x), NotToken(y)) => {
-                if x == y {
-                    None
-                } else {
-                    Some(Token(*y))
-                }
-            }
-            (Star, Token(n)) | (Question, Token(n)) => Some(NotToken(*n)),
-            (Star, NotToken(n)) | (Question, NotToken(n)) => Some(Token(*n)),
+            
             (Star, NotTokenSet(v)) | (Question, NotTokenSet(v)) => Some(TokenSet(v.clone())),
             (Star, TokenSet(y)) | (Question, TokenSet(y)) => Some(NotTokenSet(y.clone())),
-
-            (Token(x), Token(y)) => {
-                if x == y {
-                    None
-                } else {
-                    Some(Token(*x))
-                }
-            }
-            (Token(x), NotToken(y)) => {
-                //  a - !a
-                if x == y {
-                    Some(Token(*x))
-                // a - !b
-                } else {
-                    None
-                }
-            }
-            (Token(x), NotTokenSet(y)) => {
-                if y.contains(x) {
-                    Some(Token(*x))
-                } else {
-                    None
-                }
-            }
-
-            (NotToken(x), Token(y)) => {
-                // !a - a
-                if x == y {
-                    Some(NotToken(*x))
-                // !a - b
-                } else {
-                    Some(NotTokenSet(vec![*x, *y]))
-                }
-            }
-
-            (NotTokenSet(x), Token(y)) => {
-                //  !a!b a
-                if x.contains(y) {
-                    Some(NotTokenSet(x.clone()))
-                //  !a!b c
-                } else {
-                    let mut x = x.clone();
-                    x.push(*y);
-                    NotTokenSet(x).simplify()
-                }
-            }
-
-            (TokenSet(x), Token(y)) => {
-                // a,b - a
-                if x.contains(y) {
-                    let mut x = x.clone();
-                    x.retain(|c| c != y);
-                    TokenSet(x).simplify()
-                } else {
-                    Some(TokenSet(x.clone()))
-                }
-            }
-
-            (Token(x), TokenSet(y)) => {
-                if y.contains(x) {
-                    None
-                } else {
-                    Some(Token(*x))
-                }
-            }
 
             (TokenSet(x), TokenSet(y)) => {
                 // ab - bc = a
@@ -758,95 +375,21 @@ impl Subtraction<Element> for Element {
                 x.retain(|c| !y.contains(c));
                 TokenSet(x).simplify()
             }
-            (TokenSet(x), NotToken(y)) => {
-                // ab - !a = ab - b,c,d,e,f... = a
-                let mut x = x.clone();
-                x.retain(|c| c == y);
-                TokenSet(x).simplify()
-            }
             (TokenSet(x), NotTokenSet(y)) => {
                 let mut x = x.clone();
                 x.retain(|c| y.contains(c));
                 TokenSet(x).simplify()
             }
-            (NotToken(x), TokenSet(y)) => {
-                // !a - a,b,c = !a!b!c
-                let mut not_set = y.clone().into_iter().collect::<HashSet<_>>();
-                not_set.insert(*x);
-                let v = not_set.iter().cloned().collect::<Vec<_>>();
-                NotTokenSet(v.clone()).simplify()
-            }
-
             (NotTokenSet(x), TokenSet(y)) => {
                 // !a!b abc
-                let mut v = x.clone();
-                v.extend(y);
-                v.dedup();
-                NotTokenSet(v.clone()).simplify()
+                NotTokenSet(x.clone().union(y).cloned().collect()).simplify()
             }
 
-            (NotTokenSet(x), NotToken(y)) => {
-                // !a!b!c !a
-                let mut x = x.clone();
-                x.retain(|c| c != y);
-                NotTokenSet(x).simplify()
-            }
-
-            (NotToken(x), NotTokenSet(y)) => {
-                if y.contains(x) {
-                    None
-                } else {
-                    Some(NotToken(*x))
-                }
-            }
             (NotTokenSet(x), NotTokenSet(y)) => {
                 let mut x = x.clone();
                 x.retain(|c| !y.contains(c));
                 NotTokenSet(x).simplify()
             }
-        }
-    }
-    // TODO: define in terms of remainder!
-    fn is_valid(a: &Element, b: &Element) -> bool {
-        use Element::*;
-        match (a, b) {
-            (Token(_), Question)
-            | (NotToken(_), Question)
-            | (TokenSet(_), Question)
-            | (Token(_), Star)
-            | (NotToken(_), Star)
-            | (TokenSet(_), Star)
-            | (NotTokenSet(_), Question)
-            | (NotToken(_), NotToken(_))
-            | (NotToken(_), NotTokenSet(_))
-            | (NotTokenSet(_), NotToken(_))
-            | (NotTokenSet(_), NotTokenSet(_))
-            | (NotTokenSet(_), Star) => false,
-
-            (Question, Question) => true,
-            (Question, Star) => true,
-            (Star, Question) => true,
-            (Star, Star) => true,
-
-            (Star, Token(_)) | (Question, Token(_)) => true,
-            (Star, NotToken(_)) | (Question, NotToken(_)) => true,
-            (Star, NotTokenSet(_)) | (Question, NotTokenSet(_)) => true,
-            (Star, TokenSet(_)) | (Question, TokenSet(_)) => true,
-
-            (Token(x), Token(y)) => x != y,
-            (Token(x), NotToken(y)) => x == y,
-            (Token(x), NotTokenSet(y)) => y.len() == 1 && x == &y[0],
-
-            (TokenSet(y), Token(x)) | (Token(x), TokenSet(y)) => !y.iter().any(|c| x == c),
-            (TokenSet(x), TokenSet(y)) => !x.into_iter().any(|c| y.contains(&c)),
-            (TokenSet(x), NotToken(y)) => x.len() == 1 && &x[0] == y,
-            (TokenSet(x), NotTokenSet(y)) => y.len() == 1 && y[0] == x[0],
-
-            (NotToken(x), Token(y)) => x == y,
-            (NotToken(x), TokenSet(y)) => y.len() == 1 && &y[0] == x,
-
-            (NotTokenSet(x), Token(y)) => x.len() == 1 && y == &x[0],
-            (NotTokenSet(x), TokenSet(y)) => x.len() == 1 && y.len() == 1 && y[0] == x[0],
         }
     }
 }

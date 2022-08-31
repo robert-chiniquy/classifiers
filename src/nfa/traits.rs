@@ -45,8 +45,6 @@ where
 
 pub trait Subtraction<E> {
     fn difference(a: &E, b: &E) -> Option<E>;
-
-    fn is_valid(a: &E, b: &E) -> bool;
 }
 
 pub trait Universal {
