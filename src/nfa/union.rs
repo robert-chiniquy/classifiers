@@ -50,6 +50,12 @@ where
                             None => (),
                         }
                     }
+
+                    // 1. equality ✅
+                    // 2. subset ✅
+                    // 3. superset ✅
+                    // 4. intersection 
+
                     if !found {
                         // copy subtree to an arbitrary union entry node
                         // need to create an edge of the appropriate type from entry to a new

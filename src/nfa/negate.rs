@@ -54,36 +54,35 @@ where
         //     // 1 ---> 3
 
         // create dead end node and edges to it
-        let dead_end_edges: Result<Vec<Option<(NfaIndex, E)>>, _> = (&self.nodes)
+        let dead_end_edges: Vec<Option<(NfaIndex, E)>> = (&self.nodes)
             .iter()
-            .map(|(id, _node)| -> Result<_, String> {
+            .map(|(id, _node)| {
                 match &self.edges_from(*id).unwrap_or(&vec![])[..] {
                     [] => {
                         if self.edges_to(*id).iter().any(|(_, e)| self.edge(e).criteria == E::universal()) {
-                            Ok(None)
+                            None
                         } else {
-                            Ok(Some((*id, E::universal())))
+                            Some((*id, E::universal()))
                         }
                     }
                     list => list
                         .iter()
                         .map(|(_target, edge)| self.edge(edge).criteria.clone())
-                        .fold(Ok(Some(E::universal())), |acc, cur| match acc {
-                            Ok(None) => Ok(None),
-                            Ok(Some(acc)) => E::remainder(&acc, &cur),
-                            Err(_) => acc,
+                        .fold(Some(E::universal()), |acc, cur| match acc {
+                            None => None,
+                            Some(acc) => E::difference(&acc, &cur),
                         })
-                        .map(|r| r.map(|r| {
+                        .map(|r| {
                             println!("r: {r:?}");
                             return (*id, r)
-                        }))
+                        })
                 }
             })
             .collect();
 
         println!("dead_end_edges: {dead_end_edges:?}");
 
-        let stuff = dead_end_edges?.iter().flatten().cloned().collect::<Vec<(NfaIndex, E)>>();
+        let stuff = dead_end_edges.iter().flatten().cloned().collect::<Vec<(NfaIndex, E)>>();
         println!("stuff: {stuff:?}");
         for (source_node_id, criteria) in stuff {
             // TODO: M needs to be passed down to here...
@@ -97,8 +96,6 @@ where
                 self.add_edge(NfaEdge{ criteria: E::universal() }, target, final_target);
             }
         }
-
-
 
         return Ok(complete_dfa);
     }

@@ -105,7 +105,6 @@ impl From<&char> for Element {
     }
 }
 
-
 impl Accepts<Element> for Element {
     #[tracing::instrument(ret)]
     fn accepts(&self, l: Element) -> Result<bool, GeneralError> {
@@ -173,7 +172,6 @@ impl std::fmt::Display for Element {
         ))
     }
 }
-
 
 impl Product<Element> for Element {
     #[tracing::instrument(ret)]
@@ -608,7 +606,208 @@ impl Product<Element> for Element {
     }
 }
 
-impl Remaindery<Element> for Element {
+#[test]
+fn asdfasdf() {
+    use Element::*;
+
+    let mut r = NotToken('c');
+    r = Element::difference(&r, &Token('a')).unwrap();
+    r = Element::difference(&r, &Token('b')).unwrap();
+    assert_eq!(r, NotTokenSet(vec!['a', 'b', 'c']));
+
+    let mut r = Star;
+    r = Element::difference(&r, &Token('a')).unwrap();
+    r = Element::difference(&r, &Token('b')).unwrap();
+    assert_eq!(r, NotTokenSet(vec!['a', 'b']));
+
+    let mut r = Question;
+    r = Element::difference(&r, &Token('a')).unwrap();
+    r = Element::difference(&r, &Token('b')).unwrap();
+    assert_eq!(r, NotTokenSet(vec!['a', 'b']));
+
+    let mut r = TokenSet(vec!['a', 'b']);
+    r = Element::difference(&r, &Token('a')).unwrap();
+    assert_eq!(None, Element::difference(&r, &Token('b')));
+}
+
+impl Element {
+    fn simplify(&self) -> Option<Element> {
+        use Element::*;
+        match &self {
+            Question | Star | Token(_) | NotToken(_) => Some(self.clone()),
+            TokenSet(x) => {
+                if x.is_empty() {
+                    None
+                } else if x.len() == 1 {
+                    Some(Token(x[0]))
+                } else {
+                    Some(self.clone())
+                }
+            }
+            NotTokenSet(x) => {
+                if x.is_empty() {
+                    None
+                } else if x.len() == 1 {
+                    Some(NotToken(x[0]))
+                } else {
+                    Some(self.clone())
+                }
+            }
+        }
+    }
+}
+
+impl Subtraction<Element> for Element {
+    fn difference(a: &Element, b: &Element) -> Option<Element> {
+        use Element::*;
+        // println!("remainder: {a:?} v {b:?}");
+        // let err = Err(format!("too much stuff {a:?} {b:?}").to_string());
+
+        match (a, b) {
+            (Token(_), Question)
+            | (Token(_), Star)
+            | (NotToken(_), Question)
+            | (NotToken(_), Star)
+            | (TokenSet(_), Question)
+            | (TokenSet(_), Star)
+            | (NotTokenSet(_), Question)
+            | (NotTokenSet(_), Star) => None,
+
+            (Question, Question) => None,
+            (Question, Star) => None,
+            (Star, Question) => None,
+            (Star, Star) => None,
+            (NotToken(x), NotToken(y)) => {
+                if x == y {
+                    None
+                } else {
+                    Some(Token(*y))
+                }
+            }
+            (Star, Token(n)) | (Question, Token(n)) => Some(NotToken(*n)),
+            (Star, NotToken(n)) | (Question, NotToken(n)) => Some(Token(*n)),
+            (Star, NotTokenSet(v)) | (Question, NotTokenSet(v)) => Some(TokenSet(v.clone())),
+            (Star, TokenSet(y)) | (Question, TokenSet(y)) => Some(NotTokenSet(y.clone())),
+
+            (Token(x), Token(y)) => {
+                if x == y {
+                    None
+                } else {
+                    Some(Token(*x))
+                }
+            }
+            (Token(x), NotToken(y)) => {
+                //  a - !a
+                if x == y {
+                    Some(Token(*x))
+                // a - !b
+                } else {
+                    None
+                }
+            }
+            (Token(x), NotTokenSet(y)) => {
+                if y.contains(x) {
+                    Some(Token(*x))
+                } else {
+                    None
+                }
+            }
+
+            (NotToken(x), Token(y)) => {
+                // !a - a
+                if x == y {
+                    Some(NotToken(*x))
+                // !a - b
+                } else {
+                    Some(NotTokenSet(vec![*x, *y]))
+                }
+            }
+
+            (NotTokenSet(x), Token(y)) => {
+                //  !a!b a
+                if x.contains(y) {
+                    Some(NotTokenSet(x.clone()))
+                //  !a!b c
+                } else {
+                    let mut x = x.clone();
+                    x.push(*y);
+                    NotTokenSet(x).simplify()
+                }
+            }
+
+            (TokenSet(x), Token(y)) => {
+                // a,b - a
+                if x.contains(y) {
+                    let mut x = x.clone();
+                    x.retain(|c| c != y);
+                    TokenSet(x).simplify()
+                } else {
+                    Some(TokenSet(x.clone()))
+                }
+            }
+
+            (Token(x), TokenSet(y)) => {
+                if y.contains(x) {
+                    None
+                } else {
+                    Some(Token(*x))
+                }
+            }
+
+            (TokenSet(x), TokenSet(y)) => {
+                // ab - bc = a
+                let mut x = x.clone();
+                x.retain(|c| !y.contains(c));
+                TokenSet(x).simplify()
+            }
+            (TokenSet(x), NotToken(y)) => {
+                // ab - !a = ab - b,c,d,e,f... = a
+                let mut x = x.clone();
+                x.retain(|c| c == y);
+                TokenSet(x).simplify()
+            }
+            (TokenSet(x), NotTokenSet(y)) => {
+                let mut x = x.clone();
+                x.retain(|c| y.contains(c));
+                TokenSet(x).simplify()
+            }
+            (NotToken(x), TokenSet(y)) => {
+                // !a - a,b,c = !a!b!c
+                let mut not_set = y.clone().into_iter().collect::<HashSet<_>>();
+                not_set.insert(*x);
+                let v = not_set.iter().cloned().collect::<Vec<_>>();
+                NotTokenSet(v.clone()).simplify()
+            }
+
+            (NotTokenSet(x), TokenSet(y)) => {
+                // !a!b abc
+                let mut v = x.clone();
+                v.extend(y);
+                v.dedup();
+                NotTokenSet(v.clone()).simplify()
+            }
+
+            (NotTokenSet(x), NotToken(y)) => {
+                // !a!b!c !a
+                let mut x = x.clone();
+                x.retain(|c| c != y);
+                NotTokenSet(x).simplify()
+            }
+
+            (NotToken(x), NotTokenSet(y)) => {
+                if y.contains(x) {
+                    None
+                } else {
+                    Some(NotToken(*x))
+                }
+            }
+            (NotTokenSet(x), NotTokenSet(y)) => {
+                let mut x = x.clone();
+                x.retain(|c| !y.contains(c));
+                NotTokenSet(x).simplify()
+            }
+        }
+    }
     // TODO: define in terms of remainder!
     fn is_valid(a: &Element, b: &Element) -> bool {
         use Element::*;
@@ -651,139 +850,6 @@ impl Remaindery<Element> for Element {
             (NotTokenSet(x), Token(y)) => x.len() == 1 && y == &x[0],
             (NotTokenSet(x), TokenSet(y)) => x.len() == 1 && y.len() == 1 && y[0] == x[0],
         }
-    }
-    fn remainder(a: &Element, b: &Element) -> Result<Option<Element>, String> {
-        use Element::*;
-        // println!("remainder: {a:?} v {b:?}");
-        let err = Err(format!("to much stuff {a:?} {b:?}").to_string());
-
-        let d = match (a, b) {
-            (Token(_), Question)
-            | (Token(_), Star)
-            | (NotToken(_), Question)
-            | (NotToken(_), Star)
-            | (TokenSet(_), Question)
-            | (TokenSet(_), Star)
-            | (NotTokenSet(_), Question)
-            | (NotTokenSet(_), Star) => return err,
-
-            (Question, Question) => None,
-            (Question, Star) => None,
-            (Star, Question) => None,
-            (Star, Star) => None,
-            (NotToken(x), NotToken(y)) => {
-                if x == y {
-                    None
-                } else {
-                    return err;
-                }
-            }
-            (Star, Token(n)) | (Question, Token(n)) => Some(NotToken(n.clone())),
-            (Star, NotToken(n)) | (Question, NotToken(n)) => Some(Token(n.clone())),
-            (Star, NotTokenSet(v)) | (Question, NotTokenSet(v)) => Some(TokenSet(v.clone())),
-            (Star, TokenSet(y)) | (Question, TokenSet(y)) => Some(NotTokenSet(y.clone())),
-
-            (Token(x), Token(y)) => {
-                if x == y {
-                    return err;
-                } else {
-                    Some(NotTokenSet(vec![*x, *y]))
-                }
-            }
-            (Token(x), NotToken(y)) => {
-                if x == y {
-                    None
-                } else {
-                    return err;
-                }
-            }
-            (Token(x), NotTokenSet(y)) => {
-                if y.len() == 0 {
-                    Some(NotToken(*x))
-                } else if y.len() > 1 || x != &y[0] {
-                    return err;
-                } else {
-                    None
-                }
-            }
-
-            (NotToken(x), Token(y)) => {
-                if x == y {
-                    None
-                } else {
-                    return err;
-                }
-            }
-
-            (NotTokenSet(x), Token(y)) => {
-                if x.len() == 0 {
-                    Some(NotToken(*y))
-                } else if x.len() > 1 || y != &x[0] {
-                    return err;
-                } else {
-                    None
-                }
-            }
-
-            (TokenSet(y), Token(x)) | (Token(x), TokenSet(y)) => {
-                if y.iter().any(|c| x == c) {
-                    return err;
-                }
-                let mut y = y.clone();
-                y.push(x.clone());
-                Some(NotTokenSet(y))
-            }
-
-            (TokenSet(x), TokenSet(y)) => {
-                if x.clone().into_iter().any(|c| y.contains(&c)) {
-                    return err;
-                }
-                let mut x = x.clone();
-                x.extend(y.iter());
-                Some(NotTokenSet(x))
-            }
-            (TokenSet(x), NotToken(y)) => {
-                if x.len() != 1 || &x[0] != y {
-                    return err;
-                }
-                None
-            }
-            (TokenSet(x), NotTokenSet(y)) => {
-                if y.len() != 1 || y[0] != x[0] {
-                    return err;
-                }
-                None
-            }
-            (NotToken(x), TokenSet(y)) => {
-                if y.len() != 1 || &y[0] != x {
-                    return err;
-                }
-                None
-            }
-            (NotTokenSet(x), TokenSet(y)) => {
-                if x.len() != 1 || y.len() != 1 || y[0] != x[0] {
-                    return err;
-                }
-                None
-            }
-
-            (NotTokenSet(y), NotToken(x)) | (NotToken(x), NotTokenSet(y)) => {
-                if y.len() == 1 && x == &y[0] {
-                    None
-                } else {
-                    return err;
-                }
-            }
-            (NotTokenSet(x), NotTokenSet(y)) => {
-                if x == y {
-                    None
-                } else {
-                    return err;
-                }
-            }
-        };
-
-        Ok(d)
     }
 }
 

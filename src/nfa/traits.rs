@@ -25,7 +25,7 @@ pub trait ElementalLanguage<E>:
     + std::hash::Hash
     + Accepts<E>
     + Complement<E>
-    + Remaindery<E>
+    + Subtraction<E>
     + Product<E>
     + Universal
 {
@@ -43,8 +43,8 @@ where
     fn complement(&self) -> Option<Self>;
 }
 
-pub trait Remaindery<E> {
-    fn remainder(a: &E, b: &E) -> Result<Option<E>, String>;
+pub trait Subtraction<E> {
+    fn difference(a: &E, b: &E) -> Option<E>;
 
     fn is_valid(a: &E, b: &E) -> bool;
 }
