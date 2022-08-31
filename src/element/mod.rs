@@ -660,8 +660,6 @@ impl Element {
 impl Subtraction<Element> for Element {
     fn difference(a: &Element, b: &Element) -> Option<Element> {
         use Element::*;
-        // println!("remainder: {a:?} v {b:?}");
-        // let err = Err(format!("too much stuff {a:?} {b:?}").to_string());
 
         match (a, b) {
             (Token(_), Question)
