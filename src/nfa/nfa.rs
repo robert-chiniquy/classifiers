@@ -405,6 +405,11 @@ where
         i
     }
 
+    pub fn remove_edge(&mut self, edge: NfaIndex) {
+        // self.transitions
+        self.edges.remove(&edge).unwrap();
+    }
+
     /// Returns the edges from a given node in tuple format
     ///
     /// source node index -> (target node index, edge index)

@@ -154,42 +154,72 @@ where
 
         // assume only one - this is an Nfa.
         // Could do it to all of them to be even more Nfa-y but this is simpler.
-        match self.edge_by_kind(*working_node_id, &kind).pop() {
-            Some((target_node_id, _edge_id)) => {
-                // smash the new node with the existing node
-                self.node_mut(target_node_id).sum_mut(&new_node);
-                target_node_id
-            }
-            None => {
-                // the superset edge case
-                // When adding a new edge to a node, we need to ensure not only that there are no extant identical edges,
-                // but that no edge is a superset (accepting of the new edge kind). If an edge is a superset, we
-                // we need to visit it as if it were an identical edge type
-                let mut superset_edge = None;
-                if let Some(edges) = self.edges_from(*working_node_id) {
-                    for (t, e) in edges {
-                        let e = self.edge(e);
-                        if let Ok(true) = e.criteria.accepts(kind.clone()) {
-                            // superset case
-                            superset_edge = Some(*t);
-                        }
-                    }
+        let existing_edge = self.edge_by_kind(*working_node_id, &kind).pop();
+        if existing_edge.is_some() {
+            let (t, _) = existing_edge.unwrap();
+            self.node_mut(t).sum_mut(&new_node);
+            return t;
+        }
+        // the superset edge case
+        // When adding a new edge to a node, we need to ensure not only that there are no extant identical edges,
+        // but that no edge is a superset (accepting of the new edge kind). If an edge is a superset, we
+        // we need to visit it as if it were an identical edge type
+        let mut superset_edge = None;
+        if let Some(edges) = self.edges_from(*working_node_id) {
+            for (t, e) in edges {
+                let e = self.edge(e);
+                if let Ok(true) = e.criteria.accepts(kind.clone()) {
+                    // superset case
+                    superset_edge = Some(*t);
+                    println!("🍩🍩🍩🍩 found accepting path {:?} > {:?}", e.criteria, kind);
                 }
-                if let Some(t) = superset_edge {
-                    self.node_mut(t).sum_mut(&new_node);
-                    return t;
-                }
-
-                // TODO: the intersection case
-
-                // new node
-                // caller must pass in node of correct chirality, usually this will
-                // be from NfaNode.sum()
-                let new_node = self.add_node(new_node);
-                let _edge = self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node);
-                new_node
             }
         }
+        if let Some(t) = superset_edge {
+            self.node_mut(t).sum_mut(&new_node);
+            return t;
+        }
+
+        let mut subset = vec![];
+        if let Some(edges) = self.edges_from(*working_node_id) {
+            for (t, edge_id) in edges {
+                if let Ok(true) = kind.clone().accepts(self.edge(edge_id).criteria.clone()) {
+                    // superset case
+                    subset.push((*t, *edge_id));
+                    println!("🌮🌮🌮🌮 we are accepting path {:?} > {:?}", kind, self.edge(edge_id).criteria.clone());
+                }
+            }
+        }
+        if !subset.is_empty() {
+            let mut new_node = new_node.clone();
+            
+
+            
+            //  loop over overlapping edges
+            //  snip edge
+            //  sum_mut new_node
+            //  add all old outbound edges from t to new_node -> t
+            for (t, e) in subset {
+                self.remove_edge(e);
+                new_node.sum_mut(&self.node(t));
+                
+            }
+
+            let new_node_id = self.add_node(new_node);
+            let _edge = self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node_id);
+            return new_node_id;
+            
+        }
+
+
+        // TODO: the intersection case
+
+        // new node
+        // caller must pass in node of correct chirality, usually this will
+        // be from NfaNode.sum()
+        let new_node = self.add_node(new_node.clone());
+        let _edge = self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node);
+        new_node
     }
 
     // there is no convergence yet but this is convergence-safe
