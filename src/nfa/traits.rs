@@ -1,59 +1,6 @@
-/// E: Accepts<L> implies a C: Into<E> and L: IntoIterator<Item = C>
-pub trait Accepts<L> {
-    fn accepts(&self, l: L) -> Result<bool, GeneralError>;
-}
-
-pub trait Complement<L>
-where
-    Self: Sized,
-{
-    fn complement(&self) -> Option<Self>;
-}
-
-pub trait Remaindery<L> {
-    fn remainder(a: &L, b: &L) -> Result<Option<L>, String>;
-
-    fn is_valid(a: &L, b: &L) -> bool;
-}
-
-pub trait Universal {
-    fn universal() -> Self;
-}
-
-pub trait ElementalLanguage<E>:
-    Clone
-    + Default
-    + Eq
-    + std::fmt::Debug
-    + std::fmt::Display
-    + std::hash::Hash
-    + Accepts<E>
-    + Complement<E>
-    + Remaindery<E>
-    + Universal
-{
-    fn product(a: &Self, b: &Self) -> Result<Vec<NfaBranch<E>>, GeneralError>;
-}
-
-pub trait NodeSum {
-    fn sum(&self, other: &Self) -> Self;
-    fn sum_mut(&mut self, other: &Self);
-}
-
-// This should be implemented on a path of E
-// pub trait Invertible
-// where
-//     Self: Sized,
-// {
-//     fn inverse(&self) -> Vec<Self>;
-// }
-
 #[derive(Debug)]
 pub enum GeneralError {
     Error(String),
-    // UnrollLeft,d
-    // UnrollRight,
-    // UnrollLeftRight,
 }
 
 impl From<String> for GeneralError {
@@ -66,6 +13,54 @@ impl std::fmt::Display for GeneralError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!("{:?}", self))
     }
+}
+
+
+pub trait ElementalLanguage<E>:
+    Clone
+    + Default
+    + Eq
+    + std::fmt::Debug
+    + std::fmt::Display
+    + std::hash::Hash
+    + Accepts<E>
+    + Complement<E>
+    + Remaindery<E>
+    + Product<E>
+    + Universal
+{
+}
+
+/// E: Accepts<L> implies a C: Into<E> and L: IntoIterator<Item = C>
+pub trait Accepts<E> {
+    fn accepts(&self, l: E) -> Result<bool, GeneralError>;
+}
+
+pub trait Complement<E>
+where
+    Self: Sized,
+{
+    fn complement(&self) -> Option<Self>;
+}
+
+pub trait Remaindery<E> {
+    fn remainder(a: &E, b: &E) -> Result<Option<E>, String>;
+
+    fn is_valid(a: &E, b: &E) -> bool;
+}
+
+pub trait Universal {
+    fn universal() -> Self;
+}
+
+pub trait Product<E> {
+    fn product(a: &E, b: &E) -> Result<Vec<NfaBranch<E>>, GeneralError>;
+}
+
+
+pub trait NodeSum {
+    fn sum(&self, other: &Self) -> Self;
+    fn sum_mut(&mut self, other: &Self);
 }
 
 #[derive(Debug, PartialEq, Eq)]

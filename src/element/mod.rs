@@ -77,59 +77,105 @@ impl Complement<Element> for Element {
     }
 }
 
-impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
-where
-    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
-{
-    pub fn accepts_string(&self, s: &str) -> bool {
-        self.accepts(&str_to_chars(s)).unwrap()
-    }
+impl ElementalLanguage<Element> for Element {}
 
-    #[tracing::instrument(skip_all)]
-    pub fn from_str(s: &str, m: M) -> Self {
-        let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
-        nfa.entry.insert(prior);
-        for c in s.chars() {
-            let target = nfa.add_node(NfaNode::new(Terminal::Not));
-            let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
-            prior = target;
-        }
-        nfa.node_mut(prior).state = Terminal::Accept(m);
-        nfa
+impl Universal for Element {
+    fn universal() -> Self {
+        Element::Star
     }
 }
 
-// #[test]
-// fn test_one() {
-//     let sources = vec![("a", ["!a", "**"])];
-//     for (s, v) in sources {
-//         let p = path_from_str(s);
-//         let expected_paths: Vec<_> = v.into_iter().map(path_from_str).collect();
-//         assert_eq!(p.inverse(), expected_paths);
-//     }
-// }
-
-#[cfg(test)]
-fn path_from_str(s: &str) -> Vec<Element> {
-    let mut negate_next = false;
-    let mut v: Vec<_> = Default::default();
-    for c in s.chars() {
-        if c == '!' {
-            negate_next = true;
-            continue;
+impl From<char> for Element {
+    fn from(c: char) -> Self {
+        match c {
+            '*' => Element::Star,
+            '?' => Element::Question,
+            c => Element::Token(c),
         }
-        let mut e = c.into();
-        if negate_next {
-            e = Element::NotToken(c);
-            negate_next = false;
-        }
-        v.push(e);
     }
-    v
 }
 
-impl ElementalLanguage<Element> for Element {
+impl From<&char> for Element {
+    fn from(c: &char) -> Self {
+        match c {
+            '*' => Element::Star,
+            '?' => Element::Question,
+            c => Element::Token(*c),
+        }
+    }
+}
+
+
+impl Accepts<Element> for Element {
+    #[tracing::instrument(ret)]
+    fn accepts(&self, l: Element) -> Result<bool, GeneralError> {
+        use Element::*;
+        let r = match (self, &l) {
+            (x, y) if x == y => true,
+            // (Element::Question, Element::Question) => true,
+            (Star, _) => true,
+            (NotToken(b), Token(a)) => a != b,
+            (Question, NotToken(_)) => true,
+            (Question, Token(_)) => true,
+            (_, Star) => false,
+            // if len(seq) == 1, Q can match seq.  Otherwise, Q can't match multi chars.
+            (Token(_), NotToken(_)) => false,
+            (NotToken(_), Question) => false,
+            (Token(_), Question) => false,
+            (_, _) => false,
+        };
+        Ok(r)
+    }
+}
+
+// TODO: FIXME: terminal_on needs to decompose seqs of len > 1 into component token/not token to call this method
+impl Accepts<&char> for Element {
+    #[tracing::instrument(skip_all, ret)]
+    fn accepts(&self, l: &char) -> Result<bool, GeneralError> {
+        let r = match self {
+            Element::Question => true,
+            Element::Star => true,
+            Element::Token(n) => n == l,
+            Element::NotToken(n) => n != l,
+            Element::NotTokenSet(v) => !v.into_iter().any(|c| c == l),
+            Element::TokenSet(v) => v.into_iter().any(|c| c == l),
+        };
+        Ok(r)
+    }
+}
+
+impl Accepts<char> for Element {
+    #[tracing::instrument(skip_all, ret)]
+    fn accepts(&self, l: char) -> Result<bool, GeneralError> {
+        self.accepts(&l)
+    }
+}
+
+// TODO: Remove the dep on Default for this stuff
+impl Default for Element {
+    fn default() -> Self {
+        Element::Star
+    }
+}
+
+impl std::fmt::Display for Element {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "{}",
+            match self {
+                Element::Question => "?".to_string(),
+                Element::Star => "*".to_string(),
+                Element::Token(c) => format!("{c}"),
+                Element::NotToken(c) => format!("!{c}"),
+                Element::NotTokenSet(v) => format!("!`{v:?}`"),
+                Element::TokenSet(v) => format!("`{v:?}`"),
+            }
+        ))
+    }
+}
+
+
+impl Product<Element> for Element {
     #[tracing::instrument(ret)]
     fn product(a: &Self, b: &Self) -> Result<Vec<NfaBranch<Element>>, GeneralError> {
         use EdgeTransition::*;
@@ -562,32 +608,8 @@ impl ElementalLanguage<Element> for Element {
     }
 }
 
-impl Universal for Element {
-    fn universal() -> Self {
-        Element::Star
-    }
-}
-
-impl From<char> for Element {
-    fn from(c: char) -> Self {
-        match c {
-            '*' => Element::Star,
-            '?' => Element::Question,
-            c => Element::Token(c),
-        }
-    }
-}
-
-impl From<&char> for Element {
-    fn from(c: &char) -> Self {
-        match c {
-            '*' => Element::Star,
-            '?' => Element::Question,
-            c => Element::Token(*c),
-        }
-    }
-}
 impl Remaindery<Element> for Element {
+    // TODO: define in terms of remainder!
     fn is_valid(a: &Element, b: &Element) -> bool {
         use Element::*;
         match (a, b) {
@@ -765,70 +787,25 @@ impl Remaindery<Element> for Element {
     }
 }
 
-impl Accepts<Element> for Element {
-    #[tracing::instrument(ret)]
-    fn accepts(&self, l: Element) -> Result<bool, GeneralError> {
-        use Element::*;
-        let r = match (self, &l) {
-            (x, y) if x == y => true,
-            // (Element::Question, Element::Question) => true,
-            (Star, _) => true,
-            (NotToken(b), Token(a)) => a != b,
-            (Question, NotToken(_)) => true,
-            (Question, Token(_)) => true,
-            (_, Star) => false,
-            // if len(seq) == 1, Q can match seq.  Otherwise, Q can't match multi chars.
-            (Token(_), NotToken(_)) => false,
-            (NotToken(_), Question) => false,
-            (Token(_), Question) => false,
-            (_, _) => false,
-        };
-        Ok(r)
+impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
+where
+    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
+{
+    pub fn accepts_string(&self, s: &str) -> bool {
+        self.accepts(&str_to_chars(s)).unwrap()
     }
-}
 
-// TODO: FIXME: terminal_on needs to decompose seqs of len > 1 into component token/not token to call this method
-impl Accepts<&char> for Element {
-    #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: &char) -> Result<bool, GeneralError> {
-        let r = match self {
-            Element::Question => true,
-            Element::Star => true,
-            Element::Token(n) => n == l,
-            Element::NotToken(n) => n != l,
-            Element::NotTokenSet(v) => !v.into_iter().any(|c| c == l),
-            Element::TokenSet(v) => v.into_iter().any(|c| c == l),
-        };
-        Ok(r)
-    }
-}
-
-impl Accepts<char> for Element {
-    #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: char) -> Result<bool, GeneralError> {
-        self.accepts(&l)
-    }
-}
-
-// TODO: Remove the dep on Default for this stuff
-impl Default for Element {
-    fn default() -> Self {
-        Element::Star
-    }
-}
-
-impl std::fmt::Display for Element {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "{}",
-            match self {
-                Element::Question => "?".to_string(),
-                Element::Star => "*".to_string(),
-                Element::Token(c) => format!("{c}"),
-                Element::NotToken(c) => format!("!{c}"),
-                Element::NotTokenSet(v) => format!("!`{v:?}`"),
-                Element::TokenSet(v) => format!("`{v:?}`"),
-            }
-        ))
+    #[tracing::instrument(skip_all)]
+    pub fn from_str(s: &str, m: M) -> Self {
+        let mut nfa: Self = Default::default();
+        let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
+        nfa.entry.insert(prior);
+        for c in s.chars() {
+            let target = nfa.add_node(NfaNode::new(Terminal::Not));
+            let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
+            prior = target;
+        }
+        nfa.node_mut(prior).state = Terminal::Accept(m);
+        nfa
     }
 }
