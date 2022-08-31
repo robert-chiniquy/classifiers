@@ -33,13 +33,7 @@ where
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: std::fmt::Display
-        + Eq
-        + Clone
-        + std::hash::Hash
-        + Default
-        + std::fmt::Debug
-        + BranchProduct<E>,
+    E: ElementalLanguage<E>,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     #[tracing::instrument(skip_all)]
@@ -94,7 +88,7 @@ where
     }
 
     #[tracing::instrument(skip(self), ret)]
-    pub fn accepts<C>(&self, path: &Vec<C>) -> Result<bool, MatchingError>
+    pub fn accepts<C>(&self, path: &Vec<C>) -> Result<bool, GeneralError>
     where
         E: Accepts<C>,
         C: Into<E> + Clone + std::fmt::Debug,
@@ -109,7 +103,7 @@ where
         &self,
         single_path: &Vec<C>,
         filter: &impl Fn(&LRSemantics) -> bool,
-    ) -> Result<bool, MatchingError>
+    ) -> Result<bool, GeneralError>
     where
         E: Accepts<C>,
         C: Into<E> + Clone + std::fmt::Debug,
@@ -184,15 +178,7 @@ fn test_accepting_paths() {
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    Vec<E>: Invertible,
-    E: std::fmt::Display
-        + std::fmt::Debug
-        + Clone
-        + BranchProduct<E>
-        + Eq
-        + std::hash::Hash
-        + Default
-        + Universal,
+    E: ElementalLanguage<E>,
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
 {
     pub fn size(&self) -> usize {

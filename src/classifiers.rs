@@ -33,17 +33,7 @@ where
     where
         C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
         L: IntoIterator<Item = C>,
-        Vec<E>: Invertible,
-        E: Accepts<E> + Complement<E> + Remaindery<E>,
-        E: std::fmt::Display
-            + std::fmt::Debug
-            + Clone
-            + PartialEq
-            + Eq
-            + Universal
-            + BranchProduct<E>
-            + std::hash::Hash
-            + std::default::Default,
+        E: ElementalLanguage<E>,
     {
         // 1. compile
         // 2. relate NFAs (product of NFAs, search terminal states)
@@ -96,20 +86,10 @@ where
     #[tracing::instrument(skip_all)]
     pub fn compile<E, M, C>(&self, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>
     where
-        E: std::fmt::Display
-            + std::fmt::Debug
-            + Clone
-            + Universal
-            + BranchProduct<E>
-            + Eq
-            + std::hash::Hash
-            + std::default::Default,
-        E: Accepts<E>,
-        E: Complement<E> + Remaindery<E>,
+        E: ElementalLanguage<E>,
         C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
         L: IntoIterator<Item = C>,
         M: std::fmt::Debug + Clone + PartialOrd + Ord + Default,
-        Vec<E>: Invertible,
     {
         match self {
             Classifier::Universal => Nfa::universal(m),

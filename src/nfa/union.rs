@@ -2,14 +2,7 @@ use super::*;
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: Eq
-        + Clone
-        + std::hash::Hash
-        + Default
-        + std::fmt::Debug
-        + BranchProduct<E>
-        + Accepts<E>
-        + std::fmt::Display,
+    E: ElementalLanguage<E>,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     /// A union is a non-mimimal NFA with the same resulting states for every input as

@@ -100,22 +100,15 @@ where
     }
 }
 
-impl Invertible for Vec<Element> {
-    #[tracing::instrument(ret)]
-    fn inverse(&self) -> Vec<Self> {
-        todo!();
-    }
-}
-
-#[test]
-fn test_one() {
-    let sources = vec![("a", ["!a", "**"])];
-    for (s, v) in sources {
-        let p = path_from_str(s);
-        let expected_paths: Vec<_> = v.into_iter().map(path_from_str).collect();
-        assert_eq!(p.inverse(), expected_paths);
-    }
-}
+// #[test]
+// fn test_one() {
+//     let sources = vec![("a", ["!a", "**"])];
+//     for (s, v) in sources {
+//         let p = path_from_str(s);
+//         let expected_paths: Vec<_> = v.into_iter().map(path_from_str).collect();
+//         assert_eq!(p.inverse(), expected_paths);
+//     }
+// }
 
 #[cfg(test)]
 fn path_from_str(s: &str) -> Vec<Element> {
@@ -136,9 +129,9 @@ fn path_from_str(s: &str) -> Vec<Element> {
     v
 }
 
-impl BranchProduct<Element> for Element {
+impl ElementalLanguage<Element> for Element {
     #[tracing::instrument(ret)]
-    fn product(a: &Self, b: &Self) -> Result<Vec<NfaBranch<Element>>, MatchingError> {
+    fn product(a: &Self, b: &Self) -> Result<Vec<NfaBranch<Element>>, GeneralError> {
         use EdgeTransition::*;
         use Element::*;
 
@@ -774,7 +767,7 @@ impl Remaindery<Element> for Element {
 
 impl Accepts<Element> for Element {
     #[tracing::instrument(ret)]
-    fn accepts(&self, l: Element) -> Result<bool, MatchingError> {
+    fn accepts(&self, l: Element) -> Result<bool, GeneralError> {
         use Element::*;
         let r = match (self, &l) {
             (x, y) if x == y => true,
@@ -797,7 +790,7 @@ impl Accepts<Element> for Element {
 // TODO: FIXME: terminal_on needs to decompose seqs of len > 1 into component token/not token to call this method
 impl Accepts<&char> for Element {
     #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: &char) -> Result<bool, MatchingError> {
+    fn accepts(&self, l: &char) -> Result<bool, GeneralError> {
         let r = match self {
             Element::Question => true,
             Element::Star => true,
@@ -812,7 +805,7 @@ impl Accepts<&char> for Element {
 
 impl Accepts<char> for Element {
     #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: char) -> Result<bool, MatchingError> {
+    fn accepts(&self, l: char) -> Result<bool, GeneralError> {
         self.accepts(&l)
     }
 }

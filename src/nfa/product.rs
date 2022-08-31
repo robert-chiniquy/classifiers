@@ -2,14 +2,7 @@ use super::*;
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    E: Eq
-        + Clone
-        + std::hash::Hash
-        + Default
-        + std::fmt::Debug
-        + BranchProduct<E>
-        + std::fmt::Display
-        + Accepts<E>,
+    E: ElementalLanguage<E>,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     #[tracing::instrument(skip(self, other))]

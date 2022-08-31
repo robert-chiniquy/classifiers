@@ -1,12 +1,6 @@
 /// E: Accepts<L> implies a C: Into<E> and L: IntoIterator<Item = C>
 pub trait Accepts<L> {
-    fn accepts(&self, l: L) -> Result<bool, MatchingError>;
-}
-
-pub trait Remaindery<L> {
-    fn remainder(a: &L, b: &L) -> Result<Option<L>, String>;
-
-    fn is_valid(a: &L, b: &L) -> bool;
+    fn accepts(&self, l: L) -> Result<bool, GeneralError>;
 }
 
 pub trait Complement<L>
@@ -16,8 +10,29 @@ where
     fn complement(&self) -> Option<Self>;
 }
 
+pub trait Remaindery<L> {
+    fn remainder(a: &L, b: &L) -> Result<Option<L>, String>;
+
+    fn is_valid(a: &L, b: &L) -> bool;
+}
+
 pub trait Universal {
     fn universal() -> Self;
+}
+
+pub trait ElementalLanguage<E>:
+    Clone
+    + Default
+    + Eq
+    + std::fmt::Debug
+    + std::fmt::Display
+    + std::hash::Hash
+    + Accepts<E>
+    + Complement<E>
+    + Remaindery<E>
+    + Universal
+{
+    fn product(a: &Self, b: &Self) -> Result<Vec<NfaBranch<E>>, GeneralError>;
 }
 
 pub trait NodeSum {
@@ -26,35 +41,31 @@ pub trait NodeSum {
 }
 
 // This should be implemented on a path of E
-pub trait Invertible
-where
-    Self: Sized,
-{
-    fn inverse(&self) -> Vec<Self>;
-}
+// pub trait Invertible
+// where
+//     Self: Sized,
+// {
+//     fn inverse(&self) -> Vec<Self>;
+// }
 
 #[derive(Debug)]
-pub enum MatchingError {
+pub enum GeneralError {
     Error(String),
-    // UnrollLeft,
+    // UnrollLeft,d
     // UnrollRight,
     // UnrollLeftRight,
 }
 
-impl From<String> for MatchingError {
+impl From<String> for GeneralError {
     fn from(s: String) -> Self {
-        MatchingError::Error(s)
+        GeneralError::Error(s)
     }
 }
 
-impl std::fmt::Display for MatchingError {
+impl std::fmt::Display for GeneralError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!("{:?}", self))
     }
-}
-
-pub trait BranchProduct<E>: Accepts<E> {
-    fn product(a: &Self, b: &Self) -> Result<Vec<NfaBranch<E>>, MatchingError>;
 }
 
 #[derive(Debug, PartialEq, Eq)]

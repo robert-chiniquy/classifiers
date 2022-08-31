@@ -117,7 +117,7 @@ where
     L: std::fmt::Debug,
 {
     #[tracing::instrument(ret)]
-    fn accepts(&self, l: L) -> Result<bool, MatchingError> {
+    fn accepts(&self, l: L) -> Result<bool, GeneralError> {
         self.criteria.accepts(l)
     }
 }

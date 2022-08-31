@@ -37,23 +37,12 @@ fn test_a_v_q() {
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
-    Vec<E>: Invertible,
-    E: std::fmt::Display
-        + std::fmt::Debug
-        + Clone
-        + Eq
-        + std::hash::Hash
-        + std::default::Default
-        + BranchProduct<E>
-        + Universal
-        + Accepts<E>
-        + Complement<E>
-        + Remaindery<E>,
+    E: ElementalLanguage<E>
 {
     /// These maybe mostly makes a DFA by adding edges for all words in the language.
     //  All terminal paths must end with stars.
     #[tracing::instrument(skip(self))]
-    pub fn create_all_transitions(&mut self) -> Result<Self, MatchingError> {
+    pub fn create_all_transitions(&mut self) -> Result<Self, GeneralError> {
         let complete_dfa: Self = self.clone();
 
         // for (node_id, _node) in &self.nodes {
