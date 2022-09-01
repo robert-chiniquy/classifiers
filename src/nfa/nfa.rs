@@ -1,21 +1,9 @@
-// pub type NfaIndex = usize;
+// use a u32 for one and a u64 for the other so that it's impossible to accidentally treat a node id as an edge id or vice-versa
 pub type NodeId = u32;
 pub type EdgeId = u64;
 
 use super::*;
 
-// Negation by Complementarity plan
-// - Drop 2 element types: NotLoopSeq and NotCharacterClass
-// - Element product must get smarter to make DFAs
-//   - Q: is a new element type needed here?
-//     - Define remainder types for every combination of elements
-// - Explicit rejecting state
-// - to_dfa() method on NFA which ensures exhaustivity of outbound edges from every node
-//   - all NFA nodes get a remainder edge which goes to a single dead end state.
-//      - a * has no remainder
-//      - ? has a remainder of * ?
-//   - runs of *..** must be compressed into ?..?*
-// Q: Validate logic around Accept/Reject semantics under complementation
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Nfa<N, E>
@@ -31,7 +19,6 @@ where
     /// source node index -> Vec<(target node index, edge index)>
     // TODO: just split into 2 maps
     pub(crate) transitions: BTreeMap<NodeId, Vec<(NodeId, EdgeId)>>,
-    // pub(crate) chirality: BTreeMap<NfaIndex, LRSemantics>,
 }
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
