@@ -109,7 +109,7 @@ where
                         if let Some(v) = self.edges_from(i) {
                             for (target, edge) in v {
                                 let edge = self.edge(edge);
-                                let accepts = edge.accepts(c.clone().to_owned())?;
+                                let accepts = edge.accepts(c);
                                 if accepts {
                                     // push target onto stack
                                     stack.push((*target, l.clone().collect()));

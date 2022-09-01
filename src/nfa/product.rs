@@ -250,7 +250,7 @@ where
         if let Some(edges) = self.edges_from(*working_node_id) {
             for (t, e) in edges {
                 let e = self.edge(e);
-                if let Ok(true) = e.criteria.accepts(kind.clone()) {
+                if e.criteria.accepts(&kind) {
                     // superset case
                     superset_edge.push(*t);
                     println!("🍩🍩🍩🍩 found accepting path {:?} > {:?}", e.criteria, kind);
@@ -265,7 +265,7 @@ where
         let mut subset = vec![];
         if let Some(edges) = self.edges_from(*working_node_id) {
             for (t, edge_id) in edges {
-                if let Ok(true) = kind.clone().accepts(self.edge(edge_id).criteria.clone()) {
+                if kind.clone().accepts(&self.edge(edge_id).criteria) {
                     // superset case
                     subset.push((*t, *edge_id));
                     println!("🌮🌮🌮🌮 we are accepting path {:?} > {:?}", kind, self.edge(edge_id).criteria.clone());

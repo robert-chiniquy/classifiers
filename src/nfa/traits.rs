@@ -27,13 +27,14 @@ pub trait ElementalLanguage<E>:
     + Complement<E>
     + Subtraction<E>
     + Product<E>
+    + Disjointsome<E>
     + Universal
 {
 }
 
 /// E: Accepts<L> implies a C: Into<E> and L: IntoIterator<Item = C>
 pub trait Accepts<E> {
-    fn accepts(&self, l: E) -> Result<bool, GeneralError>;
+    fn accepts(&self, l: &E) -> bool;
 }
 
 pub trait Complement<E>
@@ -41,6 +42,11 @@ where
     Self: Sized,
 {
     fn complement(&self) -> Option<Self>;
+}
+
+pub trait Disjointsome<E>
+{
+    fn are_disjoint(set: Vec<E>) -> bool;
 }
 
 pub trait Subtraction<E> {

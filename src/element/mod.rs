@@ -1,9 +1,11 @@
 // pub(crate) use negation::*;
 
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
-use std::{collections::HashSet, ops::Sub};
 
 use super::*;
+
+const ASCII_TOTAL_CHARS: usize = 128;
 
 // TODO: explicit Hash impl
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -53,6 +55,85 @@ impl Element {
     }
 }
 
+#[test]
+fn test_disjoint() {
+    assert!(Element::are_disjoint(vec![
+        Element::tokens(vec!['a', 'b']),
+        Element::tokens(vec!['c', 'd']),
+    ]));
+
+    assert!(!Element::are_disjoint(vec![
+        Element::tokens(vec!['a', 'b']),
+        Element::tokens(vec!['a', 'c']),
+    ]));
+
+    assert!(Element::are_disjoint(vec![
+        Element::not_tokens(vec!['a', 'b']),
+        Element::tokens(vec!['a', 'b']),
+    ]));
+
+    assert!(!Element::are_disjoint(vec![
+        Element::not_tokens(vec!['a', 'b']),
+        Element::tokens(vec!['a', 'b']),
+        Element::not_tokens(vec!['c']),
+    ]));
+
+    let all_ascii = (0_u8..128)
+        .collect::<Vec<u8>>()
+        .into_iter()
+        .map(|n| n as char)
+        .collect::<Vec<char>>();
+
+    let v = all_ascii.clone()[0..127]
+        .iter()
+        .cloned()
+        .collect::<Vec<char>>();
+    let c = 127_u8 as char;
+
+    assert!(Element::are_disjoint(vec![
+        Element::not_tokens(v),
+        Element::not_tokens(vec![c]),
+    ]));
+}
+impl Disjointsome<Element> for Element {
+    fn are_disjoint(v: Vec<Element>) -> bool {
+        use Element::*;
+        for i in 0..v.len() - 1 {
+            let e1 = &v[i];
+            for e2 in v[i + 1..].iter() {
+                match (e1, e2) {
+                    (_, Star) | (_, Question) | (Question, _) | (Star, _) => {
+                        return false;
+                    }
+                    (TokenSet(x), TokenSet(y)) => {
+                        if !x.is_disjoint(&y) {
+                            return false;
+                        }
+                    }
+                    // ab vs !c!d -> intersect
+                    // ab vs !a -> intersect
+                    // a vs !a  -> not intersect
+                    (NotTokenSet(y), TokenSet(x)) | (TokenSet(x), NotTokenSet(y)) => {
+                        if x != y {
+                            return false;
+                        }
+                    }
+                    // !a vs !b -> intersect
+                    // !a vs !a -> intersect
+                    // !a,,!c,!d...!z vs  !b
+                    (NotTokenSet(x), NotTokenSet(y)) => {
+                        println!("{} {} {}", x.len(), y.len(), x.is_disjoint(&y));
+                        if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(&y) {
+                            return false;
+                        }
+                    }
+                };
+            }
+        }
+        return true;
+    }
+}
+
 impl Complement<Element> for Element {
     fn complement(&self) -> Option<Self> {
         use Element::*;
@@ -95,39 +176,39 @@ impl From<&char> for Element {
 
 impl Accepts<Element> for Element {
     #[tracing::instrument(ret)]
-    fn accepts(&self, l: Element) -> Result<bool, GeneralError> {
+    fn accepts(&self, l: &Element) -> bool {
         use Element::*;
-        let r = match (self, &l) {
-            (x, y) if x == y => true,
+        match (self, &l) {
+            (x, y) if x == *y => true,
             (Star, _) => true,
             (_, Star) => false,
             (Question, _) => true,
             (_, Question) => false,
             // Are all other ASCII characters specified in the not token set?
-            (TokenSet(x), NotTokenSet(y)) => 128 - y.len() == x.len() && y.sub(x).len() == y.len(),
+            (TokenSet(x), NotTokenSet(y)) => {
+                x.len() + y.len() == ASCII_TOTAL_CHARS && x.is_disjoint(&y)
+            }
             (NotTokenSet(x), TokenSet(y)) => x.is_disjoint(y),
             (_, _) => false,
-        };
-        Ok(r)
+        }
     }
 }
 
 impl Accepts<&char> for Element {
     #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: &char) -> Result<bool, GeneralError> {
-        let r = match self {
+    fn accepts(&self, l: &&char) -> bool {
+        match self {
             Element::Question => true,
             Element::Star => true,
-            Element::NotTokenSet(v) => !v.into_iter().any(|c| c == l),
-            Element::TokenSet(v) => v.into_iter().any(|c| c == l),
-        };
-        Ok(r)
+            Element::NotTokenSet(v) => !v.into_iter().any(|c| *c == **l),
+            Element::TokenSet(v) => v.into_iter().any(|c| *c == **l),
+        }
     }
 }
 
 impl Accepts<char> for Element {
     #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: char) -> Result<bool, GeneralError> {
+    fn accepts(&self, l: &char) -> bool {
         self.accepts(&l)
     }
 }
@@ -271,12 +352,15 @@ impl Product<Element> for Element {
                 ]
             }
         };
-        branches.into_iter().filter(|b| match &b.kind {
-            Question => true,
-            Star => true,
-            TokenSet(v) => !v.is_empty(),
-            NotTokenSet(v) => !v.is_empty(),
-        }).collect()
+        branches
+            .into_iter()
+            .filter(|b| match &b.kind {
+                Question => true,
+                Star => true,
+                TokenSet(v) => !v.is_empty(),
+                NotTokenSet(v) => !v.is_empty(),
+            })
+            .collect()
     }
 }
 
@@ -324,6 +408,7 @@ impl Element {
                 if x.is_empty() {
                     None
                 } else {
+                    // TODO: see if we get rid of all ascii chars??
                     Some(self.clone())
                 }
             }
