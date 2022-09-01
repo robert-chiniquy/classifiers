@@ -31,7 +31,7 @@ where
         // for every edge on every node in self.enter,
         // for every edge on every node in other.enter,
         // now a 3-tuple, (self node id, other node id, union node id)
-        let mut stack: Vec<(&NfaIndex, &NfaIndex, NfaIndex)> = Default::default();
+        let mut stack: Vec<(&NodeId, &NodeId, NodeId)> = Default::default();
         for self_id in &self.entry {
             for other_id in &other.entry {
                 stack.push((self_id, other_id, _entry));
@@ -140,7 +140,7 @@ where
     /// returns the index of the new node if an edge is created, or the pre-existing node
     /// which was rationalized to if not.
     #[tracing::instrument(skip_all)]
-    fn branch(&mut self, working_node_id: &NfaIndex, kind: E, new_node: NfaNode<M>) -> Vec<NfaIndex> {
+    fn branch(&mut self, working_node_id: &NodeId, kind: E, new_node: NfaNode<M>) -> Vec<NodeId> {
         // rationalization: there should only be 1 branch of a given kind from a given node
         //
         // rationalize the potential branches against each other
@@ -307,9 +307,9 @@ where
     #[tracing::instrument(skip_all)]
     pub(crate) fn copy_subtree(
         &mut self,
-        copy_target_node: &NfaIndex,
+        copy_target_node: &NodeId,
         source: &Self,
-        source_node: &NfaIndex,
+        source_node: &NodeId,
     ) {
         // Step 1 may be needed later for various weird edge cases,
         // probably need to make a change elsewhere to have it here

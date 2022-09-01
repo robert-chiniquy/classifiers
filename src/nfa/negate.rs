@@ -51,7 +51,7 @@ where
         //     // 1 ---> 3
 
         // create dead end node and edges to it
-        let dead_end_edges: Vec<Option<(NfaIndex, E)>> = (&self.nodes)
+        let dead_end_edges: Vec<Option<(NodeId, E)>> = (&self.nodes)
             .iter()
             .map(
                 |(id, _node)| match &self.edges_from(*id).unwrap_or(&vec![])[..] {
@@ -87,7 +87,8 @@ where
             .iter()
             .flatten()
             .cloned()
-            .collect::<Vec<(NfaIndex, E)>>();
+            .collect::<Vec<(NodeId, E)>>();
+
         println!("stuff: {stuff:?}");
         for (source_node_id, criteria) in stuff {
             // TODO: M needs to be passed down to here...

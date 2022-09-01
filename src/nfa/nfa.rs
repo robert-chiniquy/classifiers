@@ -1,4 +1,6 @@
-pub type NfaIndex = usize;
+// pub type NfaIndex = usize;
+pub type NodeId = u32;
+pub type EdgeId = u64;
 
 use super::*;
 
@@ -20,14 +22,15 @@ pub struct Nfa<N, E>
 where
     E: Eq + std::hash::Hash + Default,
 {
-    pub(crate) count: usize,
+    pub(crate) node_count: NodeId,
+    pub(crate) edge_count: EdgeId,
     // Convenience for now, later switch to only a single initial node?
-    pub(crate) entry: BTreeSet<NfaIndex>,
-    pub(crate) nodes: BTreeMap<NfaIndex, N>,
-    pub(crate) edges: BTreeMap<NfaIndex, E>,
+    pub(crate) entry: BTreeSet<NodeId>,
+    pub(crate) nodes: BTreeMap<NodeId, N>,
+    pub(crate) edges: BTreeMap<EdgeId, E>,
     /// source node index -> Vec<(target node index, edge index)>
     // TODO: just split into 2 maps
-    pub(crate) transitions: BTreeMap<NfaIndex, Vec<(NfaIndex, NfaIndex)>>,
+    pub(crate) transitions: BTreeMap<NodeId, Vec<(NodeId, EdgeId)>>,
     // pub(crate) chirality: BTreeMap<NfaIndex, LRSemantics>,
 }
 
@@ -109,7 +112,7 @@ where
         C: Into<E> + Clone + std::fmt::Debug,
     {
         for i in &self.entry {
-            let i: NfaIndex = *i as NfaIndex;
+            let i: NodeId = *i;
             let mut stack: Vec<_> = Default::default();
             stack.push((i, single_path.clone()));
             while let Some((i, s)) = stack.pop() {
@@ -145,7 +148,7 @@ where
     }
 
     #[tracing::instrument(skip(self), ret)]
-    pub fn node_accepting(&self, i: NfaIndex) -> bool {
+    pub fn node_accepting(&self, i: NodeId) -> bool {
         match &self.node(i).state {
             Terminal::Not => false,
             Terminal::Accept(_) => true,
@@ -154,7 +157,7 @@ where
     }
 
     #[tracing::instrument(skip(self), ret)]
-    pub fn node_rejecting(&self, i: NfaIndex) -> bool {
+    pub fn node_rejecting(&self, i: NodeId) -> bool {
         match &self.node(i).state {
             Terminal::Not => false,
             Terminal::Accept(_) => false,
@@ -227,7 +230,7 @@ where
         E: Accepts<E>,
     {
         // (current node id, current path: Vec<_>)
-        let mut stack: Vec<(NfaIndex, Vec<E>)> = self
+        let mut stack: Vec<(NodeId, Vec<E>)> = self
             .entry
             .iter()
             .cloned()
@@ -338,38 +341,43 @@ where
     E: Eq + Clone + std::hash::Hash + std::default::Default,
 {
     // #[tracing::instrument(skip_all)]
-    pub(crate) fn index(&mut self) -> NfaIndex {
-        self.count += 1;
-        self.count as NfaIndex
+    pub(crate) fn node_index(&mut self) -> NodeId {
+        self.node_count += 1;
+        self.node_count
+    }
+
+    pub(crate) fn edge_index(&mut self) -> EdgeId {
+        self.edge_count += 1;
+        self.edge_count
     }
 
     // #[tracing::instrument(skip_all)]
-    pub fn add_node(&mut self, n: N) -> NfaIndex {
-        let i = self.index();
+    pub fn add_node(&mut self, n: N) -> NodeId {
+        let i = self.node_index();
         self.nodes.insert(i, n);
         i
     }
 
     // #[tracing::instrument(skip_all)]
-    pub fn node(&self, i: NfaIndex) -> &N {
+    pub fn node(&self, i: NodeId) -> &N {
         self.nodes.get(&i).unwrap()
     }
 
     /// Panic if unknown
     // #[tracing::instrument(skip_all)]
-    pub fn node_mut(&mut self, i: NfaIndex) -> &mut N {
+    pub fn node_mut(&mut self, i: NodeId) -> &mut N {
         self.nodes.get_mut(&i).unwrap()
     }
 
     // #[tracing::instrument(skip_all)]
-    pub fn edge(&self, i: &NfaIndex) -> &E {
+    pub fn edge(&self, i: &EdgeId) -> &E {
         self.edges.get(i).unwrap()
     }
 
     #[tracing::instrument(skip_all)]
     /// E is the edge weight, usually NfaEdge
-    pub fn add_edge(&mut self, edge: E, source: NfaIndex, target: NfaIndex) -> NfaIndex {
-        let i = self.index();
+    pub fn add_edge(&mut self, edge: E, source: NodeId, target: NodeId) -> EdgeId {
+        let i = self.edge_index();
         self.edges.insert(i, edge);
         let entry = match self.transitions.entry(source) {
             Entry::Occupied(o) => o.into_mut(),
@@ -379,7 +387,7 @@ where
         i
     }
 
-    pub fn remove_edge(&mut self, edge: NfaIndex) {
+    pub fn remove_edge(&mut self, edge: EdgeId) {
         // self.transitions
         self.edges.remove(&edge).unwrap();
     }
@@ -389,13 +397,13 @@ where
     /// source node index -> (target node index, edge index)
     #[inline]
     // #[tracing::instrument(skip_all, ret)]
-    pub fn edges_from(&self, i: NfaIndex) -> Option<&Vec<(NfaIndex, NfaIndex)>> {
+    pub fn edges_from(&self, i: NodeId) -> Option<&Vec<(NodeId, EdgeId)>> {
         self.transitions.get(&i)
     }
 
     #[inline]
     // #[tracing::instrument(skip_all, ret)]
-    pub fn edges_to(&self, i: NfaIndex) -> Vec<(NfaIndex, NfaIndex)> {
+    pub fn edges_to(&self, i: NodeId) -> Vec<(NodeId, EdgeId)> {
         self.transitions
             .iter()
             .filter(|(_, edges)| edges.iter().any(|(target, _)| target == &i))
@@ -411,7 +419,7 @@ where
     N: Clone,
     E: Eq + Clone + std::hash::Hash + std::default::Default,
 {
-    pub(super) fn edge_by_kind(&self, i: NfaIndex, kind: &E) -> Vec<(NfaIndex, NfaIndex)> {
+    pub(super) fn edge_by_kind(&self, i: NodeId, kind: &E) -> Vec<(NodeId, EdgeId)> {
         self.transitions
             .get(&i)
             .unwrap_or(&vec![])
@@ -424,27 +432,29 @@ where
     #[tracing::instrument(skip_all)]
     pub fn concatenate(&self, other: &Self) -> Self {
         let mut cat = self.clone();
-        cat.count += other.count;
-        cat.count += 1;
-        cat.entry.extend(other.entry.iter().map(|i| i + self.count));
+        cat.node_count += other.node_count;
+        cat.node_count += 1;
+        cat.edge_count += other.edge_count;
+        cat.edge_count += 1;
+        cat.entry.extend(other.entry.iter().map(|i| i + self.node_count));
         cat.nodes.extend(
             other
                 .nodes
                 .iter()
-                .map(|(i, n)| ((i + self.count), n.clone())),
+                .map(|(i, n)| ((i + self.node_count), n.clone())),
         );
         cat.edges.extend(
             other
                 .edges
                 .iter()
-                .map(|(i, e)| ((i + self.count), e.clone())),
+                .map(|(i, e)| ((i + self.edge_count), e.clone())),
         );
         cat.transitions
             .extend(other.transitions.iter().map(|(i, v)| {
                 (
-                    (i + self.count),
+                    (i + self.node_count),
                     v.iter()
-                        .map(|(t, e)| ((t + self.count), (e + self.count)))
+                        .map(|(t, e)| ((t + self.node_count), (e + self.edge_count)))
                         .collect(),
                 )
             }));
@@ -485,7 +495,8 @@ where
 {
     fn default() -> Self {
         Self {
-            count: Default::default(),
+            node_count: Default::default(),
+            edge_count: Default::default(),
             entry: Default::default(),
             nodes: Default::default(),
             edges: Default::default(),

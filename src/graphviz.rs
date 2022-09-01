@@ -46,7 +46,7 @@ where
     }
 }
 
-fn nodename(i: &NfaIndex) -> String {
+fn nodename(i: &NodeId) -> String {
     format!("node_{i}")
 }
 
