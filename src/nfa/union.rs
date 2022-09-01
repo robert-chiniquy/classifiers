@@ -5,11 +5,6 @@ where
     E: ElementalLanguage<E>,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
-
-     pub fn safe_add_edge(&mut self, edge: NfaEdge<E>, source: NodeId, target: NodeId) -> EdgeId {
-        self.branch(&source, edge.criteria.clone(), self.node(target).clone());
-        self.add_edge(edge, source, target)
-    }
     /// A union is a non-mimimal NFA with the same resulting states for every input as
     /// either of the two input NFAs.
     // Whatever invariant is enforced here, assume that the inputs have that invariant
@@ -60,12 +55,15 @@ where
                     // 1. equality ✅
                     // 2. subset ✅
                     // 3. superset ✅
-                    // 4. intersection 
+                    // 4. intersection
 
                     if found {
                         continue;
                     }
-                    println!("found a matchign entry, doing a copy subtree for {}", other_edge_kind.criteria.clone());
+                    println!(
+                        "found a matchign entry, doing a copy subtree for {}",
+                        other_edge_kind.criteria.clone()
+                    );
                     let source = *union.entry.iter().next().unwrap();
                     // copy subtree to an arbitrary union entry node
                     // need to create an edge of the appropriate type from entry to a new
@@ -141,7 +139,11 @@ where
                     *other_id,
                     new_node,
                 );
-                union.branch(other_id, other_edge_kind.criteria.clone(), other.node(*other_edge_target).clone());
+                union.branch(
+                    other_id,
+                    other_edge_kind.criteria.clone(),
+                    other.node(*other_edge_target).clone(),
+                );
                 union.copy_subtree(&new_node, other, other_edge_target);
             }
         }
@@ -153,7 +155,17 @@ where
     ///
     /// returns the index of the new node if an edge is created, or the pre-existing node
     /// which was rationalized to if not.
-    pub fn branch(&mut self, working_node_id: &NodeId, kind: E, new_node: NfaNode<M>) -> Vec<NodeId> {
+    pub fn safe_add_edge(&mut self, edge: NfaEdge<E>, source: NodeId, target: NodeId) -> EdgeId {
+        self.branch(&source, edge.criteria.clone(), self.node(target).clone());
+        self.add_edge(edge, source, target)
+    }
+
+    pub fn branch(
+        &mut self,
+        working_node_id: &NodeId,
+        kind: E,
+        new_node: NfaNode<M>,
+    ) -> Vec<NodeId> {
         // rationalization: there should only be 1 branch of a given kind from a given node
         //
         // rationalize the potential branches against each other
@@ -180,13 +192,13 @@ where
                     take the edge
                     combine node states
                     return !b -> target
-                
+
                 subset:
-                    a vs !b 
-                    a & !a!b... 
-                    a stays the same, 
-                    combine node states at a-> target with our node, 
-                    make new edge and add new node, 
+                    a vs !b
+                    a & !a!b...
+                    a stays the same,
+                    combine node states at a-> target with our node,
+                    make new edge and add new node,
                     return both node_ids
 
                 intersection:
@@ -199,12 +211,11 @@ where
                     add edge to our node
                     return nodeids for targets for [!a!b, a]
                 */
-                let _is_intersection =  p.len() == 3;
+                let _is_intersection = p.len() == 3;
                 for branch in &p {
                     // branch.kind;
                     // println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (equality branch??) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);
                     match (&branch.left, &branch.right) {
-                         
                         // could be a Vs a OR !a VS !a OR * VS a OR !a vs !b  -> !a!b
                         (Advance, Advance) => {
                             // we need to merge both branches and change the kind of e.criteria to this...
@@ -212,55 +223,60 @@ where
                             if _is_intersection {
                                 println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (add edge, copy subtree, merge our state) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);
                             } else {
-                                println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (change their e, merge our state??) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);    
+                                println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (change their e, merge our state??) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);
                             }
-                        },
+                        }
                         (Advance, Stop) => {
                             // a,b,c VS !a,!b
                             //  we change kind to branch.kind (will often be the same thing)
                             //  we attempt to add the edge and node
                             if &kind != &branch.kind {
-                                println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (change our kind) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);    
+                                println!(
+                                    "\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (change our kind) \n",
+                                    &branch.left, &branch.right, &kind, e.criteria, branch.kind
+                                );
                             } else {
-                                println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (no change our kind) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);    
+                                println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (no change our kind) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);
                             }
-                        },
+                        }
                         (Stop, Advance) => {
                             //  we change e.kind to branch.kind (will often be the same thing)
                             //  we do nothing else
                             if &e.criteria != &branch.kind {
-                                println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (change their kind) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);    
+                                println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (change their kind) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);
                             } else {
-                                println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (no change their kind) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);    
+                                println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (no change their kind) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);
                             }
-                        },
+                        }
 
                         (Advance, Stay) => {
                             // in this case, we need to merge both branches and change the kind of e.criteria to this...
-                            println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (change our kind??) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);
-                        },
+                            println!(
+                                "\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (change our kind??) \n",
+                                &branch.left, &branch.right, &kind, e.criteria, branch.kind
+                            );
+                        }
                         (Stay, Advance) => {
-                            println!("\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (change their kind??) \n", &branch.left, &branch.right, &kind, e.criteria, branch.kind);
-                        },
-                        (Stay, Stay) => unreachable!(), // stars only
-                        (Stay, Stop) => unreachable!(),
-                        (Stop, Stay) => unreachable!(),
-                        (Stop, Stop) => unreachable!(),
-                   }
+                            println!(
+                                "\n🌮🌮🌮🌮 ({:?}, {:?}) : {} VS {} -> {} (change their kind??) \n",
+                                &branch.left, &branch.right, &kind, e.criteria, branch.kind
+                            );
+                        }
+                        (Stay, Stay) | (Stay, Stop) | (Stop, Stay) | (Stop, Stop) => unreachable!(),
+                    }
                 }
                 return vec![];
             }
         }
 
-
         /*
-    
-        !a 
+
+        !a
         !b
 
         *a
         a*
-        
+
         aa
         ??*
 
@@ -277,12 +293,17 @@ where
                 if e.criteria.accepts(&kind) {
                     // superset case
                     superset_edge.push(*t);
-                    println!("🍩🍩🍩🍩 found accepting path {:?} > {:?}", e.criteria, kind);
+                    println!(
+                        "🍩🍩🍩🍩 found accepting path {:?} > {:?}",
+                        e.criteria, kind
+                    );
                 }
             }
         }
         if !superset_edge.is_empty() {
-            superset_edge.iter().for_each(|t| self.node_mut(*t).sum_mut(&new_node));
+            superset_edge
+                .iter()
+                .for_each(|t| self.node_mut(*t).sum_mut(&new_node));
             return superset_edge;
         }
 
@@ -292,7 +313,11 @@ where
                 if kind.clone().accepts(&self.edge(edge_id).criteria) {
                     // superset case
                     subset.push((*t, *edge_id));
-                    println!("🌮🌮🌮🌮 we are accepting path {:?} > {:?}", kind, self.edge(edge_id).criteria.clone());
+                    println!(
+                        "🌮🌮🌮🌮 we are accepting path {:?} > {:?}",
+                        kind,
+                        self.edge(edge_id).criteria.clone()
+                    );
                 }
             }
         }
@@ -300,7 +325,7 @@ where
             let mut new_node = new_node.clone();
             //  ? vs a, b...
             //  add our state to a -> target, b -> target
-            //  change kind to  ? - a - b, 
+            //  change kind to  ? - a - b,
             //  add our edge
             //  add our node
 
@@ -311,11 +336,13 @@ where
 
             let new_node_id = self.add_node(new_node);
             let _edge = self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node_id);
-            let mut r = subset.into_iter().map(|(t,_)| t.clone()).collect::<Vec<_>>();
+            let mut r = subset
+                .into_iter()
+                .map(|(t, _)| t.clone())
+                .collect::<Vec<_>>();
             r.push(new_node_id);
             return r;
         }
-
 
         // TODO: the intersection case
 
@@ -361,7 +388,8 @@ where
 fn test_union() {
     let a = Nfa::from_symbols(&[Element::not_tokens(&['a'])], ());
     let b = Nfa::from_symbols(&[Element::not_tokens(&['b'])], ());
-    let n = a.union(&b);
-    n.graphviz_file("unioned.dot", "!a union !b");
+    let n1 = a.union(&b);
+    n1.graphviz_file("unioned1.dot", "!a union !b");
+    let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
+    n2.graphviz_file("unioned2.dot", "!a U !b U !c");
 }
-
