@@ -4,7 +4,6 @@ pub type EdgeId = u64;
 
 use super::*;
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Nfa<N, E>
 where
@@ -152,7 +151,6 @@ where
         }
     }
 }
-
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
@@ -361,6 +359,10 @@ where
         self.edges.get(i).unwrap()
     }
 
+    pub fn edge_mut(&mut self, i: EdgeId) -> Option<&mut E> {
+        self.edges.get_mut(&i)
+    }
+
     #[tracing::instrument(skip_all)]
     /// E is the edge weight, usually NfaEdge
     pub fn add_edge(&mut self, edge: E, source: NodeId, target: NodeId) -> EdgeId {
@@ -375,8 +377,18 @@ where
         i
     }
 
-    pub fn remove_edge(&mut self, edge: EdgeId) {
-        // self.transitions
+    pub fn remove_edge(&mut self, source: NodeId, edge: EdgeId) {
+        let t = self.transitions.get(&source);
+        if t.is_some() {
+            self.transitions.insert(
+                source,
+                t.unwrap()
+                    .iter()
+                    .filter(|(_, edge_id)| *edge_id != edge)
+                    .cloned()
+                    .collect(),
+            );
+        }
         self.edges.remove(&edge).unwrap();
     }
 
@@ -412,7 +424,10 @@ where
             .get(&i)
             .unwrap_or(&vec![])
             .iter()
-            .filter(|(_target_node_id, edge_id)| self.edge(edge_id).criteria == *kind)
+            .filter(|(_target_node_id, edge_id)| match self.edges.get(edge_id) {
+                Some(e) => e.criteria == *kind,
+                None => false,
+            })
             .cloned()
             .collect()
     }
@@ -424,7 +439,8 @@ where
         cat.node_count += 1;
         cat.edge_count += other.edge_count;
         cat.edge_count += 1;
-        cat.entry.extend(other.entry.iter().map(|i| i + self.node_count));
+        cat.entry
+            .extend(other.entry.iter().map(|i| i + self.node_count));
         cat.nodes.extend(
             other
                 .nodes

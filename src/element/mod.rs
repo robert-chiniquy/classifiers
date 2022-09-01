@@ -7,7 +7,13 @@ use super::*;
 
 const ASCII_TOTAL_CHARS: usize = 128;
 
-// TODO: explicit Hash impl
+#[test]
+fn test_equility() {
+    let a = Element::not_tokens(&['a', 'b', 'c']);
+    let b = Element::not_tokens(&['a', 'b', 'c']);
+    assert_eq!(a, b);
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Element {
     Question,
@@ -57,42 +63,52 @@ impl Element {
 
 #[test]
 fn test_disjoint() {
+    // assert!(Element::are_disjoint(vec![
+    //     Element::tokens(&['a', 'b']),
+    //     Element::tokens(&['c', 'd']),
+    // ]));
+
+    // assert!(!Element::are_disjoint(vec![
+    //     Element::tokens(&['a', 'b']),
+    //     Element::tokens(&['a', 'c']),
+    // ]));
+
+    // assert!(Element::are_disjoint(vec![
+    //     Element::not_tokens(&['a', 'b']),
+    //     Element::tokens(&['a', 'b']),
+    // ]));
+
+    // assert!(!Element::are_disjoint(vec![
+    //     Element::not_tokens(&['a', 'b']),
+    //     Element::tokens(&['a', 'b']),
+    //     Element::not_tokens(&['c']),
+    // ]));
+
+    // let all_ascii = (0_u8..128)
+    //     .collect::<Vec<u8>>()
+    //     .into_iter()
+    //     .map(|n| n as char)
+    //     .collect::<Vec<char>>();
+
+    // let v = all_ascii.clone()[0..127]
+    //     .iter()
+    //     .cloned()
+    //     .collect::<Vec<char>>();
+    // let c = 127_u8 as char;
+
+    // assert!(Element::are_disjoint(vec![
+    //     Element::not_tokens(&v),
+    //     Element::not_tokens(&[c]),
+    // ]));
+
     assert!(Element::are_disjoint(vec![
-        Element::tokens(&['a', 'b']),
-        Element::tokens(&['c', 'd']),
+        Element::token('a'),
+        Element::not_tokens(&['a', 'b']),
     ]));
 
     assert!(!Element::are_disjoint(vec![
-        Element::tokens(&['a', 'b']),
-        Element::tokens(&['a', 'c']),
-    ]));
-
-    assert!(Element::are_disjoint(vec![
-        Element::not_tokens(&['a', 'b']),
-        Element::tokens(&['a', 'b']),
-    ]));
-
-    assert!(!Element::are_disjoint(vec![
-        Element::not_tokens(&['a', 'b']),
-        Element::tokens(&['a', 'b']),
-        Element::not_tokens(&['c']),
-    ]));
-
-    let all_ascii = (0_u8..128)
-        .collect::<Vec<u8>>()
-        .into_iter()
-        .map(|n| n as char)
-        .collect::<Vec<char>>();
-
-    let v = all_ascii.clone()[0..127]
-        .iter()
-        .cloned()
-        .collect::<Vec<char>>();
-    let c = 127_u8 as char;
-
-    assert!(Element::are_disjoint(vec![
-        Element::not_tokens(&v),
-        Element::not_tokens(&[c]),
+        Element::token('a'),
+        Element::not_tokens(&['b']),
     ]));
 }
 impl Disjointsome<Element> for Element {
@@ -110,11 +126,16 @@ impl Disjointsome<Element> for Element {
                             return false;
                         }
                     }
-                    // ab vs !c!d -> intersect
-                    // ab vs !a -> intersect
-                    // a vs !a  -> not intersect
-                    (NotTokenSet(y), TokenSet(x)) | (TokenSet(x), NotTokenSet(y)) => {
-                        if x != y {
+                    // ab vs !c!d -> no
+                    // ab vs !a -> no
+                    // a vs !a  -> yes
+                    // a vs !a!b -> yes
+                    // a vs !b -> yes
+
+                    (TokenSet(x), NotTokenSet(y)) | (NotTokenSet(y), TokenSet(x))  => {
+                        // all of left must be in right
+                        // println!("{:?} {:?} {}", x, y, !y.is_superset(&x));
+                        if !y.is_superset(&x) {
                             return false;
                         }
                     }
@@ -122,7 +143,6 @@ impl Disjointsome<Element> for Element {
                     // !a vs !a -> intersect
                     // !a,,!c,!d...!z vs  !b
                     (NotTokenSet(x), NotTokenSet(y)) => {
-                        println!("{} {} {}", x.len(), y.len(), x.is_disjoint(&y));
                         if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(&y) {
                             return false;
                         }

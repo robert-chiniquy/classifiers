@@ -59,7 +59,7 @@ strict digraph G {{
     splines = true;
     fontsize="40";
 
-    bgcolor = "#111111";
+    bgcolor = "#555555";
     node[color = "#FFFFFF"];
     node[fontcolor = "#FFFFFF"];
     edge[color = "#FFFFFF", fontcolor="#FFFFFF"];
