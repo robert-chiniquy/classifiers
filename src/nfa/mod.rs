@@ -13,7 +13,7 @@ pub use traits::*;
 pub use product::*;
 pub use union::*;
 
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, HashSet};
+use std::collections::{btree_map::Entry, BTreeMap, HashSet};
 
 #[allow(unused_imports)]
 use crate::*;

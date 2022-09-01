@@ -30,7 +30,7 @@ where
             }
         }
         for (id, node) in &self.nodes {
-            let nodelabel = if self.entry.contains(id) {
+            let nodelabel = if self.entry == *id {
                 "enter".to_string()
             } else {
                 node.to_string()

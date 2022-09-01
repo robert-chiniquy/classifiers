@@ -10,36 +10,36 @@ fn test_accepts() {
     assert!(!d1.accepts(&str_to_chars("abcc")).unwrap());
 }
 
-#[test]
-fn test_graphviz_one() {
-    use std::io::Write;
+// #[test]
+// fn test_graphviz_one() {
+//     use std::io::Write;
 
-    test_setup();
-    // let asdf: Nfa<NfaNode<()>, NfaEdge<Element>> = Nfa::from_language(str_to_chars("XYZ"), ());
-    let lhs = Classifier::Any(BTreeSet::from_iter([
-        Classifier::Literal(str_to_chars("ABC")),
-        Classifier::Literal(str_to_chars("XYZ")),
-    ]));
+//     test_setup();
+//     // let asdf: Nfa<NfaNode<()>, NfaEdge<Element>> = Nfa::from_language(str_to_chars("XYZ"), ());
+//     let lhs = Classifier::Any(BTreeSet::from_iter([
+//         Classifier::Literal(str_to_chars("ABC")),
+//         Classifier::Literal(str_to_chars("XYZ")),
+//     ]));
 
-    // not ABC and not XYZ
-    let rhs = Classifier::And(BTreeSet::from_iter([
-        Classifier::not(Classifier::Literal(str_to_chars("ABC"))),
-        Classifier::not(Classifier::Literal(str_to_chars("XYZ"))),
-    ]));
+//     // not ABC and not XYZ
+//     let rhs = Classifier::And(BTreeSet::from_iter([
+//         Classifier::not(Classifier::Literal(str_to_chars("ABC"))),
+//         Classifier::not(Classifier::Literal(str_to_chars("XYZ"))),
+//     ]));
 
-    let c1: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile::<Element, (), char>(&lhs, ());
-    let c2: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile(&rhs, ());
+//     let c1: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile::<Element, (), char>(&lhs, ());
+//     let c2: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile(&rhs, ());
 
-    let cat = c1.concatenate(&c2);
+//     let cat = c1.concatenate(&c2);
 
-    let g = graphviz_wrap(cat.graphviz(), "c1, c2");
-    let mut output = std::fs::File::create("./one.dot").unwrap();
-    assert!(output.write_all(g.as_bytes()).is_ok());
+//     let g = graphviz_wrap(cat.graphviz(), "c1, c2");
+//     let mut output = std::fs::File::create("./one.dot").unwrap();
+//     assert!(output.write_all(g.as_bytes()).is_ok());
 
-    let _adsf: Vec<char> = "OOABC".chars().collect();
+//     let _adsf: Vec<char> = "OOABC".chars().collect();
 
-    assert_eq!(Relation::Disjoint, lhs.relation::<Element, char>(&rhs));
-}
+//     assert_eq!(Relation::Disjoint, lhs.relation::<Element, char>(&rhs));
+// }
 
 #[test]
 fn test_intersection_of_heterogenous_states() {

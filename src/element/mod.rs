@@ -503,7 +503,7 @@ where
     pub fn from_str(s: &str, m: M) -> Self {
         let mut nfa: Self = Default::default();
         let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
-        nfa.entry.insert(prior);
+        nfa.entry = prior;
         for c in s.chars() {
             let target = nfa.add_node(NfaNode::new(Terminal::Not));
             let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);

@@ -7,11 +7,6 @@ where
 {
  
     pub fn product(&self, other: &Self) -> Self {
-        if self.entry.is_empty() {
-            return other.clone();
-        } else if other.entry.is_empty() {
-            return self.clone();
-        }
 
         // TODO: handle unrolling here?
         // make a copy of self to unroll and use in the remainder of product
@@ -20,23 +15,14 @@ where
         // - visit each edge pair which would occur in product and only unroll the needed?
         let mut union: Self = Default::default();
 
-        // println!(
-        //     "I union stuff: {} {} {}",
-        //     self.nodes.len(),
-        //     other.nodes.len(),
-        //     union.nodes.len()
-        // );
-        let _entry = union.add_node(Default::default());
-        union.entry.insert(_entry);
+
+        union.entry = union.add_node(Default::default());
         // for every edge on every node in self.enter,
         // for every edge on every node in other.enter,
         // now a 3-tuple, (self node id, other node id, union node id)
         let mut stack: Vec<(&NodeId, &NodeId, NodeId)> = Default::default();
-        for self_id in &self.entry {
-            for other_id in &other.entry {
-                stack.push((self_id, other_id, _entry));
-            }
-        }
+        stack.push((&self.entry, &other.entry, union.entry));
+            
         // start
         // stack: first left, first right, target, ignore target
         // evaluate edges, each of the two nodes has 1 edge, you see like a * A product,
@@ -53,28 +39,24 @@ where
             visited.insert((self_id, other_id));
             let self_edges = self.edges_from(*self_id);
             let other_edges = other.edges_from(*other_id);
-            if (self_edges == None && other_edges == None)
-                || (self_edges.is_some()
-                    && other_edges.is_some()
-                    && self_edges.as_ref().unwrap().is_empty()
-                    && other_edges.as_ref().unwrap().is_empty())
+            if self_edges.is_empty() && other_edges.is_empty()
             {
                 continue;
             }
 
-            if self_edges == None || self_edges.as_ref().unwrap().is_empty() {
-                union.copy_subtree(&working_union_node_id, other, other_id);
+            if self_edges.is_empty() {
+                union.copy_subtree(other, other_id, &working_union_node_id);
                 continue;
             }
 
-            if other_edges == None || other_edges.as_ref().unwrap().is_empty() {
-                union.copy_subtree(&working_union_node_id, self, self_id);
+            if other_edges.is_empty() {
+                union.copy_subtree(self, self_id, &working_union_node_id);
                 continue;
             }
 
-            for (self_target_node_id, self_edge_id) in self.edges_from(*self_id).unwrap() {
+            for (self_target_node_id, self_edge_id) in self.edges_from(*self_id) {
                 let self_edge = self.edge(self_edge_id);
-                for (other_target_node_id, other_edge_id) in other.edges_from(*other_id).unwrap() {
+                for (other_target_node_id, other_edge_id) in other.edges_from(*other_id) {
                     // println!("{} {} {other_id}",self_edge_id, other_edge_id);
                     let other_edge = other.edge(other_edge_id);
                     // Robert suggests: Do not unroll here.
@@ -99,7 +81,7 @@ where
                                 self.node(*left_node_id).sum(other.node(*right_node_id))
                             }
                         };
-                        let  next_working_ids =
+                        let next_working_ids =
                             union.branch(&working_union_node_id, kind.clone(), new_node.clone());
 
                         // debug_assert!(
@@ -114,12 +96,12 @@ where
                             (None, None) => unreachable!(),
                             (None, Some(right_node_id)) => {
                                 // the right hand side is other
-                                next_working_ids.iter().for_each(|id| union.copy_subtree(&id, other, right_node_id))
+                                next_working_ids.iter().for_each(|id| union.copy_subtree( other, right_node_id, &id))
                                 
                             }
                             (Some(left_node_id), None) => {
                                 // the left hand side is self
-                                next_working_ids.iter().for_each(|id| union.copy_subtree(&id, self, left_node_id))
+                                next_working_ids.iter().for_each(|id| union.copy_subtree( self, left_node_id, &id))
                             }
                             (Some(left_node_id), Some(right_node_id)) => {
                                 next_working_ids.iter().for_each(|id| stack.push((left_node_id, right_node_id, *id)))   

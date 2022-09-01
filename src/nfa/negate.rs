@@ -55,7 +55,7 @@ where
         let dead_end_edges: Vec<Option<(NodeId, E)>> = (&self.nodes)
             .iter()
             .map(
-                |(id, _node)| match &self.edges_from(*id).unwrap_or(&vec![])[..] {
+                |(id, _node)| match &self.edges_from(*id)[..] {
                     [] => {
                         if self
                             .edges_to(*id)

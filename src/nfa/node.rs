@@ -141,7 +141,9 @@ impl<E: std::fmt::Display + Eq> std::fmt::Display for NfaEdge<E> {
 
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum Terminal<M> {
-    Not,
+    Not, 
+    // NotButFormerlyWasAccept,
+    // NotButFormerlyWasReject,
     Accept(M),
     Reject(M),
 }

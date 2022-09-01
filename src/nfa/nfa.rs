@@ -12,7 +12,7 @@ where
     pub(crate) node_count: NodeId,
     pub(crate) edge_count: EdgeId,
     // Convenience for now, later switch to only a single initial node?
-    pub(crate) entry: BTreeSet<NodeId>,
+    pub(crate) entry: NodeId,
     pub(crate) nodes: BTreeMap<NodeId, N>,
     pub(crate) edges: BTreeMap<EdgeId, E>,
     /// source node index -> Vec<(target node index, edge index)>
@@ -33,7 +33,7 @@ where
     {
         let mut nfa: Self = Default::default();
         let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
-        nfa.entry.insert(prior);
+        nfa.entry = prior;
         for c in l {
             let target = nfa.add_node(NfaNode::new(Terminal::Not));
             let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
@@ -47,7 +47,7 @@ where
     pub fn from_symbols(l: &[E], m: M) -> Self {
         let mut nfa: Self = Default::default();
         let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
-        nfa.entry.insert(prior);
+        nfa.entry = prior;
         for criteria in l {
             let target = nfa.add_node(NfaNode::new(Terminal::Not));
             let _ = nfa.add_edge(
@@ -97,39 +97,37 @@ where
         E: Accepts<C>,
         C: Into<E> + Clone + std::fmt::Debug,
     {
-        for i in &self.entry {
-            let i: NodeId = *i;
-            let mut stack: Vec<_> = Default::default();
-            stack.push((i, single_path.clone()));
-            while let Some((i, s)) = stack.pop() {
-                let mut l = s.clone().into_iter();
-                match &l.next() {
-                    Some(c) => {
-                        if let Some(v) = self.edges_from(i) {
-                            for (target, edge) in v {
-                                let edge = self.edge(edge);
-                                let accepts = edge.accepts(c);
-                                if accepts {
-                                    // push target onto stack
-                                    stack.push((*target, l.clone().collect()));
-                                }
-                            }
+
+        let i: NodeId = self.entry;
+        let mut stack: Vec<_> = Default::default();
+        stack.push((i, single_path.clone()));
+        while let Some((i, s)) = stack.pop() {
+            let mut l = s.clone().into_iter();
+            match &l.next() {
+                Some(c) => {
+                    for (target, edge) in self.edges_from(i) {
+                        let edge = self.edge(edge);
+                        let accepts = edge.accepts(c);
+                        if accepts {
+                            // push target onto stack
+                            stack.push((*target, l.clone().collect()));
                         }
                     }
-                    // Could just push these results onto a return stack instead
-                    // just collect all terminal states period and return them instead of a bool
-                    // TODO: remove use of Default here
-                    None => {
-                        // todo: clarify, maybe accepting should not check for rejection
-                        if self.node_rejecting(i) {
-                            return Ok(false);
-                        } else if self.node_accepting(i) {
-                            return Ok(filter(&self.node(i).chirality));
-                        }
+                }
+                // Could just push these results onto a return stack instead
+                // just collect all terminal states period and return them instead of a bool
+                // TODO: remove use of Default here
+                None => {
+                    // todo: clarify, maybe accepting should not check for rejection
+                    if self.node_rejecting(i) {
+                        return Ok(false);
+                    } else if self.node_accepting(i) {
+                        return Ok(filter(&self.node(i).chirality));
                     }
                 }
             }
         }
+
         Ok(false)
     }
 
@@ -179,7 +177,7 @@ where
         }
         let union = a.product(&b);
         // println!("XXX\n{a:?}\n{b:?}\n{union:?}");
-        // FIXME accepting_paths is illogical, this must respect all terminal states
+        // FIXME accepting_paths is illogical, this must respect all terminal states (Accept & Reject, but not Not)
         // ... .terminal_paths() -> Paths (where Paths additionally stores terminal state and/or M)
         let paths = union.accepting_paths();
 
@@ -215,12 +213,8 @@ where
         E: Accepts<E>,
     {
         // (current node id, current path: Vec<_>)
-        let mut stack: Vec<(NodeId, Vec<E>)> = self
-            .entry
-            .iter()
-            .cloned()
-            .map(|e| (e, Default::default()))
-            .collect();
+        let mut stack: Vec<(_, Vec<E>)> = vec![(self.entry, Default::default())];
+
         let mut paths: Paths<E> = Default::default();
 
         while let Some((current_node, current_path)) = stack.pop() {
@@ -245,12 +239,10 @@ where
                 }
             }
 
-            if let Some(edges) = self.edges_from(current_node) {
-                for (next_node, edge_id) in edges {
-                    let mut next_path = current_path.to_vec();
-                    next_path.push(self.edge(edge_id).criteria.clone());
-                    stack.push((*next_node, next_path));
-                }
+            for (next_node, edge_id) in self.edges_from(current_node) {
+                let mut next_path = current_path.to_vec();
+                next_path.push(self.edge(edge_id).criteria.clone());
+                stack.push((*next_node, next_path));
             }
         }
         for path in paths.l.iter() {
@@ -316,10 +308,12 @@ where
             prior,
             target,
         );
-        nfa.entry.insert(prior);
+        nfa.entry = prior;
         nfa
     }
 }
+
+static EMPTY_VECTOR: Vec<(NodeId, EdgeId)> = Vec::new();
 
 impl<N, E> Nfa<N, E>
 where
@@ -397,8 +391,8 @@ where
     /// source node index -> (target node index, edge index)
     #[inline]
     // #[tracing::instrument(skip_all, ret)]
-    pub fn edges_from(&self, i: NodeId) -> Option<&Vec<(NodeId, EdgeId)>> {
-        self.transitions.get(&i)
+    pub fn edges_from(&self, i: NodeId) -> &Vec<(NodeId, EdgeId)> {
+        self.transitions.get(&i).unwrap_or(&EMPTY_VECTOR)
     }
 
     #[inline]
@@ -412,6 +406,54 @@ where
             .flatten()
             .collect()
     }
+
+    pub fn destination(&self, e: &EdgeId) -> Option<NodeId> {
+        let n = self.transitions
+            .iter()
+            .filter(|(_, edges)| edges.iter().any(|(_target, edge_id)| e == edge_id ))
+            .map(|(n, _)| *n)
+            .collect::<Vec<_>>();
+        if n.is_empty() {
+            None
+        } else{
+            Some(n[0])
+        }
+    }
+
+    pub(crate) fn delete_subtree(&mut self, sub_tree: &NodeId) {
+        let mut dead_nodes = vec![*sub_tree].iter().cloned().collect::<HashSet<NodeId>>();
+        let mut dead_edges: HashSet<_> = Default::default();
+
+        let mut stack = vec![*sub_tree];
+
+        while let Some(n) = stack.pop() {
+            for (target, next_edge) in self.edges_from(n).clone() {
+                if dead_nodes.contains(&target.clone()) {
+                    continue;
+                }
+                dead_nodes.insert(target);
+                dead_edges.insert(next_edge);
+                stack.push(target);
+            }
+        }
+
+        for n in dead_nodes {
+            if n == self.entry {
+                self.nodes.clear();
+                self.transitions.clear();
+                self.edges.clear();
+                return;
+            }
+            self.nodes.remove(&n);
+            self.transitions.remove(&n);
+        }
+
+        for e in dead_edges {
+            self.edges.remove(&e);
+        }
+        
+    }
+
 }
 
 impl<N, E> Nfa<N, NfaEdge<E>>
@@ -430,39 +472,6 @@ where
             })
             .cloned()
             .collect()
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub fn concatenate(&self, other: &Self) -> Self {
-        let mut cat = self.clone();
-        cat.node_count += other.node_count;
-        cat.node_count += 1;
-        cat.edge_count += other.edge_count;
-        cat.edge_count += 1;
-        cat.entry
-            .extend(other.entry.iter().map(|i| i + self.node_count));
-        cat.nodes.extend(
-            other
-                .nodes
-                .iter()
-                .map(|(i, n)| ((i + self.node_count), n.clone())),
-        );
-        cat.edges.extend(
-            other
-                .edges
-                .iter()
-                .map(|(i, e)| ((i + self.edge_count), e.clone())),
-        );
-        cat.transitions
-            .extend(other.transitions.iter().map(|(i, v)| {
-                (
-                    (i + self.node_count),
-                    v.iter()
-                        .map(|(t, e)| ((t + self.node_count), (e + self.edge_count)))
-                        .collect(),
-                )
-            }));
-        cat
     }
 }
 
