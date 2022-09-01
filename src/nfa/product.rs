@@ -99,12 +99,13 @@ where
                                 self.node(*left_node_id).sum(other.node(*right_node_id))
                             }
                         };
-                        let next_working_node_id =
+                        let  next_working_ids =
                             union.branch(&working_union_node_id, kind.clone(), new_node.clone());
-                        debug_assert!(
-                            working_union_node_id != next_working_node_id,
-                            "working_union_node_id == next_working_node_id"
-                        );
+
+                        // debug_assert!(
+                        //     working_union_node_id != next_working_ids,
+                        //     "working_union_node_id == next_working_ids"
+                        // );
 
                         // if one side is dropped, the other side just copies in from there
                         // either create a branch and recur to construct the union from that point
@@ -113,14 +114,15 @@ where
                             (None, None) => unreachable!(),
                             (None, Some(right_node_id)) => {
                                 // the right hand side is other
-                                union.copy_subtree(&next_working_node_id, other, right_node_id)
+                                next_working_ids.iter().for_each(|id| union.copy_subtree(&id, other, right_node_id))
+                                
                             }
                             (Some(left_node_id), None) => {
                                 // the left hand side is self
-                                union.copy_subtree(&next_working_node_id, self, left_node_id)
+                                next_working_ids.iter().for_each(|id| union.copy_subtree(&id, self, left_node_id))
                             }
                             (Some(left_node_id), Some(right_node_id)) => {
-                                stack.push((left_node_id, right_node_id, next_working_node_id))
+                                next_working_ids.iter().for_each(|id| stack.push((left_node_id, right_node_id, *id)))   
                             }
                         }
                     }
@@ -138,7 +140,7 @@ where
     /// returns the index of the new node if an edge is created, or the pre-existing node
     /// which was rationalized to if not.
     #[tracing::instrument(skip_all)]
-    fn branch(&mut self, working_node_id: &NfaIndex, kind: E, new_node: NfaNode<M>) -> NfaIndex {
+    fn branch(&mut self, working_node_id: &NfaIndex, kind: E, new_node: NfaNode<M>) -> Vec<NfaIndex> {
         // rationalization: there should only be 1 branch of a given kind from a given node
         //
         // rationalize the potential branches against each other
@@ -151,26 +153,113 @@ where
         if existing_edge.is_some() {
             let (t, _) = existing_edge.unwrap();
             self.node_mut(t).sum_mut(&new_node);
-            return t;
+            return vec![t];
         }
+        use EdgeTransition::*;
+        if let Some(edges) = self.edges_from(*working_node_id) {
+            for (_t, e) in edges {
+                let e = self.edge(e);
+                let p = E::product(&kind, &e.criteria);
+
+                /*
+                equality/superset:
+                    !b vs a
+                    take the edge
+                    combine node states
+                    return !b -> target
+                
+                subset:
+                    a vs !b 
+                    a & !a!b... 
+                    a stays the same, 
+                    combine node states at a-> target with our node, 
+                    make new edge and add new node, 
+                    return both node_ids
+
+                intersection:
+                    !a vs !b
+                    b !a!b a
+                    copy subtree from !a to !a!b
+                    change edge !a -> b
+                    copy node state into !a!b -> target
+                    add our node
+                    add edge to our node
+                    return nodeids for targets for [!a!b, a]
+                */
+                let _is_intersection =  p.len() == 3;
+                for branch in &p {
+                    // branch.kind;
+                    match (&branch.left, &branch.right) {
+                        // could be a Vs a OR !a VS !a OR * VS a OR !a vs !b  -> !a!b
+                        (Advance, Advance) => {
+                            // we need to merge both branches and change the kind of e.criteria to this...
+                            // do we make a new branch with merged states?
+                            todo!()
+                        },
+                        (Advance, Stop) => {
+                            // a,b,c VS !a,!b
+                            //  we change kind to branch.kind (will often be the same thing)
+                            //  we attempt to add the edge and node
+                            todo!()
+                        },
+                        (Stop, Advance) => {
+                            //  we change e.kind to branch.kind (will often be the same thing)
+                            //  we do nothing else
+                            todo!()
+                        },
+
+                        (Advance, Stay) => {
+                            // in this case, we need to merge both branches and change the kind of e.criteria to this...
+                            todo!()
+                        },
+                        (Stay, Advance) => todo!(),
+                        (Stay, Stay) => unreachable!(), // stars only
+                        (Stay, Stop) => unreachable!(),
+                        (Stop, Stay) => unreachable!(),
+                        (Stop, Stop) => unreachable!(),
+                   }
+                }
+
+                // if let Ok(true) = e.criteria.accepts(kind.clone()) {
+                //     // superset case
+                //     superset_edge.push(*t);
+                //     println!("🍩🍩🍩🍩 found accepting path {:?} > {:?}", e.criteria, kind);
+                // }
+            }
+        }
+
+
+        /*
+    
+        !a 
+        !b
+
+        *a
+        a*
+        
+        aa
+        ??*
+
+        */
+
         // the superset edge case
         // When adding a new edge to a node, we need to ensure not only that there are no extant identical edges,
         // but that no edge is a superset (accepting of the new edge kind). If an edge is a superset, we
         // we need to visit it as if it were an identical edge type
-        let mut superset_edge = None;
+        let mut superset_edge = vec![];
         if let Some(edges) = self.edges_from(*working_node_id) {
             for (t, e) in edges {
                 let e = self.edge(e);
                 if let Ok(true) = e.criteria.accepts(kind.clone()) {
                     // superset case
-                    superset_edge = Some(*t);
+                    superset_edge.push(*t);
                     println!("🍩🍩🍩🍩 found accepting path {:?} > {:?}", e.criteria, kind);
                 }
             }
         }
-        if let Some(t) = superset_edge {
-            self.node_mut(t).sum_mut(&new_node);
-            return t;
+        if !superset_edge.is_empty() {
+            superset_edge.iter().for_each(|t| self.node_mut(*t).sum_mut(&new_node));
+            return superset_edge;
         }
 
         let mut subset = vec![];
@@ -183,25 +272,24 @@ where
                 }
             }
         }
-        if !subset.is_empty() {
+        if !&subset.is_empty() {
             let mut new_node = new_node.clone();
-            
+            //  ? vs a, b...
+            //  add our state to a -> target, b -> target
+            //  change kind to  ? - a - b, 
+            //  add our edge
+            //  add our node
 
-            
-            //  loop over overlapping edges
-            //  snip edge
-            //  sum_mut new_node
-            //  add all old outbound edges from t to new_node -> t
-            for (t, e) in subset {
-                self.remove_edge(e);
-                new_node.sum_mut(&self.node(t));
-                
+            for (t, _) in &subset {
+                // self.remove_edge(e);
+                new_node.sum_mut(&self.node(*t));
             }
 
             let new_node_id = self.add_node(new_node);
             let _edge = self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node_id);
-            return new_node_id;
-            
+            let mut r = subset.into_iter().map(|(t,_)| t.clone()).collect::<Vec<_>>();
+            r.push(new_node_id);
+            return r;
         }
 
 
@@ -212,7 +300,7 @@ where
         // be from NfaNode.sum()
         let new_node = self.add_node(new_node.clone());
         let _edge = self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node);
-        new_node
+        return vec![new_node];
     }
 
     // there is no convergence yet but this is convergence-safe

@@ -159,7 +159,7 @@ impl Product<Element> for Element {
         use EdgeTransition::*;
         use Element::*;
 
-        match (a, b) {
+        let branches: Vec<NfaBranch<Element>> = match (a, b) {
             (Star, Star) => vec![
                 NfaBranch::new(Star, Advance, Stay),
                 NfaBranch::new(Star, Stay, Advance),
@@ -270,7 +270,13 @@ impl Product<Element> for Element {
                     NfaBranch::new(TokenSet(right), Stop, Advance),
                 ]
             }
-        }
+        };
+        branches.into_iter().filter(|b| match &b.kind {
+            Question => true,
+            Star => true,
+            TokenSet(v) => !v.is_empty(),
+            NotTokenSet(v) => !v.is_empty(),
+        }).collect()
     }
 }
 
