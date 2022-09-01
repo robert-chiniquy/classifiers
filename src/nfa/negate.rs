@@ -22,14 +22,15 @@ fn test_basic_classifier_negation() {
 fn test_a_v_q() {
     tests::setup();
 
-    let n = Nfa::from_symbols(&[Element::token('a'), Element::token('a')], ());
-    let i = n.intersection(&Nfa::from_str("??", ()));
+    let n = Nfa::from_symbols(&[Element::not_token('a')], ());
+    let i = n.intersection(&Nfa::from_symbols(&[Element::Question], ()));
+
     assert!(!i.nodes.is_empty());
     i.graphviz_file("i.dot", "a_v_q");
-
-    assert!(i.accepts_string("aa"));
-    let _thing = vec![vec![Element::token('a'), Element::token('a')]];
+    assert!(!i.accepts_string("a"));
 }
+
+
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where

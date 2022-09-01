@@ -46,36 +46,36 @@ impl Element {
         Element::NotTokenSet(HashSet::from_iter(vec![c]))
     }
 
-    pub fn tokens(v: Vec<char>) -> Element {
-        Element::TokenSet(HashSet::from_iter(v.into_iter()))
+    pub fn tokens(v: &[char]) -> Element {
+        Element::TokenSet(HashSet::from_iter(v.iter().cloned()))
     }
 
-    pub fn not_tokens(v: Vec<char>) -> Element {
-        Element::NotTokenSet(HashSet::from_iter(v.into_iter()))
+    pub fn not_tokens(v: &[char]) -> Element {
+        Element::NotTokenSet(HashSet::from_iter(v.iter().cloned()))
     }
 }
 
 #[test]
 fn test_disjoint() {
     assert!(Element::are_disjoint(vec![
-        Element::tokens(vec!['a', 'b']),
-        Element::tokens(vec!['c', 'd']),
+        Element::tokens(&['a', 'b']),
+        Element::tokens(&['c', 'd']),
     ]));
 
     assert!(!Element::are_disjoint(vec![
-        Element::tokens(vec!['a', 'b']),
-        Element::tokens(vec!['a', 'c']),
+        Element::tokens(&['a', 'b']),
+        Element::tokens(&['a', 'c']),
     ]));
 
     assert!(Element::are_disjoint(vec![
-        Element::not_tokens(vec!['a', 'b']),
-        Element::tokens(vec!['a', 'b']),
+        Element::not_tokens(&['a', 'b']),
+        Element::tokens(&['a', 'b']),
     ]));
 
     assert!(!Element::are_disjoint(vec![
-        Element::not_tokens(vec!['a', 'b']),
-        Element::tokens(vec!['a', 'b']),
-        Element::not_tokens(vec!['c']),
+        Element::not_tokens(&['a', 'b']),
+        Element::tokens(&['a', 'b']),
+        Element::not_tokens(&['c']),
     ]));
 
     let all_ascii = (0_u8..128)
@@ -91,8 +91,8 @@ fn test_disjoint() {
     let c = 127_u8 as char;
 
     assert!(Element::are_disjoint(vec![
-        Element::not_tokens(v),
-        Element::not_tokens(vec![c]),
+        Element::not_tokens(&v),
+        Element::not_tokens(&[c]),
     ]));
 }
 impl Disjointsome<Element> for Element {
@@ -227,15 +227,27 @@ impl std::fmt::Display for Element {
             match self {
                 Element::Question => "?".to_string(),
                 Element::Star => "*".to_string(),
-                Element::NotTokenSet(v) => format!("!`{v:?}`"),
-                Element::TokenSet(v) => format!("`{v:?}`"),
+                Element::NotTokenSet(v) => {
+                    if v.len() == 1 {
+                        format!("!{}", v.iter().next().unwrap())
+                    }  else {
+                        format!("!`{v:?}`")
+                    }
+                }
+                Element::TokenSet(v) => {
+                    if v.len() == 1 {
+                        format!("{}", v.iter().next().unwrap())
+                    }  else {
+                        format!("`{v:?}`")
+                    }
+                }
             }
         ))
     }
 }
 
 impl Product<Element> for Element {
-    #[tracing::instrument(ret)]
+    // #[tracing::instrument(ret)]
     fn product(a: &Self, b: &Self) -> Vec<NfaBranch<Element>> {
         use EdgeTransition::*;
         use Element::*;
@@ -375,19 +387,19 @@ fn asdfasdf() {
     let mut r = nt('c');
     r = Element::difference(&r, &t('a')).unwrap();
     r = Element::difference(&r, &t('b')).unwrap();
-    assert_eq!(r, Element::not_tokens(vec!['a', 'b', 'c']));
+    assert_eq!(r, Element::not_tokens(&['a', 'b', 'c']));
 
     let mut r = Star;
     r = Element::difference(&r, &t('a')).unwrap();
     r = Element::difference(&r, &t('b')).unwrap();
-    assert_eq!(r, nts(vec!['a', 'b']));
+    assert_eq!(r, nts(&['a', 'b']));
 
     let mut r = Question;
     r = Element::difference(&r, &t('a')).unwrap();
     r = Element::difference(&r, &t('b')).unwrap();
-    assert_eq!(r, nts(vec!['a', 'b']));
+    assert_eq!(r, nts(&['a', 'b']));
 
-    let mut r = ts(vec!['a', 'b']);
+    let mut r = ts(&['a', 'b']);
     r = Element::difference(&r, &t('a')).unwrap();
     assert_eq!(None, Element::difference(&r, &t('b')));
 }

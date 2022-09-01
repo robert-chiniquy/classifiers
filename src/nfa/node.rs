@@ -116,7 +116,7 @@ where
     E: Accepts<L> + Eq + std::fmt::Debug,
     L: std::fmt::Debug,
 {
-    #[tracing::instrument(ret)]
+    // #[tracing::instrument(ret)]
     fn accepts(&self, l: &L) -> bool {
         self.criteria.accepts(l)
     }

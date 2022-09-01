@@ -77,7 +77,7 @@ where
         nfa
     }
 
-    #[tracing::instrument(skip(self), ret)]
+    // #[tracing::instrument(skip(self), ret)]
     pub fn accepts<C>(&self, path: &Vec<C>) -> Result<bool, GeneralError>
     where
         E: Accepts<C>,
@@ -88,7 +88,7 @@ where
 
     /// TODO: Returning early rather than collecting all terminal states within the closure of the
     /// input is incorrect. This should be changed to visit all possible nodes.
-    #[tracing::instrument(skip(filter, self), ret)]
+    // #[tracing::instrument(skip(filter, self), ret)]
     pub fn terminal_on<C>(
         &self,
         single_path: &Vec<C>,
@@ -164,7 +164,7 @@ where
     }
 
     /// An intersection NFA only has accepting states where both input NFAs have accepting states
-    #[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all)]
     pub fn intersection(&self, other: &Self) -> Self
     where
         E: Accepts<E>,
@@ -188,7 +188,7 @@ where
         // if a method here returned all terminal states with their associated paths,
         // (matt says intersection is a conjunction)
         // then each terminal state could be marked as in conjunction
-        // println!("\n\n🌮🌮🌮🌮 intersecting paths: {:?}\n\n", paths.lr);
+        // println!("\n\n intersecting paths: {:?}\n\n", paths.lr);
 
         // [*] ¥ [?, !aa, ***] -> ****, !aa, !aa***, ***, !aa*, !aa
         // [*] ¥ [*** , !aa, ?] -> !aa, ?
@@ -365,6 +365,7 @@ where
     /// E is the edge weight, usually NfaEdge
     pub fn add_edge(&mut self, edge: E, source: NodeId, target: NodeId) -> EdgeId {
         let i = self.edge_index();
+
         self.edges.insert(i, edge);
         let entry = match self.transitions.entry(source) {
             Entry::Occupied(o) => o.into_mut(),
