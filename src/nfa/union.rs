@@ -11,7 +11,6 @@ where
     // Blindly copying states here allows M to vary widely
     #[tracing::instrument(skip(self, other))]
     pub fn union(&self, other: &Self) -> Self {
-
         println!("union!");
         let mut union: Self = self.clone();
         let mut stack = vec![(union.entry, other.entry)];
@@ -42,44 +41,33 @@ where
 
             if union_edges.is_empty() {
                 println!("adding in body subtree!: {:?}", &other_edges);
-                union.copy_subtree( other, &other_id, &union_id);
+                union.copy_subtree(other, &other_id, &union_id);
                 continue;
             }
 
-            for (other_edge_target, other_edge) in other_edges {
-                let other_edge_kind = other.edge(other_edge);
+            println!("looking at other edges: {:?}\n{:?}\n{:?}", other_edges, union, other);
+            for (other_edge_target, other_edge_id) in other_edges {
                 // is there a matching edge in union?
-                let matching = union
-                    .edge_by_kind(union_id, &other_edge_kind.criteria)
-                    .pop();
-
-                if let Some((union_edge_target, _)) = matching {
-                    println!("mutating existing node!: {:?}", &other_edges);
-                    union.node_mut(union_id).sum_mut(other.node(other_id));
-                    stack.push((union_edge_target, *other_edge_target));
-                    continue;
-                }
-
-                let new_node = union.add_node(other.node(*other_edge_target).clone());
-                union.safe_add_edge(
-                    NfaEdge {
-                        criteria: other_edge_kind.criteria.clone(),
-                    },
-                    other_id,
-                    new_node,
-                );
-                union.branch(
-                    &other_id,
-                    other_edge_kind.criteria.clone(),
+                let next_ids = union.branch(
+                    &union_id,
+                    other.edge(other_edge_id).criteria.clone(),
                     other.node(*other_edge_target).clone(),
                 );
-                union.copy_subtree( other, other_edge_target, &new_node);
+
+                for id in next_ids {
+                    stack.push((id, other_edge_target.clone()));
+                }
             }
         }
         union
     }
 
-    pub fn safe_add_edge(&mut self, edge: NfaEdge<E>, source: NodeId, target: NodeId) -> Vec<NodeId> {
+    pub fn safe_add_edge(
+        &mut self,
+        edge: NfaEdge<E>,
+        source: NodeId,
+        target: NodeId,
+    ) -> Vec<NodeId> {
         self.branch(&source, edge.criteria.clone(), self.node(target).clone())
     }
 
@@ -103,7 +91,7 @@ where
         let mut _new_nodes_or_something = vec![];
         for (i, e1) in edges.clone().into_iter().enumerate() {
             let c1 = self.edge(&e1).criteria.clone();
-            for e2 in edges[i+1..].iter() {
+            for e2 in edges[i + 1..].iter() {
                 let c2 = self.edge(&e2).criteria.clone();
                 let p = E::product(&c1, &c2);
 
@@ -111,7 +99,10 @@ where
 
                 // println!("{} products for {c1} X {c2}", p.len());
                 for branch in &p {
-                    println!("\n({:?}, {:?}) {} \n", &branch.left, &branch.right,  branch.kind);
+                    println!(
+                        "\n({:?}, {:?}) {} \n",
+                        &branch.left, &branch.right, branch.kind
+                    );
                     match (&branch.left, &branch.right) {
                         // could be a Vs a OR !a VS !a OR * VS a OR !a vs !b  -> !a!b
                         (Advance, Advance) => {
@@ -119,7 +110,7 @@ where
                                 // make a new branch
                                 // merge e1 subtree!
                                 // merge e2 subtree
-                                // delete e1 subtree? 
+                                // delete e1 subtree?
                                 // ~delete e2 subtree?~\
                                 println!("\n({:?}, {:?}) : {} VS {}, ?? -> {} (is intersection change their e, merge our state??) \n", &branch.left, &branch.right, &c1, c2, branch.kind);
 
@@ -130,14 +121,21 @@ where
                                 let center_node = match existing_edge.is_empty() {
                                     true => {
                                         let center_node = self.add_node(Default::default());
-                                        self.add_edge(NfaEdge{ criteria: branch.kind.clone() }, source, center_node);
+                                        self.add_edge(
+                                            NfaEdge {
+                                                criteria: branch.kind.clone(),
+                                            },
+                                            source,
+                                            center_node,
+                                        );
                                         center_node
-                                    },
-                                    false => existing_edge[0].0
+                                    }
+                                    false => existing_edge[0].0,
                                 };
-                                
+
                                 self.self_copy_subtree(&center_node, &left);
                                 self.self_copy_subtree(&center_node, &right);
+                                println!("{:?} {:?} {:?}", self.node(left), self.node(center_node), self.node(right));
                                 _new_nodes_or_something.push(center_node);
                                 should_restart = true;
                             } else {
@@ -254,10 +252,10 @@ where
         println!("branching: {}", kind.clone());
 
         let edges = self.edge_by_kind(*working_node_id, &kind);
-        if !self.edges.is_empty() {
+        if !edges.is_empty() {
             let mut nodes = vec![];
             println!("found matching edge for {}", kind);
-            for (n,_) in edges.clone() {
+            for (n, _) in edges.clone() {
                 nodes.push(n);
                 self.node_mut(n).sum_mut(&new_node);
             }
@@ -274,7 +272,6 @@ where
             new_node_id,
         );
 
-
         // let mut new_nodes_or_something = vec![new_node_id];
         let mut stuff = vec![*working_node_id];
         loop {
@@ -290,7 +287,8 @@ where
             } else {
                 println!("stuff isn't disjoint!?: {:?}", vedges);
             }
-            stuff.extend(self.clean_edges(*working_node_id, edges.iter().map(|(_, e)| *e).collect()))
+            stuff
+                .extend(self.clean_edges(*working_node_id, edges.iter().map(|(_, e)| *e).collect()))
         }
     }
 
@@ -352,6 +350,6 @@ fn test_union() {
     let b = Nfa::from_symbols(&[Element::not_tokens(&['b'])], ());
     let n1 = a.union(&b);
     n1.graphviz_file("unioned1.dot", "!a union !b");
-    let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
-    n2.graphviz_file("unioned2.dot", "!a U !b U !c");
+    // let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
+    // n2.graphviz_file("unioned2.dot", "!a U !b U !c");
 }

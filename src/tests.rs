@@ -237,6 +237,7 @@ fn test_negate4() {
     assert!(!d.accepts_string("AA"));
 }
 
+#[allow(dead_code)]
 pub fn test_setup() {
     assert!(*TEST_SETUP);
 }

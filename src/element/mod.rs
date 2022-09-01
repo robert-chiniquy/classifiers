@@ -352,7 +352,7 @@ impl Product<Element> for Element {
                 vec![
                     NfaBranch::new(TokenSet(left), Advance, Stop),
                     NfaBranch::new(NotTokenSet(center), Advance, Advance),
-                    NfaBranch::new(TokenSet(right), Advance, Stop),
+                    NfaBranch::new(TokenSet(right), Stop, Advance),
                 ]
             }
 
