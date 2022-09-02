@@ -124,6 +124,7 @@ where
                             let existing_edge = self.edge_by_kind(source, &branch.kind);
                             let center_node = match existing_edge.is_empty() {
                                 true => {
+                                    // copy subtree doesn't do this for us atm :-/
                                     let center_node = self.add_node(self.node(left).clone().sum(self.node(right)));
                                     self.add_edge(
                                         NfaEdge {
@@ -357,6 +358,6 @@ fn test_union() {
     println!("from symbols {a:?}\n{b:?}");
     let n1 = a.union(&b);
     n1.graphviz_file("unioned1.dot", "!a union !b");
-    // let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
-    // n2.graphviz_file("unioned2.dot", "!a U !b U !c");
+    let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
+    n2.graphviz_file("unioned2.dot", "!a U !b U !c");
 }
