@@ -301,12 +301,6 @@ where
         source_node: &NodeId,
         copy_target_node: &NodeId,
     ) {
-        // Step 1 may be needed later for various weird edge cases,
-        // probably need to make a change elsewhere to have it here
-        // 1. merge the node states into target
-        // self.node_mut(*copy_target_node)
-        //     .sum_mut(source.node(*source_node_id));
-        // 2. for each edge from source,
         for (source_edge_endpoint, edge) in source.edges_from(*source_node) {
             // - create a new copy-target edge-target node matching the target of the source edge
             let new_edge_endpoint = self.add_node(source.node(*source_edge_endpoint).clone());
@@ -316,8 +310,6 @@ where
                 *copy_target_node,
                 new_edge_endpoint,
             );
-            // 3. recur on the new copy-target edge-target node copying from the
-            //    copy-source edge-target node
             self.copy_subtree(source, &source_edge_endpoint, &new_edge_endpoint);
         }
     }
@@ -326,18 +318,12 @@ where
     pub(crate) fn self_copy_subtree(&mut self, source_node: &NodeId, copy_target_node: &NodeId) {
         for (target, edge) in self.edges_from(*source_node).clone() {
             println!("self_copy_subtree: {target} {edge}");
-            // - create a new copy-target edge-target node matching the target of the source edge
-            let new_node = self.add_node(self.node(target).clone());
 
-            let c = self.edge(&edge).criteria.clone();            
-            let node_ids = self.branch(copy_target_node, c, self.node(target).clone());
+            let c = self.edge(&edge).criteria.clone();  
 
-            if new_node == 6 {
-                println!(
-                    "adding dead edge node 6... adding edge from {copy_target_node} to {new_node}.. got some {node_ids:?}"
-                );
+            for id in self.branch(copy_target_node, c, self.node(target).clone()) {
+                self.self_copy_subtree(&target, &id);
             }
-            self.self_copy_subtree(&target, &new_node);
         }
     }
 }
