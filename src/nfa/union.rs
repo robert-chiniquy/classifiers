@@ -47,6 +47,7 @@ where
 
             println!("looking at other edges: {:?}\n{:?}\n{:?}", other_edges, union, other);
             for (other_edge_target, other_edge_id) in other_edges {
+                println!("node we give to branch: {:?}", other.node(*other_edge_target).clone());
                 // is there a matching edge in union?
                 let next_ids = union.branch(
                     &union_id,
@@ -92,6 +93,8 @@ where
         for (i, e1) in edges.clone().into_iter().enumerate() {
             let c1 = self.edge(&e1).criteria.clone();
             for e2 in edges[i + 1..].iter() {
+                
+                debug_assert!(e1 != *e2, "same edge");
                 let c2 = self.edge(&e2).criteria.clone();
                 let p = E::product(&c1, &c2);
 
@@ -99,59 +102,67 @@ where
 
                 // println!("{} products for {c1} X {c2}", p.len());
                 for branch in &p {
-                    println!(
-                        "\n({:?}, {:?}) {} \n",
-                        &branch.left, &branch.right, branch.kind
-                    );
+                    // println!(
+                    //     "\n({:?}, {:?}) {} \n",
+                    //     &branch.left, &branch.right, branch.kind
+                    // );
                     match (&branch.left, &branch.right) {
                         // could be a Vs a OR !a VS !a OR * VS a OR !a vs !b  -> !a!b
+                        (Advance, Advance) if _is_intersection => {
+                            // make a new branch
+                            // merge e1 subtree!
+                            // merge e2 subtree
+                            // delete e1 subtree?
+                            // ~delete e2 subtree?~\
+                            println!("\n({:?}, {:?}) : {} VS {}, ?? -> {} (is intersection change their e, merge our state??) \n", &branch.left, &branch.right, &c1, c2, branch.kind);
+
+                            let left = self.destination(&e1).unwrap();
+                            let right = self.destination(&e2).unwrap();
+
+                            debug_assert!(left != right, "left {left} is right {right} for {e1}/{e2} on {:?}", self);
+
+                            let existing_edge = self.edge_by_kind(source, &branch.kind);
+                            let center_node = match existing_edge.is_empty() {
+                                true => {
+                                    let center_node = self.add_node(self.node(left).clone().sum(self.node(right)));
+                                    self.add_edge(
+                                        NfaEdge {
+                                            criteria: branch.kind.clone(),
+                                        },
+                                        source,
+                                        center_node,
+                                    );
+                                    center_node
+                                }
+                                false => existing_edge[0].0,
+                            };
+
+                            println!("\n\npre intersection: {left} {right}self...{:?}\n{:?} {:?} {:?}\n edges from left: {:?}\nedges from right: {:?}", self, self.node(left), self.node(center_node), self.node(right), self.edges_from(left), self.edges_from(right));
+                            self.self_copy_subtree(&left, &center_node);
+                            self.self_copy_subtree(&right, &center_node);
+                            println!("\n\npost intersection: {:?} {:?} {:?}", self.node(left), self.node(center_node), self.node(right));
+                            _new_nodes_or_something.push(center_node);
+                            should_restart = true;
+                        }
                         (Advance, Advance) => {
                             if _is_intersection {
-                                // make a new branch
-                                // merge e1 subtree!
-                                // merge e2 subtree
-                                // delete e1 subtree?
-                                // ~delete e2 subtree?~\
-                                println!("\n({:?}, {:?}) : {} VS {}, ?? -> {} (is intersection change their e, merge our state??) \n", &branch.left, &branch.right, &c1, c2, branch.kind);
+                                continue;
+                            }
+                            println!(
+                                "\n({:?}, {:?}) : {} VS {} -> {} (🌮🌮🌮🌮🌮 copied left into right..., deleted left) \n",
+                                &branch.left, &branch.right, &c1, c2, branch.kind
+                            );
 
+                            if c1 == c2 {
                                 let left = self.destination(&e1).unwrap();
                                 let right = self.destination(&e2).unwrap();
 
-                                let existing_edge = self.edge_by_kind(source, &branch.kind);
-                                let center_node = match existing_edge.is_empty() {
-                                    true => {
-                                        let center_node = self.add_node(Default::default());
-                                        self.add_edge(
-                                            NfaEdge {
-                                                criteria: branch.kind.clone(),
-                                            },
-                                            source,
-                                            center_node,
-                                        );
-                                        center_node
-                                    }
-                                    false => existing_edge[0].0,
-                                };
-
-                                self.self_copy_subtree(&center_node, &left);
-                                self.self_copy_subtree(&center_node, &right);
-                                println!("{:?} {:?} {:?}", self.node(left), self.node(center_node), self.node(right));
-                                _new_nodes_or_something.push(center_node);
+                                self.self_copy_subtree(&left, &right);
+                                self.delete_subtree(&left);
+                                _new_nodes_or_something.push(right);
                                 should_restart = true;
-                            } else {
-                                if c1 == c2 {
-                                    let left = self.destination(&e1).unwrap();
-                                    let right = self.destination(&e2).unwrap();
-
-                                    self.self_copy_subtree(&left, &right);
-                                    self.delete_subtree(&left);
-                                    _new_nodes_or_something.push(right);
-                                }
-                                println!(
-                                    "\n({:?}, {:?}) : {} VS {} -> {} (🌮🌮🌮🌮🌮 copied left into right..., deleted left) \n",
-                                    &branch.left, &branch.right, &c1, c2, branch.kind
-                                );
                             }
+
                         }
                         (Advance, Stop) => {
                             // a,b,c VS !a,!b
@@ -322,24 +333,19 @@ where
 
     #[allow(dead_code)]
     pub(crate) fn self_copy_subtree(&mut self, source_node: &NodeId, copy_target_node: &NodeId) {
-        // Step 1 may be needed later for various weird edge cases,
-        // probably need to make a change elsewhere to have it here
-        // 1. merge the node states into target
-        // self.node_mut(*copy_target_node)
-        //     .sum_mut(source.node(*source_node_id));
-        // 2. for each edge from source,
-        for (source_edge_endpoint, edge) in self.edges_from(*source_node).clone() {
+        for (target, edge) in self.edges_from(*source_node).clone() {
+            println!("self_copy_subtree: {target} {edge}");
             // - create a new copy-target edge-target node matching the target of the source edge
-            let new_edge_endpoint = self.add_node(self.node(source_edge_endpoint).clone());
+            let new_node = self.add_node(self.node(target).clone());
             // - get the weight and create a matching edge from target connecting to the new edge target node
             let _matching_edge = self.safe_add_edge(
                 self.edge(&edge).clone(),
                 *copy_target_node,
-                new_edge_endpoint,
+                new_node,
             );
             // 3. recur on the new copy-target edge-target node copying from the
             //    copy-source edge-target node
-            self.self_copy_subtree(&source_edge_endpoint, &new_edge_endpoint);
+            self.self_copy_subtree(&target, &new_node);
         }
     }
 }
@@ -348,6 +354,7 @@ where
 fn test_union() {
     let a = Nfa::from_symbols(&[Element::not_tokens(&['a'])], ());
     let b = Nfa::from_symbols(&[Element::not_tokens(&['b'])], ());
+    println!("from symbols {a:?}\n{b:?}");
     let n1 = a.union(&b);
     n1.graphviz_file("unioned1.dot", "!a union !b");
     // let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));

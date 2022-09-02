@@ -408,16 +408,16 @@ where
     }
 
     pub fn destination(&self, e: &EdgeId) -> Option<NodeId> {
-        let n = self.transitions
-            .iter()
-            .filter(|(_, edges)| edges.iter().any(|(_target, edge_id)| e == edge_id ))
-            .map(|(n, _)| *n)
-            .collect::<Vec<_>>();
-        if n.is_empty() {
-            None
-        } else{
-            Some(n[0])
+        // let values: Vec<(_,_)>  = 
+        for value in self.transitions.values() {
+            for (target, edge) in value {
+                if edge == e {
+                    return Some(*target);
+                }
+            }
         }
+        None
+
     }
 
     pub(crate) fn delete_subtree(&mut self, sub_tree: &NodeId) {
