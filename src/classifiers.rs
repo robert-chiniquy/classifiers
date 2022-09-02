@@ -103,7 +103,7 @@ where
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {
                     items.fold(Classifier::compile(acc, m.clone()), |acc, cur| {
-                        acc.product(&Classifier::compile(cur, m.clone()))
+                        acc.union(&Classifier::compile(cur, m.clone()))
                     })
                 } else {
                     Nfa::universal(m).negate()
