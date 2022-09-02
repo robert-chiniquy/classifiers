@@ -45,9 +45,15 @@ where
                 continue;
             }
 
-            println!("looking at other edges: {:?}\n{:?}\n{:?}", other_edges, union, other);
+            println!(
+                "looking at other edges: {:?}\n{:?}\n{:?}",
+                other_edges, union, other
+            );
             for (other_edge_target, other_edge_id) in other_edges {
-                println!("node we give to branch: {:?}", other.node(*other_edge_target).clone());
+                println!(
+                    "node we give to branch: {:?}",
+                    other.node(*other_edge_target).clone()
+                );
                 // is there a matching edge in union?
                 let next_ids = union.branch(
                     &union_id,
@@ -93,12 +99,14 @@ where
         for (i, e1) in edges.clone().into_iter().enumerate() {
             let c1 = self.edge(&e1).criteria.clone();
             for e2 in edges[i + 1..].iter() {
-                
                 debug_assert!(e1 != *e2, "same edge");
                 let c2 = self.edge(&e2).criteria.clone();
+                if E::are_disjoint(vec![c1.clone(), c2.clone()]) {
+                    continue;
+                }
                 let p = E::product(&c1, &c2);
 
-                let _is_intersection = p.len() == 3;
+                let is_intersection = p.len() == 3;
 
                 // println!("{} products for {c1} X {c2}", p.len());
                 for branch in &p {
@@ -108,7 +116,7 @@ where
                     // );
                     match (&branch.left, &branch.right) {
                         // could be a Vs a OR !a VS !a OR * VS a OR !a vs !b  -> !a!b
-                        (Advance, Advance) if _is_intersection => {
+                        (Advance, Advance) if is_intersection => {
                             // make a new branch
                             // merge e1 subtree!
                             // merge e2 subtree
@@ -119,13 +127,18 @@ where
                             let left = self.destination(&e1).unwrap();
                             let right = self.destination(&e2).unwrap();
 
-                            debug_assert!(left != right, "left {left} is right {right} for {e1}/{e2} on {:?}", self);
+                            debug_assert!(
+                                left != right,
+                                "left {left} is right {right} for {e1}/{e2} on {:?}",
+                                self
+                            );
 
                             let existing_edge = self.edge_by_kind(source, &branch.kind);
                             let center_node = match existing_edge.is_empty() {
                                 true => {
                                     // copy subtree doesn't do this for us atm :-/
-                                    let center_node = self.add_node(self.node(left).clone().sum(self.node(right)));
+                                    let center_node = self
+                                        .add_node(self.node(left).clone().sum(self.node(right)));
                                     self.add_edge(
                                         NfaEdge {
                                             criteria: branch.kind.clone(),
@@ -141,14 +154,16 @@ where
                             println!("\n\npre intersection: {left} {right}self...{:?}\n{:?} {:?} {:?}\n edges from left: {:?}\nedges from right: {:?}", self, self.node(left), self.node(center_node), self.node(right), self.edges_from(left), self.edges_from(right));
                             self.self_copy_subtree(&left, &center_node);
                             self.self_copy_subtree(&right, &center_node);
-                            println!("\n\npost intersection: {:?} {:?} {:?}", self.node(left), self.node(center_node), self.node(right));
+                            println!(
+                                "\n\npost intersection: {:?} {:?} {:?}",
+                                self.node(left),
+                                self.node(center_node),
+                                self.node(right)
+                            );
                             _new_nodes_or_something.push(center_node);
                             should_restart = true;
                         }
                         (Advance, Advance) => {
-                            if _is_intersection {
-                                continue;
-                            }
                             println!(
                                 "\n({:?}, {:?}) : {} VS {} -> {} (🌮🌮🌮🌮🌮 copied left into right..., deleted left) \n",
                                 &branch.left, &branch.right, &c1, c2, branch.kind
@@ -159,11 +174,11 @@ where
                                 let right = self.destination(&e2).unwrap();
 
                                 self.self_copy_subtree(&left, &right);
+                                println!("deleting right: {right}");
                                 self.delete_subtree(&left);
                                 _new_nodes_or_something.push(right);
                                 should_restart = true;
                             }
-
                         }
                         (Advance, Stop) => {
                             // a,b,c VS !a,!b
@@ -236,31 +251,6 @@ where
         // this node is instantiated, but not in the graph
         new_node: NfaNode<M>,
     ) -> Vec<NodeId> {
-        /*
-        equality/superset:
-            !b vs a
-            take the edge
-            combine node states
-            return !b -> target
-
-        subset:
-            a vs !b
-            a & !a!b...
-            a stays the same,
-            combine node states at a-> target with our node,
-            make new edge and add new node,
-            return both node_ids
-
-        intersection:
-            !a vs !b
-            b !a!b a
-            copy subtree from !a to !a!b
-            change edge !a -> b
-            copy node state into !a!b -> target
-            add our node
-            add edge to our node
-            return nodeids for targets for [!a!b, a]
-        */
         println!("branching: {}", kind.clone());
 
         let edges = self.edge_by_kind(*working_node_id, &kind);
@@ -338,14 +328,15 @@ where
             println!("self_copy_subtree: {target} {edge}");
             // - create a new copy-target edge-target node matching the target of the source edge
             let new_node = self.add_node(self.node(target).clone());
-            // - get the weight and create a matching edge from target connecting to the new edge target node
-            let _matching_edge = self.safe_add_edge(
-                self.edge(&edge).clone(),
-                *copy_target_node,
-                new_node,
-            );
-            // 3. recur on the new copy-target edge-target node copying from the
-            //    copy-source edge-target node
+
+            let c = self.edge(&edge).criteria.clone();            
+            let node_ids = self.branch(copy_target_node, c, self.node(target).clone());
+
+            if new_node == 6 {
+                println!(
+                    "adding dead edge node 6... adding edge from {copy_target_node} to {new_node}.. got some {node_ids:?}"
+                );
+            }
             self.self_copy_subtree(&target, &new_node);
         }
     }
@@ -353,11 +344,12 @@ where
 
 #[test]
 fn test_union() {
-    let a = Nfa::from_symbols(&[Element::not_tokens(&['a'])], ());
-    let b = Nfa::from_symbols(&[Element::not_tokens(&['b'])], ());
+    let nt = Element::not_tokens;
+    let a = Nfa::from_symbols(&[nt(&['a']), nt(&['b'])], ());
+    let b = Nfa::from_symbols(&[nt(&['c'])], ());
     println!("from symbols {a:?}\n{b:?}");
     let n1 = a.union(&b);
-    n1.graphviz_file("unioned1.dot", "!a union !b");
-    let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
-    n2.graphviz_file("unioned2.dot", "!a U !b U !c");
+    n1.graphviz_file("unioned1.dot", "!ab union !cd");
+    // let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
+    // n2.graphviz_file("unioned2.dot", "!a U !b U !c");
 }
