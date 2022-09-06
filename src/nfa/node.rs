@@ -78,7 +78,12 @@ where
     M: std::fmt::Debug + Clone + Default,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{:?} {:?}", &self.state, &self.chirality))
+        if self.chirality != LRSemantics::None {
+            f.write_fmt(format_args!("{:?} {}", &self.state, &self.chirality))    
+        } else {
+            f.write_fmt(format_args!("{:?}", &self.state))
+        }
+        
     }
 }
 
@@ -157,7 +162,7 @@ impl<M> Default for Terminal<M> {
 impl<M> std::fmt::Debug for Terminal<M> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Not => write!(f, "."),
+            Self::Not => write!(f, ""),
             Self::Accept(_) => f.debug_tuple("Accept").finish(),
             Self::Reject(_) => f.debug_tuple("Reject").finish(),
         }

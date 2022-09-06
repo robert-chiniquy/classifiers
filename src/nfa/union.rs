@@ -335,7 +335,7 @@ fn test_union() {
     let b = Nfa::from_symbols(&[nt(&['c'])], ());
     println!("from symbols {a:?}\n{b:?}");
     let n1 = a.union(&b);
-    n1.graphviz_file("unioned1.dot", "!ab union !cd");
+    n1.graphviz_file("unioned1.dot", "!a!b U !c");
     // let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
     // n2.graphviz_file("unioned2.dot", "!a U !b U !c");
 }

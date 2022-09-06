@@ -519,6 +519,19 @@ where
     }
 }
 
+
+impl std::fmt::Display for LRSemantics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            LRSemantics::L => "L",
+            LRSemantics::R => "R",
+            LRSemantics::LR => "LR",
+            LRSemantics::None => "",
+        };
+        f.write_str(s)
+    }
+}
+
 #[derive(Default, Debug)]
 // ? 6 fields, 1 for accepting and 1 for rejecting ?
 // 1. need to visit all states and not return early
