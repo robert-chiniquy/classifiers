@@ -14,50 +14,50 @@ fn test_equility() {
     assert_eq!(a, b);
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, std::hash::Hash)]
 pub enum Element {
     Question,
     Star,
-    TokenSet(HashSet<char>),
-    NotTokenSet(HashSet<char>),
+    TokenSet(BTreeSet<char>),
+    NotTokenSet(BTreeSet<char>),
 }
 
-impl Hash for Element {
-    // TODO: this is **really** inefficient
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let s = match self {
-            Element::Question => "?".to_string(),
-            Element::Star => "*".to_string(),
-            Element::TokenSet(v) => {
-                let mut v = v.iter().cloned().collect::<Vec<_>>();
-                v.sort();
-                format!("ts|{v:?}")
-            }
-            Element::NotTokenSet(v) => {
-                let mut v = v.iter().cloned().collect::<Vec<_>>();
-                v.sort();
-                format!("nts|{v:?}")
-            }
-        };
-        state.write(s.as_bytes());
-    }
-}
+// impl Hash for Element {
+//     // TODO: this is **really** inefficient
+//     fn hash<H: Hasher>(&self, state: &mut H) {
+//         let s = match self {
+//             Element::Question => "?".to_string(),
+//             Element::Star => "*".to_string(),
+//             Element::TokenSet(v) => {
+//                 let mut v = v.iter().cloned().collect::<Vec<_>>();
+//                 v.sort();
+//                 format!("ts|{v:?}")
+//             }
+//             Element::NotTokenSet(v) => {
+//                 let mut v = v.iter().cloned().collect::<Vec<_>>();
+//                 v.sort();
+//                 format!("nts|{v:?}")
+//             }
+//         };
+//         state.write(s.as_bytes());
+//     }
+// }
 
 impl Element {
     pub fn token(c: char) -> Element {
-        Element::TokenSet(HashSet::from_iter(vec![c]))
+        Element::TokenSet(FromIterator::from_iter(vec![c]))
     }
 
     pub fn not_token(c: char) -> Element {
-        Element::NotTokenSet(HashSet::from_iter(vec![c]))
+        Element::NotTokenSet(FromIterator::from_iter(vec![c]))
     }
 
     pub fn tokens(v: &[char]) -> Element {
-        Element::TokenSet(HashSet::from_iter(v.iter().cloned()))
+        Element::TokenSet(FromIterator::from_iter(v.iter().cloned()))
     }
 
     pub fn not_tokens(v: &[char]) -> Element {
-        Element::NotTokenSet(HashSet::from_iter(v.iter().cloned()))
+        Element::NotTokenSet(FromIterator::from_iter(v.iter().cloned()))
     }
 }
 
@@ -131,8 +131,7 @@ impl Disjointsome<Element> for Element {
                     // a vs !a  -> yes
                     // a vs !a!b -> yes
                     // a vs !b -> yes
-
-                    (TokenSet(x), NotTokenSet(y)) | (NotTokenSet(y), TokenSet(x))  => {
+                    (TokenSet(x), NotTokenSet(y)) | (NotTokenSet(y), TokenSet(x)) => {
                         // all of left must be in right
                         // println!("{:?} {:?} {}", x, y, !y.is_superset(&x));
                         if !y.is_superset(&x) {
@@ -250,14 +249,14 @@ impl std::fmt::Display for Element {
                 Element::NotTokenSet(v) => {
                     if v.len() == 1 {
                         format!("!{}", v.iter().next().unwrap())
-                    }  else {
+                    } else {
                         format!("!`{v:?}`")
                     }
                 }
                 Element::TokenSet(v) => {
                     if v.len() == 1 {
                         format!("{}", v.iter().next().unwrap())
-                    }  else {
+                    } else {
                         format!("`{v:?}`")
                     }
                 }
@@ -322,7 +321,7 @@ impl Product<Element> for Element {
                     .iter()
                     .filter(|c| y.contains(c))
                     .cloned()
-                    .collect::<HashSet<_>>();
+                    .collect::<BTreeSet<_>>();
 
                 let left = x
                     .iter()
@@ -346,7 +345,7 @@ impl Product<Element> for Element {
             (NotTokenSet(x), NotTokenSet(y)) => {
                 // [!a,!b] X [!a,!c] -> [c], [!a,!b,!c], [b]
                 let left = y.iter().filter(|c| !x.contains(c)).cloned().collect();
-                let center = x.clone().union(y).cloned().collect::<HashSet<char>>();
+                let center = x.clone().union(y).cloned().collect::<BTreeSet<char>>();
                 let right = x.iter().filter(|c| !y.contains(c)).cloned().collect();
 
                 vec![
