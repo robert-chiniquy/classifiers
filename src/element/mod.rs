@@ -107,6 +107,8 @@ impl Disjointsome<Element> for Element {
                     // a vs !a!b -> yes
                     // a vs !b -> yes
                     (TokenSet(x), NotTokenSet(y)) | (NotTokenSet(y), TokenSet(x)) => {
+                        // if a token is present in TokenSet which is not excluded by
+                        // NotTokenSet, then they both have some common element and are non-disjoint.
                         // all of left must be in right
                         // println!("{:?} {:?} {}", x, y, !y.is_superset(&x));
                         if !y.is_superset(x) {

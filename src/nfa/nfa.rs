@@ -403,6 +403,7 @@ where
             .collect()
     }
 
+    // Shouldn't this always be able to return an ID for an edge?
     pub fn destination(&self, e: &EdgeId) -> Option<NodeId> {
         // let values: Vec<(_,_)>  =
         for value in self.transitions.values() {
@@ -415,10 +416,15 @@ where
         None
     }
 
+    // How does this handle cycles? convergence?
+    // FIXME(not urgent): Definitionally this should only remove nodes which are solely reachable
+    // from the subtree root.
+    // Ensure any edges pointing to this node are removed also.
     pub(crate) fn delete_subtree(&mut self, sub_tree: &NodeId) {
         let mut dead_nodes = vec![*sub_tree].iter().cloned().collect::<HashSet<NodeId>>();
-        let mut dead_edges: HashSet<_> = Default::default();
+        let mut dead_edges: HashSet<_> = self.edges_to(*sub_tree).iter().map(|(_, e)| *e).collect();
 
+        // Find the closure of the subtree
         let mut stack = vec![*sub_tree];
 
         while let Some(n) = stack.pop() {

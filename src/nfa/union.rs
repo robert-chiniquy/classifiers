@@ -91,6 +91,7 @@ where
         vec![existing_node]
     }
 
+    /// Returns the ids of any nodes which are the targets of modified edges
     fn clean_edges(&mut self, source: NodeId, edges: Vec<EdgeId>) -> Vec<NodeId> {
         use EdgeTransition::*;
 
@@ -104,6 +105,11 @@ where
                 if E::are_disjoint(vec![c1.clone(), c2.clone()]) {
                     continue;
                 }
+                // If you have 2 non-disjoint edges,
+                // they must be split into at most 3 edges,
+                // with 1 edge for each of the 2 original which represents their
+                // non-overlapping values (if any), and an edge representing the overlap
+                // product() only indirectly points to this result
                 let p = E::product(&c1, &c2);
 
                 let is_intersection = p.len() == 3;
@@ -169,16 +175,16 @@ where
                                 &branch.left, &branch.right, &c1, c2, branch.kind
                             );
 
-                            if c1 == c2 {
-                                let left = self.destination(&e1).unwrap();
-                                let right = self.destination(&e2).unwrap();
+                            // if c1 == c2 {
+                            let left = self.destination(&e1).unwrap();
+                            let right = self.destination(e2).unwrap();
 
-                                self.self_copy_subtree(&left, &right);
-                                println!("deleting right: {right}");
-                                self.delete_subtree(&left);
-                                _new_nodes_or_something.push(right);
-                                should_restart = true;
-                            }
+                            self.self_copy_subtree(&left, &right);
+                            println!("deleting left: {left}");
+                            self.delete_subtree(&left);
+                            _new_nodes_or_something.push(right);
+                            should_restart = true;
+                            // }
                         }
                         (Advance, Stop) => {
                             // a,b,c VS !a,!b
@@ -244,6 +250,9 @@ where
         _new_nodes_or_something
     }
 
+    /// Invariant-preserving edge->node insert
+    /// Ensures that the edges from working_node_id remain consistent (disjoint)
+    /// Returns the ids of any added nodes
     pub fn branch(
         &mut self,
         working_node_id: &NodeId,
@@ -253,6 +262,7 @@ where
     ) -> Vec<NodeId> {
         println!("branching: {}", kind);
 
+        // first, look for a match
         let edges = self.edge_by_kind(*working_node_id, &kind);
         if !edges.is_empty() {
             let mut nodes = vec![];
@@ -264,26 +274,29 @@ where
             return nodes;
         }
 
+        // if no match, try to find a good place to add
         println!("adding new edge: {}", kind);
         let new_node_id = self.add_node(new_node);
         self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node_id);
 
         // let mut new_nodes_or_something = vec![new_node_id];
-        let mut stuff = vec![*working_node_id];
+        let mut node_ids = vec![*working_node_id];
         loop {
             let edges = self.edges_from(*working_node_id);
-            let vedges: Vec<_> = edges
+            let edge_criterias: Vec<_> = edges
                 .iter()
                 .map(|(_, e)| self.edge(e).criteria.clone())
                 .collect();
 
-            if E::are_disjoint(vedges.clone()) {
-                println!("stuff is disjoint!!: {:?}", vedges);
-                return stuff;
+            // ? If any 2 (or more) edges from a given node are non-disjoint,
+            // do we only need to operate on the non-disjoint set
+            if E::are_disjoint(edge_criterias.clone()) {
+                println!("stuff is disjoint!!: {:?}", edge_criterias);
+                return node_ids;
             } else {
-                println!("stuff isn't disjoint!?: {:?}", vedges);
+                println!("stuff isn't disjoint!?: {:?}", edge_criterias);
             }
-            stuff
+            node_ids
                 .extend(self.clean_edges(*working_node_id, edges.iter().map(|(_, e)| *e).collect()))
         }
     }
@@ -330,6 +343,6 @@ fn test_union() {
     println!("from symbols {a:?}\n{b:?}");
     let n1 = a.union(&b);
     n1.graphviz_file("unioned1.dot", "!a!b U !c");
-    // let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
-    // n2.graphviz_file("unioned2.dot", "!a U !b U !c");
+    let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
+    n2.graphviz_file("unioned2.dot", "!a U !b U !c");
 }
