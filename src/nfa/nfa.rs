@@ -380,6 +380,7 @@ where
                     .collect(),
             );
         }
+        // TODO: empty remaining outbound edge list?
         self.edges.remove(&edge).unwrap();
     }
 
@@ -421,6 +422,7 @@ where
     // FIXME(not urgent): Definitionally this should only remove nodes which are solely reachable
     // from the subtree root.
     // Ensure any edges pointing to this node are removed also.
+    #[tracing::instrument(skip(self))]
     pub(crate) fn delete_subtree(&mut self, sub_tree: &NodeId) {
         let mut dead_nodes = vec![*sub_tree].iter().cloned().collect::<HashSet<NodeId>>();
         let mut dead_edges: HashSet<_> = self.edges_to(*sub_tree).iter().map(|(_, e)| *e).collect();
@@ -452,20 +454,24 @@ where
 
         for e in dead_edges {
             self.edges.remove(&e);
+            // TODO make more optimal
+            println!("XX  {:?}", self.transitions);
             self.transitions
                 .iter_mut()
-                .for_each(|(_, edges)| edges.retain(|(_, ee)| ee != &e));
+                .for_each(|(_, edges)| edges.retain(|(_, ee)| *ee != e));
+            println!("YY  {:?}", self.transitions);
         }
         // ensure any remaining lists of edges are non-empty
-        self.transitions.retain(|_k, v| !v.is_empty());
+        // self.transitions.retain(|_k, v| !v.is_empty());
     }
 }
 
 impl<N, E> Nfa<N, NfaEdge<E>>
 where
     N: Clone,
-    E: Eq + Clone + std::hash::Hash + std::default::Default,
+    E: std::fmt::Debug + Eq + Clone + std::hash::Hash + std::default::Default,
 {
+    #[tracing::instrument(skip(self), ret)]
     pub(super) fn edge_by_kind(&self, i: NodeId, kind: &E) -> Vec<(NodeId, EdgeId)> {
         self.transitions
             .get(&i)

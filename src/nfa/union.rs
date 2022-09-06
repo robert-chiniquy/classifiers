@@ -69,6 +69,7 @@ where
         union
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn safe_add_edge(
         &mut self,
         edge: NfaEdge<E>,
@@ -92,12 +93,16 @@ where
     }
 
     /// Returns the ids of any nodes which are the targets of modified edges
+    #[tracing::instrument(skip(self))]
     fn clean_edges(&mut self, source: NodeId, edges: Vec<EdgeId>) -> Vec<NodeId> {
         use EdgeTransition::*;
 
         let mut should_restart = false;
-        let mut _new_nodes_or_something = vec![];
+        let mut any_changed_targets = vec![];
         for (i, e1) in edges.clone().into_iter().enumerate() {
+            if self.edge(&e1).is_none() {
+                continue;
+            }
             let c1 = self.edge(&e1).unwrap().criteria.clone();
             for e2 in edges[i + 1..].iter() {
                 debug_assert!(e1 != *e2, "same edge");
@@ -166,25 +171,31 @@ where
                                 self.node(center_node),
                                 self.node(right)
                             );
-                            _new_nodes_or_something.push(center_node);
+                            any_changed_targets.push(center_node);
                             should_restart = true;
                         }
                         (Advance, Advance) => {
+                            //if c1 == c2 {
                             println!(
                                 "\n({:?}, {:?}) : {} VS {} -> {} (🌮🌮🌮🌮🌮 copied left into right..., deleted left) \n",
-                                &branch.left, &branch.right, &c1, c2, branch.kind
-                            );
+                                    &branch.left, &branch.right, &c1, c2, branch.kind
+                                );
 
-                            // if c1 == c2 {
                             let left = self.destination(&e1).unwrap();
                             let right = self.destination(e2).unwrap();
 
+                            self.graphviz_file("pre-copy.dot", "pre-copy");
+
                             self.self_copy_subtree(&left, &right);
                             println!("deleting left: {left}");
+                            self.graphviz_file("post-copy.dot", "post-copy");
+
                             self.delete_subtree(&left);
-                            _new_nodes_or_something.push(right);
+                            self.graphviz_file("post-delete.dot", "post-delete");
+
+                            any_changed_targets.push(right);
                             should_restart = true;
-                            // }
+                            //}
                         }
                         (Advance, Stop) => {
                             // a,b,c VS !a,!b
@@ -196,7 +207,7 @@ where
                                     &branch.left, &branch.right, c1, c2, c2, branch.kind
                                 );
                                 self.edge_mut(e1).unwrap().criteria = branch.kind.clone();
-                                _new_nodes_or_something.push(self.destination(&e1).unwrap());
+                                any_changed_targets.push(self.destination(&e1).unwrap());
                                 should_restart = true;
                             } else {
                                 println!(
@@ -206,14 +217,23 @@ where
                             }
                         }
                         (Stop, Advance) => {
-                            //  we change e.kind to branch.kind (will often be the same thing)
-                            //  we do nothing else
+                            // we change e.kind to branch.kind (will often be the same thing)
+                            // if an edge of branch.kind already exists, use that
+                            // we do nothing else
                             if c2 != branch.kind {
                                 println!(
                                     "\n({:?}, {:?}) : {} VS {} -> {} (change their kind) \n",
                                     &branch.left, &branch.right, &c1, c2, branch.kind
                                 );
-                                if let Some(edge) = self.edge_mut(*e2) {
+                                let same_edge = self.edge_by_kind(source, &branch.kind);
+                                if !same_edge.is_empty() {
+                                    let (same_edge_target, _same_edge) = same_edge[0];
+                                    self.self_copy_subtree(
+                                        &self.destination(e2).unwrap(),
+                                        &same_edge_target,
+                                    );
+                                    self.delete_subtree(&self.destination(e2).unwrap());
+                                } else if let Some(edge) = self.edge_mut(*e2) {
                                     edge.criteria = branch.kind.clone();
                                     should_restart = true;
                                 }
@@ -249,12 +269,13 @@ where
                 break;
             }
         }
-        _new_nodes_or_something
+        any_changed_targets
     }
 
     /// Invariant-preserving edge->node insert
     /// Ensures that the edges from working_node_id remain consistent (disjoint)
     /// Returns the ids of any added nodes
+    #[tracing::instrument(skip(self))]
     pub fn branch(
         &mut self,
         working_node_id: &NodeId,
@@ -324,6 +345,7 @@ where
     }
 
     #[allow(dead_code)]
+    #[tracing::instrument(skip(self))]
     pub(crate) fn self_copy_subtree(&mut self, source_node: &NodeId, copy_target_node: &NodeId) {
         for (target, edge) in self.edges_from(*source_node).clone() {
             println!("self_copy_subtree: {target} {edge}");
@@ -339,6 +361,7 @@ where
 
 #[test]
 fn test_union() {
+    tests::setup();
     let nt = Element::not_tokens;
     let a = Nfa::from_symbols(&[nt(&['a']), nt(&['b'])], ());
     let b = Nfa::from_symbols(&[nt(&['c'])], ());
