@@ -1,3 +1,5 @@
+use crate::Relation;
+
 #[derive(Debug)]
 pub enum GeneralError {
     Error(String),
@@ -27,6 +29,7 @@ pub trait ElementalLanguage<E>:
     + Complement<E>
     + Subtraction<E>
     + Product<E>
+    + Relelationship<E>
     + Disjointsome<E>
     + Universal
 {
@@ -47,6 +50,11 @@ where
 pub trait Disjointsome<E>
 {
     fn are_disjoint(set: Vec<E>) -> bool;
+}
+
+pub trait Relelationship<E>
+{
+    fn relation(a: &E, b: &E) -> Relation;
 }
 
 pub trait Subtraction<E> {

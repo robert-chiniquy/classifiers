@@ -193,6 +193,8 @@ where
                             self.delete_subtree(&left);
                             self.graphviz_file("post-delete.dot", "post-delete");
 
+                            self.edge_mut(*e2).unwrap().criteria = branch.kind.clone();
+
                             any_changed_targets.push(right);
                             should_restart = true;
                             //}
@@ -285,6 +287,63 @@ where
     ) -> Vec<NodeId> {
         println!("branching: {}", kind);
 
+
+
+        /* new algo:
+         
+         1. find appropriate edge (sort in order of):
+            a. identity
+            b. subset
+            c. superset
+            d. intersection
+            e. disjoint
+         2. Add new edge/modify existing target edge as appropriate for the exact relationship
+            a. take edge, return target id
+            b. take edge, return target id
+            c. split superset into two, add modified criteria, return both edge ids
+            d. do product, update middle criteria, return both edge ids
+            e. just add branch
+        */
+        let mut best = Relation::Disjoint;
+        let mut best_edge = None;
+        let mut best_target_node = None;
+        use Relation::*;
+        for (t, e) in self.edges_from(*working_node_id) {
+            let rel = E::relation(&kind, &self.edge(e).unwrap().criteria);
+            match rel {
+                Disjoint => {},
+                Intersection => {
+                    if best == Equality ||  best == Subset || best == Superset {
+                        continue;
+                    }
+                    best = rel;
+                    best_edge = Some(e);
+                    best_target_node = Some(t);
+                },
+                Superset => {
+                    if best == Equality ||  best == Subset {
+                        continue;
+                    }
+                    best = rel;
+                    best_edge = Some(e);
+                    best_target_node = Some(t);
+                },
+                Subset => {
+                    if best == Equality {
+                        continue;
+                    }
+                    best = rel;
+                    best_edge = Some(e);
+                    best_target_node = Some(t);
+                },
+                Equality => {
+                    best = Equality;
+                    best_edge = Some(e);
+                    best_target_node = Some(t);
+                    break;
+                },
+            }
+        }
         // first, look for a match
         let edges = self.edge_by_kind(*working_node_id, &kind);
         if !edges.is_empty() {
@@ -304,7 +363,14 @@ where
 
         // let mut new_nodes_or_something = vec![new_node_id];
         let mut node_ids = vec![*working_node_id];
+        let mut i = 1;
+    
+
+
         loop {
+            let name = &format!("auto-{i}.dot");
+            self.graphviz_file(name, name);
+            i += 1;
             let edges = self.edges_from(*working_node_id);
             let edge_criterias: Vec<_> = edges
                 .iter()
@@ -321,6 +387,7 @@ where
             }
             node_ids
                 .extend(self.clean_edges(*working_node_id, edges.iter().map(|(_, e)| *e).collect()))
+            
         }
     }
 
