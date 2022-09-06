@@ -287,10 +287,8 @@ where
     ) -> Vec<NodeId> {
         println!("branching: {}", kind);
 
-
-
         /* new algo:
-         
+
          1. find appropriate edge (sort in order of):
             a. identity
             b. subset
@@ -311,23 +309,23 @@ where
         for (t, e) in self.edges_from(*working_node_id) {
             let rel = E::relation(&kind, &self.edge(e).unwrap().criteria);
             match rel {
-                Disjoint => {},
+                Disjoint => {}
                 Intersection => {
-                    if best == Equality ||  best == Subset || best == Superset {
+                    if best == Equality || best == Subset || best == Superset {
                         continue;
                     }
                     best = rel;
                     best_edge = Some(e);
                     best_target_node = Some(t);
-                },
+                }
                 Superset => {
-                    if best == Equality ||  best == Subset {
+                    if best == Equality || best == Subset {
                         continue;
                     }
                     best = rel;
                     best_edge = Some(e);
                     best_target_node = Some(t);
-                },
+                }
                 Subset => {
                     if best == Equality {
                         continue;
@@ -335,13 +333,13 @@ where
                     best = rel;
                     best_edge = Some(e);
                     best_target_node = Some(t);
-                },
+                }
                 Equality => {
                     best = Equality;
                     best_edge = Some(e);
                     best_target_node = Some(t);
                     break;
-                },
+                }
             }
         }
         // first, look for a match
@@ -364,13 +362,14 @@ where
         // let mut new_nodes_or_something = vec![new_node_id];
         let mut node_ids = vec![*working_node_id];
         let mut i = 1;
-    
-
 
         loop {
-            let name = &format!("auto-{i}.dot");
-            self.graphviz_file(name, name);
-            i += 1;
+            #[cfg(feature = "graphs")]
+            {
+                let name = &format!("auto-{i}.dot");
+                self.graphviz_file(name, name);
+                i += 1;
+            }
             let edges = self.edges_from(*working_node_id);
             let edge_criterias: Vec<_> = edges
                 .iter()
@@ -387,7 +386,6 @@ where
             }
             node_ids
                 .extend(self.clean_edges(*working_node_id, edges.iter().map(|(_, e)| *e).collect()))
-            
         }
     }
 
