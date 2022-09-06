@@ -1,8 +1,3 @@
-// pub(crate) use negation::*;
-
-use std::collections::HashSet;
-use std::hash::{Hash, Hasher};
-
 use super::*;
 
 const ASCII_TOTAL_CHARS: usize = 128;
@@ -21,27 +16,6 @@ pub enum Element {
     TokenSet(BTreeSet<char>),
     NotTokenSet(BTreeSet<char>),
 }
-
-// impl Hash for Element {
-//     // TODO: this is **really** inefficient
-//     fn hash<H: Hasher>(&self, state: &mut H) {
-//         let s = match self {
-//             Element::Question => "?".to_string(),
-//             Element::Star => "*".to_string(),
-//             Element::TokenSet(v) => {
-//                 let mut v = v.iter().cloned().collect::<Vec<_>>();
-//                 v.sort();
-//                 format!("ts|{v:?}")
-//             }
-//             Element::NotTokenSet(v) => {
-//                 let mut v = v.iter().cloned().collect::<Vec<_>>();
-//                 v.sort();
-//                 format!("nts|{v:?}")
-//             }
-//         };
-//         state.write(s.as_bytes());
-//     }
-// }
 
 impl Element {
     pub fn token(c: char) -> Element {
@@ -111,6 +85,7 @@ fn test_disjoint() {
         Element::not_tokens(&['b']),
     ]));
 }
+
 impl Disjointsome<Element> for Element {
     fn are_disjoint(v: Vec<Element>) -> bool {
         use Element::*;
@@ -122,7 +97,7 @@ impl Disjointsome<Element> for Element {
                         return false;
                     }
                     (TokenSet(x), TokenSet(y)) => {
-                        if !x.is_disjoint(&y) {
+                        if !x.is_disjoint(y) {
                             return false;
                         }
                     }
@@ -134,7 +109,7 @@ impl Disjointsome<Element> for Element {
                     (TokenSet(x), NotTokenSet(y)) | (NotTokenSet(y), TokenSet(x)) => {
                         // all of left must be in right
                         // println!("{:?} {:?} {}", x, y, !y.is_superset(&x));
-                        if !y.is_superset(&x) {
+                        if !y.is_superset(x) {
                             return false;
                         }
                     }
@@ -142,14 +117,14 @@ impl Disjointsome<Element> for Element {
                     // !a vs !a -> intersect
                     // !a,,!c,!d...!z vs  !b
                     (NotTokenSet(x), NotTokenSet(y)) => {
-                        if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(&y) {
+                        if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(y) {
                             return false;
                         }
                     }
                 };
             }
         }
-        return true;
+        true
     }
 }
 
@@ -205,7 +180,7 @@ impl Accepts<Element> for Element {
             (_, Question) => false,
             // Are all other ASCII characters specified in the not token set?
             (TokenSet(x), NotTokenSet(y)) => {
-                x.len() + y.len() == ASCII_TOTAL_CHARS && x.is_disjoint(&y)
+                x.len() + y.len() == ASCII_TOTAL_CHARS && x.is_disjoint(y)
             }
             (NotTokenSet(x), TokenSet(y)) => x.is_disjoint(y),
             (_, _) => false,
@@ -219,8 +194,8 @@ impl Accepts<&char> for Element {
         match self {
             Element::Question => true,
             Element::Star => true,
-            Element::NotTokenSet(v) => !v.into_iter().any(|c| *c == **l),
-            Element::TokenSet(v) => v.into_iter().any(|c| *c == **l),
+            Element::NotTokenSet(v) => !v.iter().any(|c| *c == **l),
+            Element::TokenSet(v) => v.iter().any(|c| *c == **l),
         }
     }
 }
@@ -283,8 +258,8 @@ impl Product<Element> for Element {
                     NfaBranch::new(b.clone(), Advance, Advance),
                 ];
                 let c = b.clone().complement();
-                if c.is_some() {
-                    v.push(NfaBranch::new(c.unwrap(), Advance, Stop));
+                if let Some(c) = c {
+                    v.push(NfaBranch::new(c, Advance, Stop));
                 }
                 v
             }
@@ -295,8 +270,8 @@ impl Product<Element> for Element {
                     NfaBranch::new(a.clone(), Advance, Advance),
                 ];
                 let c = a.clone().complement();
-                if c.is_some() {
-                    v.push(NfaBranch::new(c.unwrap(), Stop, Advance));
+                if let Some(c) = c {
+                    v.push(NfaBranch::new(c, Stop, Advance));
                 }
                 v
             }
@@ -305,8 +280,8 @@ impl Product<Element> for Element {
             (Question, Question) | (Question, TokenSet(_)) | (Question, NotTokenSet(_)) => {
                 let mut v = vec![NfaBranch::new(b.clone(), Advance, Advance)];
                 let c = b.clone().complement();
-                if c.is_some() {
-                    v.push(NfaBranch::new(c.unwrap(), Advance, Stop));
+                if let Some(c) = c {
+                    v.push(NfaBranch::new(c, Advance, Stop));
                 }
                 v
             }

@@ -62,7 +62,7 @@ where
                 );
 
                 for id in next_ids {
-                    stack.push((id, other_edge_target.clone()));
+                    stack.push((id, *other_edge_target));
                 }
             }
         }
@@ -75,7 +75,7 @@ where
         source: NodeId,
         target: NodeId,
     ) -> Vec<NodeId> {
-        self.branch(&source, edge.criteria.clone(), self.node(target).clone())
+        self.branch(&source, edge.criteria, self.node(target).clone())
     }
 
     #[allow(unused)]
@@ -87,8 +87,8 @@ where
             return vec![new_node_id];
         }
         let (existing_node, _existing_edge) = existing_edges[0];
-        self.node_mut(existing_node).sum_mut(&target_node);
-        return vec![existing_node];
+        self.node_mut(existing_node).sum_mut(target_node);
+        vec![existing_node]
     }
 
     fn clean_edges(&mut self, source: NodeId, edges: Vec<EdgeId>) -> Vec<NodeId> {
@@ -100,7 +100,7 @@ where
             let c1 = self.edge(&e1).criteria.clone();
             for e2 in edges[i + 1..].iter() {
                 debug_assert!(e1 != *e2, "same edge");
-                let c2 = self.edge(&e2).criteria.clone();
+                let c2 = self.edge(e2).criteria.clone();
                 if E::are_disjoint(vec![c1.clone(), c2.clone()]) {
                     continue;
                 }
@@ -241,7 +241,7 @@ where
                 break;
             }
         }
-        return _new_nodes_or_something;
+        _new_nodes_or_something
     }
 
     pub fn branch(
@@ -251,28 +251,22 @@ where
         // this node is instantiated, but not in the graph
         new_node: NfaNode<M>,
     ) -> Vec<NodeId> {
-        println!("branching: {}", kind.clone());
+        println!("branching: {}", kind);
 
         let edges = self.edge_by_kind(*working_node_id, &kind);
         if !edges.is_empty() {
             let mut nodes = vec![];
             println!("found matching edge for {}", kind);
-            for (n, _) in edges.clone() {
+            for (n, _) in edges {
                 nodes.push(n);
                 self.node_mut(n).sum_mut(&new_node);
             }
             return nodes;
         }
 
-        println!("adding new edge: {}", kind.clone());
+        println!("adding new edge: {}", kind);
         let new_node_id = self.add_node(new_node);
-        self.add_edge(
-            NfaEdge {
-                criteria: kind.clone(),
-            },
-            *working_node_id,
-            new_node_id,
-        );
+        self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node_id);
 
         // let mut new_nodes_or_something = vec![new_node_id];
         let mut stuff = vec![*working_node_id];
@@ -306,11 +300,11 @@ where
             let new_edge_endpoint = self.add_node(source.node(*source_edge_endpoint).clone());
             // - get the weight and create a matching edge from target connecting to the new edge target node
             let _matching_edge = self.safe_add_edge(
-                source.edge(&edge).clone(),
+                source.edge(edge).clone(),
                 *copy_target_node,
                 new_edge_endpoint,
             );
-            self.copy_subtree(source, &source_edge_endpoint, &new_edge_endpoint);
+            self.copy_subtree(source, source_edge_endpoint, &new_edge_endpoint);
         }
     }
 
@@ -319,7 +313,7 @@ where
         for (target, edge) in self.edges_from(*source_node).clone() {
             println!("self_copy_subtree: {target} {edge}");
 
-            let c = self.edge(&edge).criteria.clone();  
+            let c = self.edge(&edge).criteria.clone();
 
             for id in self.branch(copy_target_node, c, self.node(target).clone()) {
                 self.self_copy_subtree(&target, &id);

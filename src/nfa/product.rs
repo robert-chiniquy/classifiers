@@ -5,9 +5,7 @@ where
     E: ElementalLanguage<E>,
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
- 
     pub fn product(&self, other: &Self) -> Self {
-
         // TODO: handle unrolling here?
         // make a copy of self to unroll and use in the remainder of product
         // alternatives
@@ -15,14 +13,13 @@ where
         // - visit each edge pair which would occur in product and only unroll the needed?
         let mut union: Self = Default::default();
 
-
         union.entry = union.add_node(Default::default());
         // for every edge on every node in self.enter,
         // for every edge on every node in other.enter,
         // now a 3-tuple, (self node id, other node id, union node id)
         let mut stack: Vec<(&NodeId, &NodeId, NodeId)> = Default::default();
         stack.push((&self.entry, &other.entry, union.entry));
-            
+
         // start
         // stack: first left, first right, target, ignore target
         // evaluate edges, each of the two nodes has 1 edge, you see like a * A product,
@@ -39,8 +36,7 @@ where
             visited.insert((self_id, other_id));
             let self_edges = self.edges_from(*self_id);
             let other_edges = other.edges_from(*other_id);
-            if self_edges.is_empty() && other_edges.is_empty()
-            {
+            if self_edges.is_empty() && other_edges.is_empty() {
                 continue;
             }
 
@@ -96,16 +92,19 @@ where
                             (None, None) => unreachable!(),
                             (None, Some(right_node_id)) => {
                                 // the right hand side is other
-                                next_working_ids.iter().for_each(|id| union.copy_subtree( other, right_node_id, &id))
-                                
+                                next_working_ids
+                                    .iter()
+                                    .for_each(|id| union.copy_subtree(other, right_node_id, id))
                             }
                             (Some(left_node_id), None) => {
                                 // the left hand side is self
-                                next_working_ids.iter().for_each(|id| union.copy_subtree( self, left_node_id, &id))
+                                next_working_ids
+                                    .iter()
+                                    .for_each(|id| union.copy_subtree(self, left_node_id, id))
                             }
-                            (Some(left_node_id), Some(right_node_id)) => {
-                                next_working_ids.iter().for_each(|id| stack.push((left_node_id, right_node_id, *id)))   
-                            }
+                            (Some(left_node_id), Some(right_node_id)) => next_working_ids
+                                .iter()
+                                .for_each(|id| stack.push((left_node_id, right_node_id, *id))),
                         }
                     }
                 }

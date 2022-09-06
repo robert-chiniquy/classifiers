@@ -30,8 +30,6 @@ fn test_a_v_q() {
     assert!(!i.accepts_string("a"));
 }
 
-
-
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
@@ -54,32 +52,30 @@ where
         // create dead end node and edges to it
         let dead_end_edges: Vec<Option<(NodeId, E)>> = (&self.nodes)
             .iter()
-            .map(
-                |(id, _node)| match &self.edges_from(*id)[..] {
-                    [] => {
-                        if self
-                            .edges_to(*id)
-                            .iter()
-                            .any(|(_, e)| self.edge(e).criteria == E::universal())
-                        {
-                            None
-                        } else {
-                            Some((*id, E::universal()))
-                        }
-                    }
-                    list => list
+            .map(|(id, _node)| match &self.edges_from(*id)[..] {
+                [] => {
+                    if self
+                        .edges_to(*id)
                         .iter()
-                        .map(|(_target, edge)| self.edge(edge).criteria.clone())
-                        .fold(Some(E::universal()), |acc, cur| match acc {
-                            None => None,
-                            Some(acc) => E::difference(&acc, &cur),
-                        })
-                        .map(|r| {
-                            println!("r: {r:?}");
-                            return (*id, r);
-                        }),
-                },
-            )
+                        .any(|(_, e)| self.edge(e).criteria == E::universal())
+                    {
+                        None
+                    } else {
+                        Some((*id, E::universal()))
+                    }
+                }
+                list => list
+                    .iter()
+                    .map(|(_target, edge)| self.edge(edge).criteria.clone())
+                    .fold(Some(E::universal()), |acc, cur| match acc {
+                        None => None,
+                        Some(acc) => E::difference(&acc, &cur),
+                    })
+                    .map(|r| {
+                        println!("r: {r:?}");
+                        (*id, r)
+                    }),
+            })
             .collect();
 
         println!("dead_end_edges: {dead_end_edges:?}");
@@ -116,7 +112,7 @@ where
             }
         }
 
-        return Ok(complete_dfa);
+        Ok(complete_dfa)
     }
 
     #[tracing::instrument(skip(self), ret)]

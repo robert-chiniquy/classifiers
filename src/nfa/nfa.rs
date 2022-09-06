@@ -11,7 +11,6 @@ where
 {
     pub(crate) node_count: NodeId,
     pub(crate) edge_count: EdgeId,
-    // Convenience for now, later switch to only a single initial node?
     pub(crate) entry: NodeId,
     pub(crate) nodes: BTreeMap<NodeId, N>,
     pub(crate) edges: BTreeMap<EdgeId, E>,
@@ -63,14 +62,14 @@ where
         nfa
     }
 
-    pub fn from_paths(paths: &Vec<Vec<E>>) -> Self {
+    pub fn from_paths(paths: &[Vec<E>]) -> Self {
         let mut nfa: Self = Default::default();
         let mut items = paths.iter();
 
         if let Some(first) = items.next() {
             let init = Self::from_symbols(first, Default::default());
             nfa = items.fold(init, |acc, cur| {
-                acc.union(&Self::from_symbols(&cur, Default::default()))
+                acc.union(&Self::from_symbols(cur, Default::default()))
             })
         }
         nfa
@@ -90,14 +89,13 @@ where
     // #[tracing::instrument(skip(filter, self), ret)]
     pub fn terminal_on<C>(
         &self,
-        single_path: &Vec<C>,
+        #[allow(clippy::ptr_arg)] single_path: &Vec<C>,
         filter: &impl Fn(&LRSemantics) -> bool,
     ) -> Result<bool, GeneralError>
     where
         E: Accepts<C>,
         C: Into<E> + Clone + std::fmt::Debug,
     {
-
         let i: NodeId = self.entry;
         let mut stack: Vec<_> = Default::default();
         stack.push((i, single_path.clone()));
@@ -156,7 +154,7 @@ where
     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
 {
     pub fn size(&self) -> usize {
-        return self.nodes.len();
+        self.nodes.len()
     }
 
     /// An intersection NFA only has accepting states where both input NFAs have accepting states
@@ -373,11 +371,10 @@ where
 
     pub fn remove_edge(&mut self, source: NodeId, edge: EdgeId) {
         let t = self.transitions.get(&source);
-        if t.is_some() {
+        if let Some(t) = t {
             self.transitions.insert(
                 source,
-                t.unwrap()
-                    .iter()
+                t.iter()
                     .filter(|(_, edge_id)| *edge_id != edge)
                     .cloned()
                     .collect(),
@@ -401,14 +398,13 @@ where
         self.transitions
             .iter()
             .filter(|(_, edges)| edges.iter().any(|(target, _)| target == &i))
-            .map(|(_, t)| t)
+            .flat_map(|(_, t)| t)
             .cloned()
-            .flatten()
             .collect()
     }
 
     pub fn destination(&self, e: &EdgeId) -> Option<NodeId> {
-        // let values: Vec<(_,_)>  = 
+        // let values: Vec<(_,_)>  =
         for value in self.transitions.values() {
             for (target, edge) in value {
                 if edge == e {
@@ -417,7 +413,6 @@ where
             }
         }
         None
-
     }
 
     pub(crate) fn delete_subtree(&mut self, sub_tree: &NodeId) {
@@ -451,9 +446,7 @@ where
         for e in dead_edges {
             self.edges.remove(&e);
         }
-        
     }
-
 }
 
 impl<N, E> Nfa<N, NfaEdge<E>>
@@ -518,7 +511,6 @@ where
         }
     }
 }
-
 
 impl std::fmt::Display for LRSemantics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
