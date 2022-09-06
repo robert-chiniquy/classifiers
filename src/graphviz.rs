@@ -25,7 +25,7 @@ where
   {} -> {} [label="{}" fontsize="20pt"];"#,
                     nodename(source),
                     nodename(target),
-                    self.edge(edge)
+                    self.edge(edge).unwrap()
                 );
             }
         }

@@ -57,7 +57,7 @@ where
                 // is there a matching edge in union?
                 let next_ids = union.branch(
                     &union_id,
-                    other.edge(other_edge_id).criteria.clone(),
+                    other.edge(other_edge_id).unwrap().criteria.clone(),
                     other.node(*other_edge_target).clone(),
                 );
 
@@ -98,10 +98,10 @@ where
         let mut should_restart = false;
         let mut _new_nodes_or_something = vec![];
         for (i, e1) in edges.clone().into_iter().enumerate() {
-            let c1 = self.edge(&e1).criteria.clone();
+            let c1 = self.edge(&e1).unwrap().criteria.clone();
             for e2 in edges[i + 1..].iter() {
                 debug_assert!(e1 != *e2, "same edge");
-                let c2 = self.edge(e2).criteria.clone();
+                let c2 = self.edge(e2).unwrap().criteria.clone();
                 if E::are_disjoint(vec![c1.clone(), c2.clone()]) {
                     continue;
                 }
@@ -213,8 +213,10 @@ where
                                     "\n({:?}, {:?}) : {} VS {} -> {} (change their kind) \n",
                                     &branch.left, &branch.right, &c1, c2, branch.kind
                                 );
-                                self.edge_mut(*e2).unwrap().criteria = branch.kind.clone();
-                                should_restart = true;
+                                if let Some(edge) = self.edge_mut(*e2) {
+                                    edge.criteria = branch.kind.clone();
+                                    should_restart = true;
+                                }
                             } else {
                                 println!(
                                     "\n({:?}, {:?}) : {} VS {} ({}) (no change their kind) \n",
@@ -285,7 +287,7 @@ where
             let edges = self.edges_from(*working_node_id);
             let edge_criterias: Vec<_> = edges
                 .iter()
-                .map(|(_, e)| self.edge(e).criteria.clone())
+                .map(|(_, e)| self.edge(e).unwrap().criteria.clone())
                 .collect();
 
             // ? If any 2 (or more) edges from a given node are non-disjoint,
@@ -313,7 +315,7 @@ where
             let new_edge_endpoint = self.add_node(source.node(*source_edge_endpoint).clone());
             // - get the weight and create a matching edge from target connecting to the new edge target node
             let _matching_edge = self.safe_add_edge(
-                source.edge(edge).clone(),
+                source.edge(edge).unwrap().clone(),
                 *copy_target_node,
                 new_edge_endpoint,
             );
@@ -326,7 +328,7 @@ where
         for (target, edge) in self.edges_from(*source_node).clone() {
             println!("self_copy_subtree: {target} {edge}");
 
-            let c = self.edge(&edge).criteria.clone();
+            let c = self.edge(&edge).unwrap().criteria.clone();
 
             for id in self.branch(copy_target_node, c, self.node(target).clone()) {
                 self.self_copy_subtree(&target, &id);

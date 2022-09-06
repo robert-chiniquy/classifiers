@@ -57,7 +57,7 @@ where
                     if self
                         .edges_to(*id)
                         .iter()
-                        .any(|(_, e)| self.edge(e).criteria == E::universal())
+                        .any(|(_, e)| self.edge(e).unwrap().criteria == E::universal())
                     {
                         None
                     } else {
@@ -66,7 +66,7 @@ where
                 }
                 list => list
                     .iter()
-                    .map(|(_target, edge)| self.edge(edge).criteria.clone())
+                    .map(|(_target, edge)| self.edge(edge).unwrap().criteria.clone())
                     .fold(Some(E::universal()), |acc, cur| match acc {
                         None => None,
                         Some(acc) => E::difference(&acc, &cur),

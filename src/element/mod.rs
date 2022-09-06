@@ -89,6 +89,9 @@ fn test_disjoint() {
 impl Disjointsome<Element> for Element {
     fn are_disjoint(v: Vec<Element>) -> bool {
         use Element::*;
+        if v.is_empty() {
+            return true;
+        }
         for i in 0..v.len() - 1 {
             let e1 = &v[i];
             for e2 in v[i + 1..].iter() {

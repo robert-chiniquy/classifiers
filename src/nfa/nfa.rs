@@ -105,7 +105,7 @@ where
                 Some(c) => {
                     for (target, edge) in self.edges_from(i) {
                         let edge = self.edge(edge);
-                        let accepts = edge.accepts(c);
+                        let accepts = edge.unwrap().accepts(c);
                         if accepts {
                             // push target onto stack
                             stack.push((*target, l.clone().collect()));
@@ -239,7 +239,7 @@ where
 
             for (next_node, edge_id) in self.edges_from(current_node) {
                 let mut next_path = current_path.to_vec();
-                next_path.push(self.edge(edge_id).criteria.clone());
+                next_path.push(self.edge(edge_id).unwrap().criteria.clone());
                 stack.push((*next_node, next_path));
             }
         }
@@ -347,8 +347,8 @@ where
     }
 
     // #[tracing::instrument(skip_all)]
-    pub fn edge(&self, i: &EdgeId) -> &E {
-        self.edges.get(i).unwrap()
+    pub fn edge(&self, i: &EdgeId) -> Option<&E> {
+        self.edges.get(i)
     }
 
     pub fn edge_mut(&mut self, i: EdgeId) -> Option<&mut E> {
@@ -394,6 +394,7 @@ where
 
     #[inline]
     // #[tracing::instrument(skip_all, ret)]
+    // returns a Vec of (target node, edge) where the target matches the requested NodeId
     pub fn edges_to(&self, i: NodeId) -> Vec<(NodeId, EdgeId)> {
         self.transitions
             .iter()
@@ -451,7 +452,12 @@ where
 
         for e in dead_edges {
             self.edges.remove(&e);
+            self.transitions
+                .iter_mut()
+                .for_each(|(_, edges)| edges.retain(|(_, ee)| ee != &e));
         }
+        // ensure any remaining lists of edges are non-empty
+        self.transitions.retain(|_k, v| !v.is_empty());
     }
 }
 
