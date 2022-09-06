@@ -100,7 +100,7 @@ impl Disjointsome<Element> for Element {
                         return false;
                     }
                     (TokenSet(x), TokenSet(y)) => {
-                        if !x.is_disjoint(y) {
+                        if !x.is_disjoint(&y) {
                             return false;
                         }
                     }
@@ -122,7 +122,7 @@ impl Disjointsome<Element> for Element {
                     // !a vs !a -> intersect
                     // !a,,!c,!d...!z vs  !b
                     (NotTokenSet(x), NotTokenSet(y)) => {
-                        if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(y) {
+                        if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(&y) {
                             return false;
                         }
                     }

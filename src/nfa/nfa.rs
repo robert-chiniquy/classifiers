@@ -395,14 +395,17 @@ where
 
     #[inline]
     // #[tracing::instrument(skip_all, ret)]
-    // returns a Vec of (target node, edge) where the target matches the requested NodeId
-    pub fn edges_to(&self, i: NodeId) -> Vec<(NodeId, EdgeId)> {
-        self.transitions
-            .iter()
-            .filter(|(_, edges)| edges.iter().any(|(target, _)| target == &i))
-            .flat_map(|(_, t)| t)
-            .cloned()
-            .collect()
+    // returns a Vec of (source node, edge) where the source matches the requested NodeId
+    pub fn edges_to(&self, to: NodeId) -> Vec<(NodeId, EdgeId)> {
+        let mut ret = vec![];
+        for (s, edges) in &self.transitions {
+            for (t, e) in edges {
+                if *t == to {
+                    ret.push((*s, *e));
+                }
+            }
+        }
+        ret
     }
 
     // Shouldn't this always be able to return an ID for an edge?
@@ -425,8 +428,10 @@ where
     #[tracing::instrument(skip(self))]
     pub(crate) fn delete_subtree(&mut self, sub_tree: &NodeId) {
         let mut dead_nodes = vec![*sub_tree].iter().cloned().collect::<HashSet<NodeId>>();
+        println!("self transitions: {:?}", self.transitions);
         let mut dead_edges: HashSet<_> = self.edges_to(*sub_tree).iter().map(|(_, e)| *e).collect();
 
+        println!("dead nodes: {:?}, dead_edges: {:?}", dead_nodes, dead_edges);
         // Find the closure of the subtree
         let mut stack = vec![*sub_tree];
 
@@ -440,6 +445,8 @@ where
                 stack.push(target);
             }
         }
+
+        println!("dead nodes: {:?}, dead_edges: {:?}", dead_nodes, dead_edges);
 
         for n in dead_nodes {
             if n == self.entry {
@@ -455,11 +462,11 @@ where
         for e in dead_edges {
             self.edges.remove(&e);
             // TODO make more optimal
-            println!("XX  {:?}", self.transitions);
+            println!("XX {e} {:?}", self.transitions);
             self.transitions
                 .iter_mut()
                 .for_each(|(_, edges)| edges.retain(|(_, ee)| *ee != e));
-            println!("YY  {:?}", self.transitions);
+            println!("YY {e} {:?}", self.transitions);
         }
         // ensure any remaining lists of edges are non-empty
         // self.transitions.retain(|_k, v| !v.is_empty());

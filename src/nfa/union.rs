@@ -185,7 +185,7 @@ where
                             let right = self.destination(e2).unwrap();
 
                             self.graphviz_file("pre-copy.dot", "pre-copy");
-
+                            println!("copying left: {left} to right: {right}");
                             self.self_copy_subtree(&left, &right);
                             println!("deleting left: {left}");
                             self.graphviz_file("post-copy.dot", "post-copy");
@@ -346,13 +346,13 @@ where
 
     #[allow(dead_code)]
     #[tracing::instrument(skip(self))]
-    pub(crate) fn self_copy_subtree(&mut self, source_node: &NodeId, copy_target_node: &NodeId) {
+    pub(crate) fn self_copy_subtree(&mut self, source_node: &NodeId, destination_node: &NodeId) {
         for (target, edge) in self.edges_from(*source_node).clone() {
             println!("self_copy_subtree: {target} {edge}");
 
             let c = self.edge(&edge).unwrap().criteria.clone();
 
-            for id in self.branch(copy_target_node, c, self.node(target).clone()) {
+            for id in self.branch(destination_node, c, self.node(target).clone()) {
                 self.self_copy_subtree(&target, &id);
             }
         }
