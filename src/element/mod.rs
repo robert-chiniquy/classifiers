@@ -96,25 +96,25 @@ fn test_relationships() {
     let tests = vec![
         (Star, Star, Equality),
         (Question, Question, Equality),
-        (t(&vec!['a', 'b']), Question, Subset),
-        (Question, t(&vec!['a', 'b']), Superset),
-        (t(&vec!['a', 'b']), t(&vec!['a']), Superset),
-        (t(&vec!['a', 'b']), nt(&vec!['a']), Intersection),
-        (t(&vec!['a', 'b']), nt(&vec!['a', 'b']), Disjoint),
-        (nt(&vec!['a', 'b']), nt(&vec!['a', 'b']), Equality),
-        (nt(&vec!['a', 'b', 'c']), nt(&vec!['a', 'b']), Subset),
-        (t(&vec!['a', 'b', 'c']), nt(&vec!['a', 'b']), Intersection),
-        (t(&vec!['a', 'b', 'c']), nt(&vec!['a']), Intersection),
+        (t(&['a', 'b']), Question, Subset),
+        (Question, t(&['a', 'b']), Superset),
+        (t(&['a', 'b']), t(&['a']), Superset),
+        (t(&['a', 'b']), nt(&['a']), Intersection),
+        (t(&['a', 'b']), nt(&['a', 'b']), Disjoint),
+        (nt(&['a', 'b']), nt(&['a', 'b']), Equality),
+        (nt(&['a', 'b', 'c']), nt(&['a', 'b']), Subset),
+        (t(&['a', 'b', 'c']), nt(&['a', 'b']), Intersection),
+        (t(&['a', 'b', 'c']), nt(&['a']), Intersection),
     ];
     for (t1, t2, t3) in &tests {
-        assert_eq!(Element::relation(t1, t2), *t3);    
+        assert_eq!(Element::relation(t1, t2), *t3);
     }
 }
 
 impl Relelationship<Element> for Element {
     fn relation(a: &Element, b: &Element) -> Relation {
-        use Relation::*;
         use Element::*;
+        use Relation::*;
 
         match (a, b) {
             (Star, Star) => Equality,
@@ -126,15 +126,11 @@ impl Relelationship<Element> for Element {
             (_, Question) => Subset,
             (_, Star) => Subset,
             (TokenSet(x), NotTokenSet(y)) => {
-
                 // a,b,c,d,e...[DEL] vs !a
                 if x.len() - y.len() == ASCII_TOTAL_CHARS && x.is_superset(y) {
                     Subset
                 // a vs !a
-                } else if x == y {
-                    Disjoint
-                // a vs !a,!b
-                } else if x.is_subset(y) {
+                } else if x == y || x.is_subset(y) {
                     Disjoint
                 // a,b vs !a
                 } else if x.is_superset(y) {
@@ -145,8 +141,7 @@ impl Relelationship<Element> for Element {
                 } else {
                     Intersection
                 }
-
-            },
+            }
             (NotTokenSet(x), TokenSet(y)) => {
                 // a,b,c,d,e...[DEL] vs !a
                 if y.len() - x.len() == ASCII_TOTAL_CHARS && y.is_superset(x) {
@@ -154,19 +149,18 @@ impl Relelationship<Element> for Element {
                 // !a vs a
                 } else if x == y {
                     Disjoint
-                // !a vs a,b  
+                // !a vs a,b
                 } else if x.is_subset(y) {
                     Intersection
                 // !a,!b vs a
                 } else if x.is_superset(y) {
                     Subset
                 // !b vs a
-                } else if x.is_disjoint(y) {
-                    Intersection
                 } else {
+                    //if x.is_disjoint(y) or other
                     Intersection
                 }
-            },
+            }
             (NotTokenSet(x), NotTokenSet(y)) => {
                 // !a vs !a!b
                 if x == y {
@@ -180,7 +174,7 @@ impl Relelationship<Element> for Element {
                 } else {
                     Intersection
                 }
-            },
+            }
             (TokenSet(x), TokenSet(y)) => {
                 if x.is_disjoint(y) {
                     Disjoint
@@ -194,7 +188,6 @@ impl Relelationship<Element> for Element {
                     Intersection
                 }
             }
-            
         }
     }
 }
@@ -213,7 +206,7 @@ impl Disjointsome<Element> for Element {
                         return false;
                     }
                     (TokenSet(x), TokenSet(y)) => {
-                        if !x.is_disjoint(&y) {
+                        if !x.is_disjoint(y) {
                             return false;
                         }
                     }
@@ -235,7 +228,7 @@ impl Disjointsome<Element> for Element {
                     // !a vs !a -> intersect
                     // !a,,!c,!d...!z vs  !b
                     (NotTokenSet(x), NotTokenSet(y)) => {
-                        if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(&y) {
+                        if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(y) {
                             return false;
                         }
                     }

@@ -136,7 +136,7 @@ where
                             println!("\n({:?}, {:?}) : {} VS {}, ?? -> {} (is intersection change their e, merge our state??) \n", &branch.left, &branch.right, &c1, c2, branch.kind);
 
                             let left = self.destination(&e1).unwrap();
-                            let right = self.destination(&e2).unwrap();
+                            let right = self.destination(e2).unwrap();
 
                             debug_assert!(
                                 left != right,
