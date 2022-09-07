@@ -30,7 +30,6 @@ pub trait ElementalLanguage<E>:
     + Add
     + std::ops::Add<Output = E>
     + Product<E>
-    + Disjointsome<E>
     + Universal
 {
 }
@@ -45,10 +44,6 @@ where
     Self: Sized,
 {
     fn complement(&self) -> Option<Self>;
-}
-
-pub trait Disjointsome<E> {
-    fn are_disjoint(set: Vec<E>) -> bool;
 }
 
 #[derive(Debug, PartialEq, Eq)]
