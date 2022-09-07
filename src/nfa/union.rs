@@ -362,13 +362,13 @@ where
                                 new_node.clone(),
                             );
                             node_ids.push(star_target);
-
+                            self.triangle_copy(&target, &r_r_l_node, &star_target);
                             // As r_r_l_node is ToStar, self_copy_subtree must respect branch logic
                             // copy the edge target subtree under the new node
-                            self.self_copy_subtree(&target, &r_r_l_node);
-                            // copy also under the star target
-                            // FIXME: convergence
-                            self.self_copy_subtree(&target, &star_target);
+                            // self.self_copy_subtree(&target, &r_r_l_node);
+                            // // copy also under the star target
+                            // // FIXME: convergence
+                            // self.self_copy_subtree(&target, &star_target);
                         }
                         // If Ri - (Ri - L) is ø, do nothing
                         EDifference::None => (),
@@ -411,12 +411,13 @@ where
                                 new_node.clone(),
                             );
                             node_ids.push(star_target);
+                            self.triangle_copy(&target, &r_r_l_node, &star_target);
                             // As r_r_l_node is ToStar, self_copy_subtree must respect branch logic
                             // copy the edge target subtree under the new node
-                            self.self_copy_subtree(&target, &r_r_l_node);
-                            // copy also under the star target
-                            // FIXME: convergence
-                            self.self_copy_subtree(&target, &star_target);
+                            // self.self_copy_subtree(&target, &r_r_l_node);
+                            // // copy also under the star target
+                            // // FIXME: convergence
+                            // self.self_copy_subtree(&target, &star_target);
                         }
                         // If Ri - (Ri - L) is ø, do nothing
                         EDifference::None => (),
@@ -425,6 +426,7 @@ where
                     self.edge_mut(e).unwrap().criteria = d;
                     // target must have a star branch added to it, as d is ToStar
                     // this must respect branch logic as it is an existing subtree
+                    node_ids.push(target);
                     node_ids.extend(self.branch(&target, E::universal(), new_node.clone()));
                 }
                 EDifference::None => {
@@ -451,6 +453,32 @@ where
         }
 
         node_ids
+    }
+
+    pub(crate) fn triangle_copy(&mut self,
+        source: &NodeId,
+        target_1: &NodeId,
+        target_2: &NodeId,
+    ) {
+        /* 
+            s -> a, s -> b, a ->c
+            t1 ->a1, t1 -> b1
+            t2 ->a1, t2 -> b1
+        */
+        let edges = self.edges_from(*source).clone();
+        // get edges from source
+        // copy target of edges into new node, N1
+        // copy_sub_tree into N1
+        // make edge from Ti -> Ni
+        for (t, edge) in edges {
+            // maybe use branch??
+            let copy = self.add_node(self.node(t).clone());
+
+            let c = self.edge(&edge).unwrap().clone();
+            self.add_edge(c.clone(), *target_1, copy);
+            self.add_edge(c.clone(), *target_2, copy);
+            self.self_copy_subtree(&t, &copy);
+        }
     }
 
     // there is no convergence yet but this is convergence-safe

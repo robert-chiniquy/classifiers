@@ -203,8 +203,8 @@ fn test_negate2() {
 
 #[test]
 fn test_simpler_intersection() {
-    let a = Classifier::Literal(str_to_chars("a*b"));
-    let b = Classifier::Literal(str_to_chars("ab"));
+    let a = Classifier::Literal(str_to_chars("*b"));
+    let b = Classifier::Literal(str_to_chars("a"));
     let c = Classifier::Any(BTreeSet::from_iter([a.clone(), b.clone()]));
 
     let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
