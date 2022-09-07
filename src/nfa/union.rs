@@ -313,6 +313,8 @@ where
             .iter()
             .map(|(_, e)| self.edge(e).unwrap().criteria.clone())
             .collect();
+
+        println!("existing_edge_weights {:?}", existing_edge_weights);
         if existing_edge_weights.is_empty() {
             // just add edge and return
             let node = self.add_node(new_node);
@@ -324,11 +326,13 @@ where
             .iter()
             .fold(initial, |acc, cur| acc + cur.clone());
 
+        println!("weights_sum: {:?}", weights_sum);
         let mut node_ids = vec![];
 
         let edges = self.edges_from(*working_node_id).clone();
         for (target, e) in edges {
             let difference = E::difference(&self.edge(&e).unwrap().criteria, &kind);
+            println!("difference: {:?} = {} - {}", difference, &self.edge(&e).unwrap().criteria, &kind);
             match difference {
                 Some(d) => {
                     // 2a
@@ -407,10 +411,10 @@ fn test_union() {
     let nt = Element::not_tokens;
     let a = Nfa::from_symbols(&[nt(&['a']), nt(&['b'])], ());
     let b = Nfa::from_symbols(&[nt(&['c'])], ());
-    println!("from symbols {a:?}\n{b:?}");
+    // println!("from symbols {a:?}\n{b:?}");
     let n1 = a.union(&b);
-    assert_eq!(n1.edges.len(), 5);
     n1.graphviz_file("unioned1.dot", "!a!b U !c");
+    assert_eq!(n1.edges.len(), 5);
     let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
     n2.graphviz_file("unioned2.dot", "!a U !b U !c");
 }

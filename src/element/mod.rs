@@ -102,7 +102,7 @@ impl Disjointsome<Element> for Element {
                         return false;
                     }
                     (TokenSet(x), TokenSet(y)) => {
-                        if !x.is_disjoint(y) {
+                        if !x.is_disjoint(&y) {
                             return false;
                         }
                     }
@@ -124,7 +124,7 @@ impl Disjointsome<Element> for Element {
                     // !a vs !a -> intersect
                     // !a,,!c,!d...!z vs  !b
                     (NotTokenSet(x), NotTokenSet(y)) => {
-                        if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(y) {
+                        if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(&y) {
                             return false;
                         }
                     }
@@ -247,34 +247,6 @@ impl std::fmt::Display for Element {
     }
 }
 
-impl Add for Element {
-    type Output = Element;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        use Element::*;
-
-        match (self, rhs) {
-            (TokenSet(_), Question) | (NotTokenSet(_), Question) => Question,
-            (TokenSet(_), Star) | (NotTokenSet(_), Star) => Star,
-            (Question, Question) => Question,
-            (Question, Star) => Star,
-            (Star, Question) => Star,
-            (Star, Star) => Star,
-            (Star, NotTokenSet(_)) | (Star, TokenSet(_)) => Star,
-            (Question, NotTokenSet(_)) | (Question, TokenSet(_)) => Question,
-            (TokenSet(x), TokenSet(y)) => TokenSet(&x | &y),
-            (NotTokenSet(y), TokenSet(x)) | (TokenSet(x), NotTokenSet(y)) => {
-                let z = &y - &x;
-                if z.is_empty() {
-                    Question
-                } else {
-                    NotTokenSet(z)
-                }
-            }
-            (NotTokenSet(x), NotTokenSet(y)) => NotTokenSet(&x | &y),
-        }
-    }
-}
 
 impl Product<Element> for Element {
     // #[tracing::instrument(ret)]
@@ -406,34 +378,6 @@ impl Product<Element> for Element {
     }
 }
 
-#[test]
-fn asdfasdf() {
-    use Element::*;
-    let nt = Element::not_token;
-    let nts = Element::not_tokens;
-    let ts = Element::tokens;
-    let t = Element::token;
-
-    let mut r = nt('c');
-    r = Element::difference(&r, &t('a')).unwrap();
-    r = Element::difference(&r, &t('b')).unwrap();
-    assert_eq!(r, Element::not_tokens(&['a', 'b', 'c']));
-
-    let mut r = Star;
-    r = Element::difference(&r, &t('a')).unwrap();
-    r = Element::difference(&r, &t('b')).unwrap();
-    assert_eq!(r, nts(&['a', 'b']));
-
-    let mut r = Question;
-    r = Element::difference(&r, &t('a')).unwrap();
-    r = Element::difference(&r, &t('b')).unwrap();
-    assert_eq!(r, nts(&['a', 'b']));
-
-    let mut r = ts(&['a', 'b']);
-    r = Element::difference(&r, &t('a')).unwrap();
-    assert_eq!(None, Element::difference(&r, &t('b')));
-}
-
 impl Element {
     fn simplify(&self) -> Option<Element> {
         use Element::*;
@@ -458,6 +402,35 @@ impl Element {
     }
 }
 
+impl Add for Element {
+    type Output = Element;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        use Element::*;
+
+        match (self, rhs) {
+            (TokenSet(_), Question) | (NotTokenSet(_), Question) => Question,
+            (TokenSet(_), Star) | (NotTokenSet(_), Star) => Star,
+            (Question, Question) => Question,
+            (Question, Star) => Star,
+            (Star, Question) => Star,
+            (Star, Star) => Star,
+            (Star, NotTokenSet(_)) | (Star, TokenSet(_)) => Star,
+            (Question, NotTokenSet(_)) | (Question, TokenSet(_)) => Question,
+            (TokenSet(x), TokenSet(y)) => TokenSet(&x | &y),
+            (NotTokenSet(y), TokenSet(x)) | (TokenSet(x), NotTokenSet(y)) => {
+                let z = &y - &x;
+                if z.is_empty() {
+                    Question
+                } else {
+                    NotTokenSet(z)
+                }
+            }
+            (NotTokenSet(x), NotTokenSet(y)) => NotTokenSet(&x | &y),
+        }
+    }
+}
+
 impl Subtraction<Element> for Element {
     fn difference(a: &Element, b: &Element) -> Option<Element> {
         use Element::*;
@@ -478,27 +451,67 @@ impl Subtraction<Element> for Element {
 
             (TokenSet(x), TokenSet(y)) => {
                 // ab - bc = a
-                let mut x = x.clone();
-                x.retain(|c| !y.contains(c));
-                TokenSet(x).simplify()
+                TokenSet(x - y).simplify()
             }
             (TokenSet(x), NotTokenSet(y)) => {
-                let mut x = x.clone();
-                x.retain(|c| y.contains(c));
-                TokenSet(x).simplify()
+                TokenSet(x & y).simplify()
+                // let mut x = x.clone();
+                // x.retain(|c| y.contains(c));
+                // TokenSet(x).simplify()
             }
             (NotTokenSet(x), TokenSet(y)) => {
                 // !a!b abc
-                NotTokenSet(x.clone().union(y).cloned().collect()).simplify()
+                // !a!b!c
+                NotTokenSet(x | y).simplify()
             }
 
             (NotTokenSet(x), NotTokenSet(y)) => {
+                // things on right not on the left
+                // let everything = a,b,c
+                // !a = b,c
+                // !c = a,b
+                // !a - !c = b,c - a,b = c
+                // !a + !c = b,c + a,b = a,b,c
+
+                //  !a - !c = c (b,c,d... - a,b,d.. = c)
+
+                // !a + !c = ? - !c = 
+
                 let mut x = x.clone();
                 x.retain(|c| !y.contains(c));
                 NotTokenSet(x).simplify()
             }
         }
     }
+}
+
+
+#[test]
+fn test_arithmetic() {
+    use Element::*;
+    let nt = Element::not_token;
+    let nts = Element::not_tokens;
+    let ts = Element::tokens;
+    let t = Element::token;
+
+    let mut r = nt('c');
+    r = Element::difference(&r, &t('a')).unwrap();
+    r = Element::difference(&r, &t('b')).unwrap();
+    assert_eq!(r, Element::not_tokens(&['a', 'b', 'c']));
+
+    let mut r = Star;
+    r = Element::difference(&r, &t('a')).unwrap();
+    r = Element::difference(&r, &t('b')).unwrap();
+    assert_eq!(r, nts(&['a', 'b']));
+
+    let mut r = Question;
+    r = Element::difference(&r, &t('a')).unwrap();
+    r = Element::difference(&r, &t('b')).unwrap();
+    assert_eq!(r, nts(&['a', 'b']));
+
+    let mut r = ts(&['a', 'b']);
+    r = Element::difference(&r, &t('a')).unwrap();
+    assert_eq!(None, Element::difference(&r, &t('b')));
 }
 
 impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
