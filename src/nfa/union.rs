@@ -287,106 +287,83 @@ where
     ) -> Vec<NodeId> {
         println!("branching: {}", kind);
 
-        /* new algo:
+        /*
+        # Rules for intersection play out for all relations so long as you ignore empty edge results ø
 
-         1. find appropriate edge (sort in order of):
-            a. identity
-            b. subset
-            c. superset
-            d. intersection
-            e. disjoint
-         2. Add new edge/modify existing target edge as appropriate for the exact relationship
-            a. take edge, return target id
-            b. take edge, return target id
-            c. split superset into two, add modified criteria, return both edge ids
-            d. do product, update middle criteria, return both edge ids
-            e. just add branch
+        1. Divide R into disjoint and overlapping sections
+           - disjoint: R - L
+           - overlapping: R - (R - L)
+        2. Partition L into its remainder of L - R
+        3. Make changes
+          - Add (or modify if in an existing tree) edges for:
+            - Ri - L : (this is a piecemeal operation) retains the prior R subtrees (this is a move)
+            - L - R : proceed to copy new subtree (new subtree)
+            - Ri - (Ri - L): (this is a piecemeal operation) proceed to copy new subtree and copy prior subtree (copy old and add new)
+
+        # Implementation
+        1. Add the weights of all extant edges (this is R)
+        2. Loop over all extant edges and calculate Ri - L, if it exists, reduce scope of edge and just retain the subtree there
+        2a. Add an edge for Ri - (Ri - L) if it exists and sum both subtrees there
+        3. Add an edge for L - R if it exists and copy the new subtree there
         */
-        let mut best = Relation::Disjoint;
-        let mut best_edge = None;
-        let mut best_target_node = None;
-        use Relation::*;
-        for (t, e) in self.edges_from(*working_node_id) {
-            let rel = E::relation(&kind, &self.edge(e).unwrap().criteria);
-            match rel {
-                Disjoint => {}
-                Intersection => {
-                    if best == Equality || best == Subset || best == Superset {
-                        continue;
+
+        // 1
+        let existing_edge_weights: Vec<E> = self
+            .edges_from(*working_node_id)
+            .iter()
+            .map(|(_, e)| self.edge(e).unwrap().criteria.clone())
+            .collect();
+        if existing_edge_weights.is_empty() {
+            // just add edge and return
+            let node = self.add_node(new_node);
+            let _edge = self.add_edge(NfaEdge { criteria: kind }, *working_node_id, node);
+            return vec![node];
+        }
+        let initial = existing_edge_weights[0].clone();
+        let weights_sum = existing_edge_weights[1..]
+            .iter()
+            .fold(initial, |acc, cur| acc + cur.clone());
+
+        let mut node_ids = vec![];
+
+        let edges = self.edges_from(*working_node_id).clone();
+        for (target, e) in edges {
+            let difference = E::difference(&self.edge(&e).unwrap().criteria, &kind);
+            match difference {
+                Some(d) => {
+                    // 2a
+                    if let Some(r_r_l) = E::difference(&self.edge(&e).unwrap().criteria, &d) {
+                        let r_r_l_node = self.add_node(new_node.clone());
+                        let _r_r_l_edge = self.add_edge(
+                            NfaEdge { criteria: r_r_l },
+                            *working_node_id,
+                            r_r_l_node,
+                        );
+                        node_ids.push(r_r_l_node);
+                        // copy the edge target subtree under the new node
+                        self.self_copy_subtree(&target, &r_r_l_node);
                     }
-                    best = rel;
-                    best_edge = Some(e);
-                    best_target_node = Some(t);
+                    // 2
+                    // reduce the scope of edge and retain the subtree there
+                    self.edge_mut(e).unwrap().criteria = d;
                 }
-                Superset => {
-                    if best == Equality || best == Subset {
-                        continue;
-                    }
-                    best = rel;
-                    best_edge = Some(e);
-                    best_target_node = Some(t);
-                }
-                Subset => {
-                    if best == Equality {
-                        continue;
-                    }
-                    best = rel;
-                    best_edge = Some(e);
-                    best_target_node = Some(t);
-                }
-                Equality => {
-                    best = Equality;
-                    best_edge = Some(e);
-                    best_target_node = Some(t);
-                    break;
+                None => {
+                    // 2a (None case) Ri - L = ø, Ri - (Ri - L) = Ri
+                    // The Ri edge already exists, so just do a sum_mut on that edge
+                    self.node_mut(target).sum_mut(&new_node);
+                    node_ids.push(target);
                 }
             }
         }
-        // first, look for a match
-        let edges = self.edge_by_kind(*working_node_id, &kind);
-        if !edges.is_empty() {
-            let mut nodes = vec![];
-            println!("found matching edge for {}", kind);
-            for (n, _) in edges {
-                nodes.push(n);
-                self.node_mut(n).sum_mut(&new_node);
-            }
-            return nodes;
+
+        // 3
+        if let Some(l_r) = E::difference(&kind, &weights_sum) {
+            let l_r_node = self.add_node(new_node);
+            let _l_r_edge = self.add_edge(NfaEdge { criteria: l_r }, *working_node_id, l_r_node);
+            node_ids.push(l_r_node);
         }
 
-        // if no match, try to find a good place to add
-        println!("adding new edge: {}", kind);
-        let new_node_id = self.add_node(new_node);
-        self.add_edge(NfaEdge { criteria: kind }, *working_node_id, new_node_id);
-
-        // let mut new_nodes_or_something = vec![new_node_id];
-        let mut node_ids = vec![*working_node_id];
-        let mut i = 1;
-
-        loop {
-            #[cfg(feature = "graphs")]
-            {
-                let name = &format!("auto-{i}.dot");
-                self.graphviz_file(name, name);
-                i += 1;
-            }
-            let edges = self.edges_from(*working_node_id);
-            let edge_criterias: Vec<_> = edges
-                .iter()
-                .map(|(_, e)| self.edge(e).unwrap().criteria.clone())
-                .collect();
-
-            // ? If any 2 (or more) edges from a given node are non-disjoint,
-            // do we only need to operate on the non-disjoint set
-            if E::are_disjoint(edge_criterias.clone()) {
-                println!("stuff is disjoint!!: {:?}", edge_criterias);
-                return node_ids;
-            } else {
-                println!("stuff isn't disjoint!?: {:?}", edge_criterias);
-            }
-            node_ids
-                .extend(self.clean_edges(*working_node_id, edges.iter().map(|(_, e)| *e).collect()))
-        }
+        node_ids
     }
 
     // there is no convergence yet but this is convergence-safe
@@ -432,6 +409,7 @@ fn test_union() {
     let b = Nfa::from_symbols(&[nt(&['c'])], ());
     println!("from symbols {a:?}\n{b:?}");
     let n1 = a.union(&b);
+    assert_eq!(n1.edges.len(), 5);
     n1.graphviz_file("unioned1.dot", "!a!b U !c");
     let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
     n2.graphviz_file("unioned2.dot", "!a U !b U !c");

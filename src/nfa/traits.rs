@@ -1,3 +1,5 @@
+use std::{iter::Sum, ops::Add};
+
 use crate::Relation;
 
 #[derive(Debug)]
@@ -17,7 +19,6 @@ impl std::fmt::Display for GeneralError {
     }
 }
 
-
 pub trait ElementalLanguage<E>:
     Clone
     + Default
@@ -28,8 +29,9 @@ pub trait ElementalLanguage<E>:
     + Accepts<E>
     + Complement<E>
     + Subtraction<E>
+    + Add
+    + std::ops::Add<Output = E>
     + Product<E>
-    + Relelationship<E>
     + Disjointsome<E>
     + Universal
 {
@@ -47,14 +49,8 @@ where
     fn complement(&self) -> Option<Self>;
 }
 
-pub trait Disjointsome<E>
-{
+pub trait Disjointsome<E> {
     fn are_disjoint(set: Vec<E>) -> bool;
-}
-
-pub trait Relelationship<E>
-{
-    fn relation(a: &E, b: &E) -> Relation;
 }
 
 pub trait Subtraction<E> {
@@ -68,7 +64,6 @@ pub trait Universal {
 pub trait Product<E> {
     fn product(a: &E, b: &E) -> Vec<NfaBranch<E>>;
 }
-
 
 pub trait NodeSum {
     fn sum(&self, other: &Self) -> Self;

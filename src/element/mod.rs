@@ -1,3 +1,5 @@
+use std::{iter::Sum, ops::Add};
+
 use super::*;
 
 const ASCII_TOTAL_CHARS: usize = 128;
@@ -84,112 +86,6 @@ fn test_disjoint() {
         Element::token('a'),
         Element::not_tokens(&['b']),
     ]));
-}
-
-#[test]
-fn test_relationships() {
-    use Element::*;
-    use Relation::*;
-    let t = Element::tokens;
-    let nt = Element::not_tokens;
-
-    let tests = vec![
-        (Star, Star, Equality),
-        (Question, Question, Equality),
-        (t(&['a', 'b']), Question, Subset),
-        (Question, t(&['a', 'b']), Superset),
-        (t(&['a', 'b']), t(&['a']), Superset),
-        (t(&['a', 'b']), nt(&['a']), Intersection),
-        (t(&['a', 'b']), nt(&['a', 'b']), Disjoint),
-        (nt(&['a', 'b']), nt(&['a', 'b']), Equality),
-        (nt(&['a', 'b', 'c']), nt(&['a', 'b']), Subset),
-        (t(&['a', 'b', 'c']), nt(&['a', 'b']), Intersection),
-        (t(&['a', 'b', 'c']), nt(&['a']), Intersection),
-    ];
-    for (t1, t2, t3) in &tests {
-        assert_eq!(Element::relation(t1, t2), *t3);
-    }
-}
-
-impl Relelationship<Element> for Element {
-    fn relation(a: &Element, b: &Element) -> Relation {
-        use Element::*;
-        use Relation::*;
-
-        match (a, b) {
-            (Star, Star) => Equality,
-            (Question, Question) => Equality,
-            (Question, Star) => Equality,
-            (Star, Question) => Equality,
-            (Star, _) => Superset,
-            (Question, _) => Superset,
-            (_, Question) => Subset,
-            (_, Star) => Subset,
-            (TokenSet(x), NotTokenSet(y)) => {
-                // a,b,c,d,e...[DEL] vs !a
-                if x.len() - y.len() == ASCII_TOTAL_CHARS && x.is_superset(y) {
-                    Subset
-                // a vs !a
-                } else if x == y || x.is_subset(y) {
-                    Disjoint
-                // a,b vs !a
-                } else if x.is_superset(y) {
-                    Intersection
-                // a vs !b
-                } else if x.is_disjoint(y) {
-                    Superset
-                } else {
-                    Intersection
-                }
-            }
-            (NotTokenSet(x), TokenSet(y)) => {
-                // a,b,c,d,e...[DEL] vs !a
-                if y.len() - x.len() == ASCII_TOTAL_CHARS && y.is_superset(x) {
-                    Subset
-                // !a vs a
-                } else if x == y {
-                    Disjoint
-                // !a vs a,b
-                } else if x.is_subset(y) {
-                    Intersection
-                // !a,!b vs a
-                } else if x.is_superset(y) {
-                    Subset
-                // !b vs a
-                } else {
-                    //if x.is_disjoint(y) or other
-                    Intersection
-                }
-            }
-            (NotTokenSet(x), NotTokenSet(y)) => {
-                // !a vs !a!b
-                if x == y {
-                    Equality
-                } else if x.is_disjoint(y) {
-                    Disjoint
-                } else if x.is_subset(y) {
-                    Superset
-                } else if x.is_superset(y) {
-                    Subset
-                } else {
-                    Intersection
-                }
-            }
-            (TokenSet(x), TokenSet(y)) => {
-                if x.is_disjoint(y) {
-                    Disjoint
-                } else if x.is_superset(y) {
-                    Superset
-                } else if x.is_subset(y) {
-                    Subset
-                } else if x == y {
-                    Equality
-                } else {
-                    Intersection
-                }
-            }
-        }
-    }
 }
 
 impl Disjointsome<Element> for Element {
@@ -348,6 +244,35 @@ impl std::fmt::Display for Element {
                 }
             }
         ))
+    }
+}
+
+impl Add for Element {
+    type Output = Element;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        use Element::*;
+
+        match (self, rhs) {
+            (TokenSet(_), Question) | (NotTokenSet(_), Question) => Question,
+            (TokenSet(_), Star) | (NotTokenSet(_), Star) => Star,
+            (Question, Question) => Question,
+            (Question, Star) => Star,
+            (Star, Question) => Star,
+            (Star, Star) => Star,
+            (Star, NotTokenSet(_)) | (Star, TokenSet(_)) => Star,
+            (Question, NotTokenSet(_)) | (Question, TokenSet(_)) => Question,
+            (TokenSet(x), TokenSet(y)) => TokenSet(&x | &y),
+            (NotTokenSet(y), TokenSet(x)) | (TokenSet(x), NotTokenSet(y)) => {
+                let z = &y - &x;
+                if z.is_empty() {
+                    Question
+                } else {
+                    NotTokenSet(z)
+                }
+            }
+            (NotTokenSet(x), NotTokenSet(y)) => NotTokenSet(&x | &y),
+        }
     }
 }
 
