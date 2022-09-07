@@ -146,6 +146,18 @@ where
             Terminal::Reject(_) => true,
         }
     }
+
+    #[tracing::instrument(skip_all)]
+    pub fn add_node_with_edge(
+        &mut self,
+        criteria: E,
+        source: NodeId,
+        target: NfaNode<M>,
+    ) -> NodeId {
+        let target = self.add_node(target);
+        let _ = self.add_edge(NfaEdge { criteria }, source, target);
+        target
+    }
 }
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>

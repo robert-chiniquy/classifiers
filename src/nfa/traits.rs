@@ -1,6 +1,4 @@
-use std::{iter::Sum, ops::Add};
-
-use crate::Relation;
+use std::ops::Add;
 
 #[derive(Debug)]
 pub enum GeneralError {
@@ -53,8 +51,25 @@ pub trait Disjointsome<E> {
     fn are_disjoint(set: Vec<E>) -> bool;
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum EDifference<E> {
+    E(E),
+    ToStar(E),
+    None,
+}
+
+// impl<E> EDifference<E> {
+//     pub fn unwrap(&self) -> E {
+//         match self {
+//             EDifference::ToStar(e) |
+//             EDifference::E(e) => e,
+//             EDifference::None => todo!(),
+//         }
+//     }
+// }
+
 pub trait Subtraction<E> {
-    fn difference(a: &E, b: &E) -> Option<E>;
+    fn difference(a: &E, b: &E) -> EDifference<E>;
 }
 
 pub trait Universal {

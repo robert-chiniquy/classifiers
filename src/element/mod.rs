@@ -1,4 +1,4 @@
-use std::{iter::Sum, ops::Add};
+use std::ops::Add;
 
 use super::*;
 
@@ -34,6 +34,38 @@ impl Element {
 
     pub fn not_tokens(v: &[char]) -> Element {
         Element::NotTokenSet(FromIterator::from_iter(v.iter().cloned()))
+    }
+}
+
+impl EDifference<Element> {
+    pub fn simplify(&self) -> Self {
+        match self {
+            EDifference::E(e) => e.simplify().into(),
+            EDifference::ToStar(e) => {
+                EDifference::ToStar(e.simplify().unwrap_or_else(|| e.clone()))
+            }
+            EDifference::None => EDifference::None,
+        }
+    }
+}
+
+impl From<Option<Element>> for EDifference<Element> {
+    fn from(o: Option<Element>) -> Self {
+        match o {
+            Some(e) => EDifference::E(e),
+            None => EDifference::None,
+        }
+    }
+}
+
+#[cfg(test)]
+impl From<EDifference<Element>> for Element {
+    fn from(d: EDifference<Element>) -> Self {
+        match d {
+            EDifference::E(e) => e,
+            EDifference::ToStar(e) => e,
+            EDifference::None => unreachable!(),
+        }
     }
 }
 
@@ -102,7 +134,7 @@ impl Disjointsome<Element> for Element {
                         return false;
                     }
                     (TokenSet(x), TokenSet(y)) => {
-                        if !x.is_disjoint(&y) {
+                        if !x.is_disjoint(y) {
                             return false;
                         }
                     }
@@ -124,7 +156,7 @@ impl Disjointsome<Element> for Element {
                     // !a vs !a -> intersect
                     // !a,,!c,!d...!z vs  !b
                     (NotTokenSet(x), NotTokenSet(y)) => {
-                        if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(&y) {
+                        if x.len() + y.len() != ASCII_TOTAL_CHARS || !x.is_disjoint(y) {
                             return false;
                         }
                     }
@@ -442,30 +474,35 @@ impl Add for Element {
 }
 
 impl Subtraction<Element> for Element {
-    fn difference(a: &Element, b: &Element) -> Option<Element> {
+    fn difference(a: &Element, b: &Element) -> EDifference<Element> {
         use Element::*;
 
         match (a, b) {
             (TokenSet(_), Question)
             | (TokenSet(_), Star)
             | (NotTokenSet(_), Question)
-            | (NotTokenSet(_), Star) => None,
+            | (NotTokenSet(_), Star) => EDifference::None,
 
-            (Question, Question) => None,
-            (Question, Star) => None,
-            (Star, Question) => None,
-            (Star, Star) => None,
+            (Question, Question) => EDifference::None,
+            (Question, Star) => EDifference::None,
+            (Star, Question) => EDifference::None,
+            (Star, Star) => EDifference::None,
 
-            (Star, NotTokenSet(v)) | (Question, NotTokenSet(v)) => Some(TokenSet(v.clone())),
-            (Star, TokenSet(y)) | (Question, TokenSet(y)) => Some(NotTokenSet(y.clone())),
+            (Star, NotTokenSet(v)) | (Question, NotTokenSet(v)) => {
+                EDifference::ToStar(TokenSet(v.clone()))
+            }
+            // FIXME: * - ab = subgraph(!ab -> * accepting)
+            (Star, TokenSet(y)) | (Question, TokenSet(y)) => {
+                EDifference::ToStar(NotTokenSet(y.clone()))
+            }
 
             (TokenSet(x), TokenSet(y)) => {
                 // ab - bc = a
-                TokenSet(x - y).simplify()
+                EDifference::E(TokenSet(x - y)).simplify()
             }
             (TokenSet(x), NotTokenSet(y)) => {
                 // remove from x any value which is not in y
-                TokenSet(x & y).simplify()
+                EDifference::E(TokenSet(x & y)).simplify()
                 // let mut x = x.clone();
                 // x.retain(|c| y.contains(c));
                 // TokenSet(x).simplify()
@@ -473,7 +510,7 @@ impl Subtraction<Element> for Element {
             (NotTokenSet(x), TokenSet(y)) => {
                 // !a!b abc
                 // !a!b!c
-                NotTokenSet(x | y).simplify()
+                EDifference::E(NotTokenSet(x | y)).simplify()
             }
 
             (NotTokenSet(x), NotTokenSet(y)) => {
@@ -486,7 +523,7 @@ impl Subtraction<Element> for Element {
                 // !a + !c = ? - !c =
 
                 //  !a - !c = c (b,c,d... - a,b,d.. = c)
-                TokenSet(y - x).simplify()
+                EDifference::E(TokenSet(y - x)).simplify()
                 // let mut x = x.clone();
                 // x.retain(|c| !y.contains(c));
                 // NotTokenSet(x).simplify()
@@ -504,30 +541,30 @@ fn test_arithmetic() {
     let t = Element::token;
 
     // !c - a - b = !a!b!c
-    let mut r = nt('c');
-    r = Element::difference(&r, &t('a')).unwrap();
-    r = Element::difference(&r, &t('b')).unwrap();
+    let r = Element::difference(&nt('c'), &t('a')).into();
+    let r: Element = Element::difference(&r, &t('b')).into();
     assert_eq!(r, Element::not_tokens(&['a', 'b', 'c']));
 
     // * - a - b = !a!b
     let mut r = Star;
-    r = Element::difference(&r, &t('a')).unwrap();
-    r = Element::difference(&r, &t('b')).unwrap();
+    r = Element::difference(&r, &t('a')).into();
+    r = Element::difference(&r, &t('b')).into();
     assert_eq!(r, nts(&['a', 'b']));
 
     // ? - a - b = !a!b
-    let mut r = Question;
-    r = Element::difference(&r, &t('a')).unwrap();
-    r = Element::difference(&r, &t('b')).unwrap();
-    assert_eq!(r, nts(&['a', 'b']));
+    let r = Element::difference(&Question, &t('a'));
+    let r = Element::difference(&r.into(), &t('b'));
+    assert_eq!(r, EDifference::E(nts(&['a', 'b'])));
 
     // ab - a -b = None
-    let mut r = ts(&['a', 'b']);
-    r = Element::difference(&r, &t('a')).unwrap();
-    assert_eq!(None, Element::difference(&r, &t('b')));
+    let r = Element::difference(&ts(&['a', 'b']), &t('a'));
+    assert_eq!(EDifference::None, Element::difference(&r.into(), &t('b')));
 
     // !a - !c = c
-    assert_eq!(Element::difference(&nt('a'), &nt('c')).unwrap(), t('c'));
+    assert_eq!(
+        Element::difference(&nt('a'), &nt('c')),
+        EDifference::E(t('c'))
+    );
 }
 
 impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>

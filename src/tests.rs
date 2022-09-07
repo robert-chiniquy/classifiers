@@ -169,11 +169,14 @@ fn test_rejection() {
 }
 
 fn write_graph(data: String, filename: &str) {
-    use std::io::Write;
+    #[cfg(feature = "graphs")]
+    {
+        use std::io::Write;
 
-    let g = graphviz_wrap(data, filename);
-    let mut output = std::fs::File::create(filename).unwrap();
-    assert!(output.write_all(g.as_bytes()).is_ok());
+        let g = graphviz_wrap(data, filename);
+        let mut output = std::fs::File::create(filename).unwrap();
+        assert!(output.write_all(g.as_bytes()).is_ok());
+    }
 }
 
 #[test]
@@ -199,7 +202,17 @@ fn test_negate2() {
 }
 
 #[test]
-fn test_negate3() {
+fn test_simpler_intersection() {
+    let a = Classifier::Literal(str_to_chars("a*b"));
+    let b = Classifier::Literal(str_to_chars("ab"));
+    let c = Classifier::Any(BTreeSet::from_iter([a.clone(), b.clone()]));
+
+    let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
+    write_graph(d.graphviz(), "simpler.dot");
+}
+
+#[test]
+fn test_intersection() {
     setup();
 
     let astar = Classifier::Literal(str_to_chars("A*"));
@@ -207,19 +220,17 @@ fn test_negate3() {
     let c = Classifier::And(BTreeSet::from_iter([astar.clone(), stara.clone()]));
 
     let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
+    write_graph(d.graphviz(), "intersection.dot");
+    assert_eq!(d.edges.len(), 2);
+    assert!(d.accepts_string("AAb"));
 
-    write_graph(d.graphviz(), "negate3.dot");
-
-    let mut b = Classifier::compile::<Element, (), char>(&astar, ());
+    let mut b: Nfa<NfaNode<()>, NfaEdge<Element>> = astar.compile(());
     let mut a = stara.compile(());
     a.set_chirality(LRSemantics::L);
     b.set_chirality(LRSemantics::R);
-    let union = a.product(&b);
+    let product = a.product(&b);
 
-    write_graph(union.graphviz(), "union-negate3.dot");
-
-    assert!(d.accepts_string("AAb"));
-    // assert!(false);
+    write_graph(product.graphviz(), "product-intersection.dot");
 }
 
 #[test]

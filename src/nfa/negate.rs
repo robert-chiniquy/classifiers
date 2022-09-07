@@ -49,6 +49,7 @@ where
         //     //    b
         //     // 1 ---> 3
 
+        // the inverse space of anything has every leaf node end in
         // create dead end node and edges to it
         let dead_end_edges: Vec<Option<(NodeId, E)>> = (&self.nodes)
             .iter()
@@ -69,16 +70,22 @@ where
                     .map(|(_target, edge)| self.edge(edge).unwrap().criteria.clone())
                     .fold(Some(E::universal()), |acc, cur| match acc {
                         None => None,
-                        Some(acc) => E::difference(&acc, &cur),
+                        Some(acc) => match E::difference(&acc, &cur) {
+                            EDifference::ToStar(e) | EDifference::E(e) => Some(e),
+                            EDifference::None => None,
+                        },
                     })
                     .map(|r| {
-                        println!("r: {r:?}");
+                        // println!("r: {r:?}");
                         (*id, r)
                     }),
             })
             .collect();
 
-        println!("dead_end_edges: {dead_end_edges:?}");
+        #[cfg(test)]
+        if !dead_end_edges.is_empty() {
+            println!("dead_end_edges: {dead_end_edges:?}");
+        }
 
         let stuff = dead_end_edges
             .iter()

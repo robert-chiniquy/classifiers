@@ -280,7 +280,7 @@ where
     #[tracing::instrument(skip(self), ret)]
     pub fn branch(
         &mut self,
-        working_node_id: &NodeId,
+        source: &NodeId,
         kind: E,
         // this node is instantiated, but not in the graph
         new_node: NfaNode<M>,
@@ -309,7 +309,7 @@ where
 
         // 1
         let existing_edge_weights: Vec<E> = self
-            .edges_from(*working_node_id)
+            .edges_from(*source)
             .iter()
             .map(|(_, e)| self.edge(e).unwrap().criteria.clone())
             .collect();
@@ -318,7 +318,7 @@ where
         if existing_edge_weights.is_empty() {
             // just add edge and return
             let node = self.add_node(new_node);
-            let _edge = self.add_edge(NfaEdge { criteria: kind }, *working_node_id, node);
+            let _edge = self.add_edge(NfaEdge { criteria: kind }, *source, node);
             return vec![node];
         }
         let initial = existing_edge_weights[0].clone();
@@ -329,9 +329,11 @@ where
         println!("weights_sum: {:?}", weights_sum);
         let mut node_ids = vec![];
 
-        let edges = self.edges_from(*working_node_id).clone();
+        let edges = self.edges_from(*source).clone();
         for (target, e) in edges {
-            let difference = E::difference(&self.edge(&e).unwrap().criteria, &kind);
+            let edge_criteria = self.edge(&e).unwrap().criteria.clone();
+            // Ri - L
+            let difference = E::difference(&edge_criteria, &kind);
             println!(
                 "difference: {:?} = {} - {}",
                 difference,
@@ -339,37 +341,113 @@ where
                 &kind
             );
             match difference {
-                Some(d) => {
+                EDifference::E(d) => {
                     // 2a
-                    if let Some(r_r_l) = E::difference(&self.edge(&e).unwrap().criteria, &d) {
-                        let r_r_l_node = self.add_node(new_node.clone());
-                        let _r_r_l_edge = self.add_edge(
-                            NfaEdge { criteria: r_r_l },
-                            *working_node_id,
-                            r_r_l_node,
-                        );
-                        node_ids.push(r_r_l_node);
-                        // copy the edge target subtree under the new node
-                        self.self_copy_subtree(&target, &r_r_l_node);
+                    // Ri - (Ri - L)
+                    match E::difference(&edge_criteria, &d) {
+                        EDifference::E(r_r_l) => {
+                            let r_r_l_node =
+                                self.add_node_with_edge(r_r_l, *source, new_node.clone());
+                            node_ids.push(r_r_l_node);
+                            // copy the edge target subtree under the new node
+                            self.self_copy_subtree(&target, &r_r_l_node);
+                        }
+                        EDifference::ToStar(r_r_l) => {
+                            let r_r_l_node =
+                                self.add_node_with_edge(r_r_l, *source, new_node.clone());
+                            node_ids.push(r_r_l_node);
+                            let star_target = self.add_node_with_edge(
+                                E::universal(),
+                                r_r_l_node,
+                                new_node.clone(),
+                            );
+                            node_ids.push(star_target);
+
+                            // As r_r_l_node is ToStar, self_copy_subtree must respect branch logic
+                            // copy the edge target subtree under the new node
+                            self.self_copy_subtree(&target, &r_r_l_node);
+                            // copy also under the star target
+                            // FIXME: convergence
+                            self.self_copy_subtree(&target, &star_target);
+                        }
+                        // If Ri - (Ri - L) is ø, do nothing
+                        EDifference::None => (),
                     }
                     // 2
                     // reduce the scope of edge and retain the subtree there
                     self.edge_mut(e).unwrap().criteria = d;
                 }
-                None => {
+                EDifference::ToStar(d) => {
+                    // L add: *
+                    // R have: a
+                    // want: !a -> *, a -> *, !a
+                    // L - R:  * - a = {!a, !a -> *} .. push both node IDs into node_ids to achieve this effect
+                    // Ri - L: a - * = ø
+                    // Ri - (Ri - L): a - (a - *) = a
+                    // ..
+                    // what if Ri - L is ToStar
+                    // L add: a
+                    // R have: *
+                    // want: !a -> *, a -> *, !a, a
+                    // L - R: a - * = ø
+                    // Ri - L: * - a = {!a, !a -> *} .. push both node IDs
+                    // Ri - (Ri - L): a - ({!a, !a -> *}) = {a, a -> *}, the ToStar is unrelated to an individual edge eval
+                    // Ri - (Ri - L) for ToStar:
+                    match E::difference(&edge_criteria, &d) {
+                        EDifference::E(r_r_l) => {
+                            let r_r_l_node =
+                                self.add_node_with_edge(r_r_l, *source, new_node.clone());
+                            node_ids.push(r_r_l_node);
+                            // copy the edge target subtree under the new node
+                            self.self_copy_subtree(&target, &r_r_l_node);
+                        }
+                        EDifference::ToStar(r_r_l) => {
+                            let r_r_l_node =
+                                self.add_node_with_edge(r_r_l, *source, new_node.clone());
+                            node_ids.push(r_r_l_node);
+                            let star_target = self.add_node_with_edge(
+                                E::universal(),
+                                r_r_l_node,
+                                new_node.clone(),
+                            );
+                            node_ids.push(star_target);
+                            // As r_r_l_node is ToStar, self_copy_subtree must respect branch logic
+                            // copy the edge target subtree under the new node
+                            self.self_copy_subtree(&target, &r_r_l_node);
+                            // copy also under the star target
+                            // FIXME: convergence
+                            self.self_copy_subtree(&target, &star_target);
+                        }
+                        // If Ri - (Ri - L) is ø, do nothing
+                        EDifference::None => (),
+                    }
+                    // reduce the scope of edge and retain the subtree there
+                    self.edge_mut(e).unwrap().criteria = d;
+                    // target must have a star branch added to it, as d is ToStar
+                    // this must respect branch logic as it is an existing subtree
+                    node_ids.extend(self.branch(&target, E::universal(), new_node.clone()));
+                }
+                EDifference::None => {
                     // 2a (None case) Ri - L = ø, Ri - (Ri - L) = Ri
                     // The Ri edge already exists, so just do a sum_mut on that edge
-                    self.node_mut(target).sum_mut(&new_node);
+                    self.node_mut(target).sum_mut(&new_node.clone());
                     node_ids.push(target);
                 }
             }
         }
 
         // 3
-        if let Some(l_r) = E::difference(&kind, &weights_sum) {
-            let l_r_node = self.add_node(new_node);
-            let _l_r_edge = self.add_edge(NfaEdge { criteria: l_r }, *working_node_id, l_r_node);
-            node_ids.push(l_r_node);
+        match E::difference(&kind, &weights_sum) {
+            EDifference::E(l_r) => {
+                node_ids.push(self.add_node_with_edge(l_r, *source, new_node));
+            }
+            EDifference::ToStar(l_r) => {
+                let l_r = self.add_node_with_edge(l_r, *source, new_node.clone());
+                node_ids.push(l_r);
+                let star_target = self.add_node_with_edge(E::universal(), l_r, new_node.clone());
+                node_ids.push(star_target);
+            }
+            EDifference::None => (),
         }
 
         node_ids
