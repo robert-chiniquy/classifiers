@@ -362,7 +362,7 @@ where
                                 new_node.clone(),
                             );
                             node_ids.push(star_target);
-                            self.triangle_copy(&target, &r_r_l_node, &star_target);
+                            self.converging_copy(&target, &[r_r_l_node, star_target]);
                             // As r_r_l_node is ToStar, self_copy_subtree must respect branch logic
                             // copy the edge target subtree under the new node
                             // self.self_copy_subtree(&target, &r_r_l_node);
@@ -411,23 +411,21 @@ where
                                 new_node.clone(),
                             );
                             node_ids.push(star_target);
-                            self.triangle_copy(&target, &r_r_l_node, &star_target);
-                            // As r_r_l_node is ToStar, self_copy_subtree must respect branch logic
-                            // copy the edge target subtree under the new node
-                            // self.self_copy_subtree(&target, &r_r_l_node);
-                            // // copy also under the star target
-                            // // FIXME: convergence
-                            // self.self_copy_subtree(&target, &star_target);
+                            self.converging_copy(&target, &[r_r_l_node, star_target]);
                         }
                         // If Ri - (Ri - L) is ø, do nothing
                         EDifference::None => (),
                     }
                     // reduce the scope of edge and retain the subtree there
                     self.edge_mut(e).unwrap().criteria = d;
+                    self.node_mut(target).sum(&new_node);
                     // target must have a star branch added to it, as d is ToStar
                     // this must respect branch logic as it is an existing subtree
                     node_ids.push(target);
-                    node_ids.extend(self.branch(&target, E::universal(), new_node.clone()));
+                    // TODO: this logic is incorrect....
+                    let n = self.add_node(new_node.clone());
+                    self.add_edge(NfaEdge { criteria: Universal::universal() }, target, n);
+                    node_ids.push(n);
                 }
                 EDifference::None => {
                     // 2a (None case) Ri - L = ø, Ri - (Ri - L) = Ri
@@ -455,28 +453,17 @@ where
         node_ids
     }
 
-    pub(crate) fn triangle_copy(&mut self,
-        source: &NodeId,
-        target_1: &NodeId,
-        target_2: &NodeId,
-    ) {
-        /* 
-            s -> a, s -> b, a ->c
-            t1 ->a1, t1 -> b1
-            t2 ->a1, t2 -> b1
-        */
+    pub(crate) fn converging_copy(&mut self, source: &NodeId, targets: &[NodeId]) {
+        // TODO: this must use branch like logic, but branch does not converge!
         let edges = self.edges_from(*source).clone();
-        // get edges from source
-        // copy target of edges into new node, N1
-        // copy_sub_tree into N1
-        // make edge from Ti -> Ni
         for (t, edge) in edges {
             // maybe use branch??
             let copy = self.add_node(self.node(t).clone());
 
             let c = self.edge(&edge).unwrap().clone();
-            self.add_edge(c.clone(), *target_1, copy);
-            self.add_edge(c.clone(), *target_2, copy);
+            for target in targets {
+                self.add_edge(c.clone(), *target, copy);
+            }
             self.self_copy_subtree(&t, &copy);
         }
     }
@@ -494,8 +481,8 @@ where
             // - get the weight and create a matching edge from target connecting to the new edge target node
             let _matching_edge = self.safe_add_edge(
                 source.edge(edge).unwrap().clone(),
-                *copy_target_node,
                 new_edge_endpoint,
+                *copy_target_node,
             );
             self.copy_subtree(source, source_edge_endpoint, &new_edge_endpoint);
         }

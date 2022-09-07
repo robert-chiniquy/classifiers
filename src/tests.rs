@@ -208,7 +208,7 @@ fn test_simpler_intersection() {
     let c = Classifier::Any(BTreeSet::from_iter([a.clone(), b.clone()]));
 
     let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
-    write_graph(d.graphviz(), "simpler.dot");
+    write_graph(d.graphviz(), "simpler-*b-v-a.dot");
 }
 
 #[test]
@@ -260,7 +260,7 @@ static TEST_SETUP: once_cell::sync::Lazy<bool> = once_cell::sync::Lazy::new(|| {
 
 pub fn setup() {
     // #[ignore]
-    #[cfg(feature = "trace")]
+    // #[cfg(feature = "trace")]
     {
         let subscriber = tracing_subscriber::fmt()
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
