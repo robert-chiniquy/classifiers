@@ -247,7 +247,6 @@ impl std::fmt::Display for Element {
     }
 }
 
-
 impl Product<Element> for Element {
     // #[tracing::instrument(ret)]
     fn product(a: &Self, b: &Self) -> Vec<NfaBranch<Element>> {
@@ -408,7 +407,7 @@ impl Add for Element {
     fn add(self, rhs: Self) -> Self::Output {
         use Element::*;
 
-        match (self, rhs) {
+        match (&self, &rhs) {
             (TokenSet(_), Question) | (NotTokenSet(_), Question) => Question,
             (TokenSet(_), Star) | (NotTokenSet(_), Star) => Star,
             (Question, Question) => Question,
@@ -417,16 +416,27 @@ impl Add for Element {
             (Star, Star) => Star,
             (Star, NotTokenSet(_)) | (Star, TokenSet(_)) => Star,
             (Question, NotTokenSet(_)) | (Question, TokenSet(_)) => Question,
-            (TokenSet(x), TokenSet(y)) => TokenSet(&x | &y),
+            (TokenSet(x), TokenSet(y)) => TokenSet(x | y),
             (NotTokenSet(y), TokenSet(x)) | (TokenSet(x), NotTokenSet(y)) => {
-                let z = &y - &x;
+                let z = y - x;
                 if z.is_empty() {
                     Question
                 } else {
                     NotTokenSet(z)
                 }
             }
-            (NotTokenSet(x), NotTokenSet(y)) => NotTokenSet(&x | &y),
+            (NotTokenSet(x), NotTokenSet(y)) => {
+                // negation flips the semantics of the set relations of the btreesets
+                // !a + !a!b = !a
+                // !a!b + !a!b!c = !a!b
+                if x.is_subset(y) {
+                    self.clone()
+                } else if y.is_subset(x) {
+                    rhs.clone()
+                } else {
+                    Question
+                }
+            }
         }
     }
 }
@@ -454,6 +464,7 @@ impl Subtraction<Element> for Element {
                 TokenSet(x - y).simplify()
             }
             (TokenSet(x), NotTokenSet(y)) => {
+                // remove from x any value which is not in y
                 TokenSet(x & y).simplify()
                 // let mut x = x.clone();
                 // x.retain(|c| y.contains(c));
@@ -472,19 +483,17 @@ impl Subtraction<Element> for Element {
                 // !c = a,b
                 // !a - !c = b,c - a,b = c
                 // !a + !c = b,c + a,b = a,b,c
+                // !a + !c = ? - !c =
 
                 //  !a - !c = c (b,c,d... - a,b,d.. = c)
-
-                // !a + !c = ? - !c = 
-
-                let mut x = x.clone();
-                x.retain(|c| !y.contains(c));
-                NotTokenSet(x).simplify()
+                TokenSet(y - x).simplify()
+                // let mut x = x.clone();
+                // x.retain(|c| !y.contains(c));
+                // NotTokenSet(x).simplify()
             }
         }
     }
 }
-
 
 #[test]
 fn test_arithmetic() {
@@ -494,24 +503,31 @@ fn test_arithmetic() {
     let ts = Element::tokens;
     let t = Element::token;
 
+    // !c - a - b = !a!b!c
     let mut r = nt('c');
     r = Element::difference(&r, &t('a')).unwrap();
     r = Element::difference(&r, &t('b')).unwrap();
     assert_eq!(r, Element::not_tokens(&['a', 'b', 'c']));
 
+    // * - a - b = !a!b
     let mut r = Star;
     r = Element::difference(&r, &t('a')).unwrap();
     r = Element::difference(&r, &t('b')).unwrap();
     assert_eq!(r, nts(&['a', 'b']));
 
+    // ? - a - b = !a!b
     let mut r = Question;
     r = Element::difference(&r, &t('a')).unwrap();
     r = Element::difference(&r, &t('b')).unwrap();
     assert_eq!(r, nts(&['a', 'b']));
 
+    // ab - a -b = None
     let mut r = ts(&['a', 'b']);
     r = Element::difference(&r, &t('a')).unwrap();
     assert_eq!(None, Element::difference(&r, &t('b')));
+
+    // !a - !c = c
+    assert_eq!(Element::difference(&nt('a'), &nt('c')).unwrap(), t('c'));
 }
 
 impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>

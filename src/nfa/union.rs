@@ -277,7 +277,7 @@ where
     /// Invariant-preserving edge->node insert
     /// Ensures that the edges from working_node_id remain consistent (disjoint)
     /// Returns the ids of any added nodes
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), ret)]
     pub fn branch(
         &mut self,
         working_node_id: &NodeId,
@@ -332,7 +332,12 @@ where
         let edges = self.edges_from(*working_node_id).clone();
         for (target, e) in edges {
             let difference = E::difference(&self.edge(&e).unwrap().criteria, &kind);
-            println!("difference: {:?} = {} - {}", difference, &self.edge(&e).unwrap().criteria, &kind);
+            println!(
+                "difference: {:?} = {} - {}",
+                difference,
+                &self.edge(&e).unwrap().criteria,
+                &kind
+            );
             match difference {
                 Some(d) => {
                     // 2a
@@ -413,8 +418,9 @@ fn test_union() {
     let b = Nfa::from_symbols(&[nt(&['c'])], ());
     // println!("from symbols {a:?}\n{b:?}");
     let n1 = a.union(&b);
-    n1.graphviz_file("unioned1.dot", "!a!b U !c");
+    //n1.graphviz_file("unioned1.dot", "!a!b U !c");
     assert_eq!(n1.edges.len(), 5);
     let n2 = n1.union(&Nfa::from_symbols(&[Element::not_tokens(&['c'])], ()));
-    n2.graphviz_file("unioned2.dot", "!a U !b U !c");
+    //n2.graphviz_file("unioned2.dot", "!a U !b U !c");
+    assert_eq!(n1, n2);
 }
