@@ -37,38 +37,6 @@ impl Element {
     }
 }
 
-impl EDifference<Element> {
-    pub fn simplify(&self) -> Self {
-        match self {
-            EDifference::E(e) => e.simplify().into(),
-            EDifference::ToStar(e) => {
-                EDifference::ToStar(e.simplify().unwrap_or_else(|| e.clone()))
-            }
-            EDifference::None => EDifference::None,
-        }
-    }
-}
-
-impl From<Option<Element>> for EDifference<Element> {
-    fn from(o: Option<Element>) -> Self {
-        match o {
-            Some(e) => EDifference::E(e),
-            None => EDifference::None,
-        }
-    }
-}
-
-#[cfg(test)]
-impl From<EDifference<Element>> for Element {
-    fn from(d: EDifference<Element>) -> Self {
-        match d {
-            EDifference::E(e) => e,
-            EDifference::ToStar(e) => e,
-            EDifference::None => unreachable!(),
-        }
-    }
-}
-
 impl Complement<Element> for Element {
     fn complement(&self) -> Option<Self> {
         use Element::*;
@@ -311,30 +279,6 @@ impl Product<Element> for Element {
     }
 }
 
-impl Element {
-    fn simplify(&self) -> Option<Element> {
-        use Element::*;
-        match &self {
-            Question | Star => Some(self.clone()),
-            TokenSet(x) => {
-                if x.is_empty() {
-                    None
-                } else {
-                    Some(self.clone())
-                }
-            }
-            NotTokenSet(x) => {
-                if x.is_empty() {
-                    None
-                } else {
-                    // TODO: see if we get rid of all ascii chars??
-                    Some(self.clone())
-                }
-            }
-        }
-    }
-}
-
 impl Add for Element {
     type Output = Element;
 
@@ -489,5 +433,61 @@ where
         }
         nfa.node_mut(prior).state = Terminal::Accept(m);
         nfa
+    }
+}
+
+impl Element {
+    fn simplify(&self) -> Option<Element> {
+        use Element::*;
+        match &self {
+            Question | Star => Some(self.clone()),
+            TokenSet(x) => {
+                if x.is_empty() {
+                    None
+                } else {
+                    Some(self.clone())
+                }
+            }
+            NotTokenSet(x) => {
+                if x.is_empty() {
+                    None
+                } else {
+                    // TODO: see if we get rid of all ascii chars??
+                    Some(self.clone())
+                }
+            }
+        }
+    }
+}
+
+impl EDifference<Element> {
+    pub fn simplify(&self) -> Self {
+        match self {
+            EDifference::E(e) => e.simplify().into(),
+            EDifference::ToStar(e) => {
+                EDifference::ToStar(e.simplify().unwrap_or_else(|| e.clone()))
+            }
+            EDifference::None => EDifference::None,
+        }
+    }
+}
+
+impl From<Option<Element>> for EDifference<Element> {
+    fn from(o: Option<Element>) -> Self {
+        match o {
+            Some(e) => EDifference::E(e),
+            None => EDifference::None,
+        }
+    }
+}
+
+#[cfg(test)]
+impl From<EDifference<Element>> for Element {
+    fn from(d: EDifference<Element>) -> Self {
+        match d {
+            EDifference::E(e) => e,
+            EDifference::ToStar(e) => e,
+            EDifference::None => unreachable!(),
+        }
     }
 }

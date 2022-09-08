@@ -92,8 +92,26 @@ where
         vec![existing_node]
     }
 
+    /// Invariant preserving edge insert
+    /// Ensures that edges from source remain consistent with a new edge to target
+    /// Does not create any nodes
+    // ? Should target instead be an a_id, b_id pair? to allow Ri - (Ri - L) trees to be merged ...
+    pub fn branch_to_target(&mut self, source: &NodeId, kind: E, target: &NodeId) {
+        /*
+        1. Divide R into disjoint and overlapping sections
+            - disjoint: R - L
+            - overlapping: R - (R - L)
+        2. Partition L into its remainder of L - R
+        3. Make changes
+            - Ri - L : (this is a piecemeal operation) retains the prior R subtrees (this is a move) (solo edge) downscope Ri to exclude L
+            - L - R : This edge connects to target (solo edge)
+            - Ri - (Ri - L): (this is a piecemeal operation) this must link to the appropriate target product node - what are the product ids or (a,b) ids here? the subtree should be the product subtree of the (.., target, ..) node along .. the Ri product node source (a,b) pair
+        */
+        todo!()
+    }
+
     /// Invariant-preserving edge->node insert
-    /// Ensures that the edges from working_node_id remain consistent (disjoint)
+    /// Ensures that the edges from source remain consistent (disjoint)
     /// Returns the ids of any added nodes
     #[tracing::instrument(skip(self), ret)]
     pub fn branch(
