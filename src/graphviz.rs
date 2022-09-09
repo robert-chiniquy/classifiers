@@ -33,7 +33,7 @@ where
             let nodelabel = if self.entry == *id {
                 "enter".to_string()
             } else {
-                node.to_string()
+                format!("{}", id)
             };
             ret = format!(
                 r#"{ret}

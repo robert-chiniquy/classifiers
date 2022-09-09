@@ -1,4 +1,4 @@
-use std::collections::hash_map::Entry::*;
+use std::collections::btree_map::Entry::*;
 use std::collections::{BTreeMap, HashSet};
 use std::{collections::HashMap, ops::Add};
 
@@ -13,7 +13,7 @@ fn test_equility() {
     assert_eq!(a, b);
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, std::hash::Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, std::hash::Hash, PartialOrd, Ord)]
 pub enum Element {
     TokenSet(BTreeSet<char>),
     NotTokenSet(BTreeSet<char>),
@@ -51,20 +51,20 @@ impl ElementalLanguage<Element> for Element {}
 
 #[derive(Default, Debug)]
 struct DfaBuilder {
+    symbols: BTreeSet<char>,
     count: u32,
     // {2,3} -> 23
     states: HashMap<BTreeSet<NodeId>, NodeId>,
     // (2, b) -> {2,3}
-    transitions: HashMap<NodeId, BTreeMap<Element, BTreeSet<NodeId>>>,
+    transitions: BTreeMap<NodeId, BTreeMap<Element, BTreeSet<NodeId>>>,
 }
 
 impl DfaBuilder {
-    fn non_optimal_accepting_transitions(
-        &self,
-        from: NodeId,
-        criteria: &Element,
-    ) -> BTreeSet<NodeId> {
-        todo!()
+    fn new(symbols: BTreeSet<char>) -> Self {
+        Self {
+            symbols,
+            ..Default::default()
+        }
     }
 
     pub fn next_id(&mut self) -> NodeId {
@@ -73,17 +73,31 @@ impl DfaBuilder {
         r
     }
 
-    pub fn add_transition(&mut self, from: NodeId, e: Element, to: NodeId) {
-        // surplus but not incorrect
-        self.states
-            .insert(FromIterator::from_iter(vec![from]), from);
-        self.states.insert(FromIterator::from_iter(vec![to]), to);
+    // pub fn get_transition(&self, from: &NodeId, e: &Element) -> Option<&BTreeSet<NodeId>> {
+    //     self.transitions.get(from).and_then(|t| t.get(e))
+    // }
 
-        let entry = match self.transitions.entry((from, e)) {
+    pub fn add_transitions(&mut self, from: &NodeId, e: &Element, to: &BTreeSet<NodeId>) {
+        for t in to {
+            self.add_transition(from, e, t);
+        }
+    }
+
+    pub fn add_transition(&mut self, from: &NodeId, e: &Element, to: &NodeId) {
+        // surplus but not incorrect
+        self.states.insert(BTreeSet::from([*from]), *from);
+        self.states.insert(BTreeSet::from([*to]), *to);
+
+        let entry = match self.transitions.entry(*from) {
             Occupied(entry) => entry.into_mut(),
             Vacant(entry) => entry.insert(Default::default()),
         };
-        entry.insert(to);
+        entry
+            .entry(e.clone())
+            .and_modify(|e| {
+                e.insert(*to);
+            })
+            .or_insert_with(|| BTreeSet::from([*to]));
     }
 
     // abc
@@ -120,51 +134,55 @@ impl DfaBuilder {
         let mut node_id_map: HashMap<NodeId, NodeId> = Default::default();
         // add a node for each row
         let nodes: HashSet<_> = self.states.values().collect();
-        // let rows: HashSet<_> = self.transitions.keys().map(|(k, _)| k).collect();
-        // let mut dfa_node_id = 0;
+        let mut nodes: Vec<_> = nodes.iter().collect();
+        nodes.sort();
         for node_id in nodes {
             let dfa_node_id = dfa.add_node(Default::default());
-            node_id_map.insert(*node_id, dfa_node_id);
+            node_id_map.insert(**node_id, dfa_node_id);
         }
         println!(
-            "{node_id_map:?}\n{:?}\n{:?}",
+            "symbols: {:?}\nnode id map {node_id_map:?}\ntransitions {:?}\nstates {:?}",
+            self.symbols,
             self.transitions.keys().collect::<Vec<_>>(),
             self.states
         );
         // add edges after nodes exist
-        for ((builder_node_id, criteria), target) in &self.transitions {
-            let t = self.states.get(target).unwrap();
-            dfa.add_edge(
-                NfaEdge {
-                    criteria: criteria.clone(),
-                },
-                *node_id_map.get(builder_node_id).unwrap(),
-                *node_id_map.get(t).unwrap(),
-            );
+        for (builder_node_id, criteria_targets) in &self.transitions {
+            for (criteria, target) in criteria_targets {
+                println!("builder_node_id {builder_node_id} criteria {criteria} target {target:?}");
+                let t = self.states.get(target).unwrap();
+                dfa.add_edge(
+                    NfaEdge {
+                        criteria: criteria.clone(),
+                    },
+                    *node_id_map.get(builder_node_id).unwrap(),
+                    *node_id_map.get(t).unwrap(),
+                );
+            }
         }
 
         // TODO
-        // filter the dfa to only nodes which are reachable by root
-        // after this step, from this specific construction, any reachable leaf node is accepting
-        // .. add missing transitions here? nope
+        // - for any multi-edges of a given element variant to a given target,
+        // condense to a single composite edge
+        // - after this, any TokenSets which are subsets of a NotTokenSet to the same target
+        // can be removed after subtracting the chars from the NotTokenSet,
+        // - and the reverse for NotTokenSet against a superset TokenSet
+        // - filter the dfa to only nodes which are reachable by root
+        // - after this step, from this specific construction, any reachable leaf node is accepting
+        // .. add missing transitions here? nope, can do later for negation only
         dfa.graphviz_file("dfa.dot", "dfa");
         dfa
     }
 
     fn construct(&mut self) {
-        let columns: HashSet<_> = self
-            .transitions
-            .keys()
-            .map(|(_, col)| col)
-            .cloned()
-            .collect();
         // start with all compound values
         let mut stack: Vec<_> = self
             .transitions
             .values()
-            .filter(|v| v.len() > 1)
+            .flat_map(|e| e.values().filter(|v| v.len() > 1).collect::<HashSet<_>>())
             .cloned()
             .collect();
+        let negation = Element::NotTokenSet(self.symbols.clone());
         while let Some(compound_state) = stack.pop() {
             // don't process the same compound state twice
             if self.states.contains_key(&compound_state) {
@@ -173,29 +191,39 @@ impl DfaBuilder {
             // create a new state (index it in self.states) and push it on the stack
             let compound_id = self.next_id();
             self.states.insert(compound_state.clone(), compound_id);
-            // for every compound state on the stack,
-            // for every column,
-            // populate its value by unioning the transitions of its component states for that column
+            // For every symbol, and additionally also for the negation of all symbols,
+            // for every compound state (as non-compound-states are already populated),
+            // populate a transition value from the compound state via the symbol
+            // by unioning the transitions of its component states for that column
             // where this entails creating a new compound state, push it on the stack
-            for col in &columns {
+            for symbol in self.symbols.clone() {
+                // for every transition from a component state of the compound state,
+                // see if it accepts this symbol, and if it does, add it to unioned_transitions
                 let mut unioned_transitions: BTreeSet<NodeId> = Default::default();
                 for component_state in &compound_state {
-                    // get the transitions of component states for this column
-                    if let Some(transitions) =
-                        self.transitions.get(&(*component_state, col.clone()))
-                    {
-                        unioned_transitions.extend(transitions);
+                    if let Some(transitions) = self.transitions.get(component_state) {
+                        let transitions = transitions.clone();
+                        // for every component state, if it has a transition on the negation of all symbols,
+                        // union that transition into that negation column for the compound state
+                        if let Some(negative) = transitions.get(&negation) {
+                            self.add_transitions(&compound_id, &negation, negative);
+                            stack.push(negative.clone());
+                            // unioned_transitions.extend(negative);
+                        }
+                        for (element, targets) in &transitions {
+                            if element.accepts(&symbol) {
+                                unioned_transitions.extend(targets);
+                            }
+                        }
+                        self.add_transitions(
+                            &compound_id,
+                            &symbol.into(),
+                            &unioned_transitions.clone(),
+                        );
+                        // if unioned_transitions is already processed, this is caught at the beginning of the loop
+                        // if it is length 1, then it is already in self.states
                     }
-                    // for every column, for every column which would accept that column,
-                    // also add the resulting transition from the accepting column to unioned_transitions
                 }
-                if unioned_transitions.is_empty() {
-                    continue;
-                }
-                self.transitions
-                    .insert((compound_id, col.clone()), unioned_transitions.clone());
-                // if unioned_transitions is already processed, this is caught at the beginning of the loop
-                // if it is length 1, then it is already in self.states
                 stack.push(unioned_transitions);
             }
         }
@@ -215,34 +243,42 @@ impl FromLanguage<Element> for Element {
 
     fn from_language(
         l: Self::Language,
-        m: Self::Metadata,
+        _m: Self::Metadata,
     ) -> Nfa<NfaNode<Self::Metadata>, NfaEdge<Element>> {
         let symbols: BTreeSet<_> = l
             .iter()
             .filter(|c| **c != '?' && **c != '*')
             .cloned()
             .collect();
-        let mut builder: DfaBuilder = Default::default();
+        let mut builder: DfaBuilder = DfaBuilder::new(symbols.clone());
         let mut prior = builder.next_id();
         for c in &l {
             let current = builder.next_id();
             match c {
                 '?' => {
                     // transition via all symbols from prior to current
-                    builder.add_transition(prior, Element::TokenSet(symbols.clone()), current);
-                    builder.add_transition(prior, Element::NotTokenSet(symbols.clone()), current);
+                    builder.add_transition(&prior, &Element::TokenSet(symbols.clone()), &current);
+                    builder.add_transition(
+                        &prior,
+                        &Element::NotTokenSet(symbols.clone()),
+                        &current,
+                    );
                 }
                 '*' => {
                     // transition via all symbols from prior to current
                     // also have a self-loop (2 actually)
-                    builder.add_transition(prior, Element::TokenSet(symbols.clone()), current);
-                    builder.add_transition(prior, Element::NotTokenSet(symbols.clone()), current);
-                    builder.add_transition(prior, Element::TokenSet(symbols.clone()), prior);
-                    builder.add_transition(prior, Element::NotTokenSet(symbols.clone()), prior);
+                    builder.add_transition(&prior, &Element::TokenSet(symbols.clone()), &current);
+                    builder.add_transition(
+                        &prior,
+                        &Element::NotTokenSet(symbols.clone()),
+                        &current,
+                    );
+                    builder.add_transition(&prior, &Element::TokenSet(symbols.clone()), &prior);
+                    builder.add_transition(&prior, &Element::NotTokenSet(symbols.clone()), &prior);
                 }
                 c => {
                     // transition from prior to current via c
-                    builder.add_transition(prior, c.into(), current);
+                    builder.add_transition(&prior, &c.into(), &current);
                 }
             }
             prior = current;
