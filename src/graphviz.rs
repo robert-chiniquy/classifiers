@@ -37,9 +37,14 @@ where
             };
             ret = format!(
                 r#"{ret}
-  {} [label="{}"]"#,
+  {} [label="{}", shape="{}"]"#,
                 nodename(id),
-                nodelabel
+                nodelabel,
+                match node.state {
+                    Terminal::Not => "circle",
+                    Terminal::Accept(_) => "doublecircle",
+                    Terminal::Reject(_) => "doublecircle",
+                }
             );
         }
         ret

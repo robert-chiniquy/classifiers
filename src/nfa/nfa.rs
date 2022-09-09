@@ -485,6 +485,12 @@ where
     }
 
     /// Restrict nodes and edges to those reachable from self.entry
+    // - for any multi-edges of a given element variant to a given target,
+    // condense to a single composite edge
+    // - after this, any TokenSets which are subsets of a NotTokenSet to the same target
+    // can be removed after subtracting the chars from the NotTokenSet,
+    // - and the reverse for NotTokenSet against a superset TokenSet
+    // - filter the dfa to only nodes which are reachable by root
     pub(crate) fn shake(&mut self) {
         // subtract visitable nodes from to_remove
         let mut to_remove = self.nodes.keys().cloned().collect::<HashSet<_>>();
@@ -498,8 +504,15 @@ where
                 stack.push(*t);
             }
         }
-        println!("to_remove: {to_remove:?}");
-        // todo remove from self.edges
+
+        let to_remove_edges: HashSet<EdgeId> = self
+            .transitions
+            .iter()
+            .filter(|(n, _)| to_remove.contains(n))
+            .flat_map(|(_, v)| v.iter().map(|(_, eid)| eid).collect::<HashSet<_>>())
+            .cloned()
+            .collect();
+        self.edges.retain(|e, _| !to_remove_edges.contains(e));
         self.transitions.retain(|n, _| !to_remove.contains(n));
         self.nodes.retain(|n, _| !to_remove.contains(n));
     }

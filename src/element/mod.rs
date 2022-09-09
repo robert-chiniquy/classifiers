@@ -53,10 +53,12 @@ impl ElementalLanguage<Element> for Element {}
 struct DfaBuilder {
     symbols: BTreeSet<char>,
     count: u32,
+    // source state collection -> compound id
     // {2,3} -> 23
     states: HashMap<BTreeSet<NodeId>, NodeId>,
     // (2, b) -> {2,3}
     transitions: BTreeMap<NodeId, BTreeMap<Element, BTreeSet<NodeId>>>,
+    accepting_states: BTreeSet<NodeId>,
 }
 
 impl DfaBuilder {
@@ -126,8 +128,7 @@ impl DfaBuilder {
     // TODO: M
     pub fn build(&mut self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
         self.construct();
-        let mut d = self.build_dfa();
-        d.simplify();
+        let d = self.build_dfa();
         debug_assert!(d.entry == 0);
         d.graphviz_file("dfa.dot", "dfa");
         d
@@ -142,10 +143,33 @@ impl DfaBuilder {
         let mut nodes: Vec<_> = nodes.iter().collect();
         nodes.sort();
         debug_assert!(**nodes[0] == 0);
-        println!("the nodes: {nodes:?}");
-        for node_id in nodes {
-            let dfa_node_id = dfa.add_node(Default::default());
-            node_id_map.insert(**node_id, dfa_node_id);
+
+        let mut accepting_states = HashSet::new();
+        for (compound, id) in self.states.clone() {
+            if self.accepting_states.contains(&id) {
+                accepting_states.insert(id);
+                continue;
+            }
+            for c in compound {
+                if self.accepting_states.contains(&c) {
+                    accepting_states.insert(id);
+                }
+            }
+        }
+        println!(
+            "the nodes: {nodes:?} {:?} {accepting_states:?}",
+            self.accepting_states
+        );
+        for builder_node_id in nodes {
+            let dfa_node_id = dfa.add_node(NfaNode {
+                state: match accepting_states.contains(builder_node_id) {
+                    // TODO: M
+                    true => Terminal::Accept(()),
+                    false => Default::default(),
+                },
+                ..Default::default()
+            });
+            node_id_map.insert(**builder_node_id, dfa_node_id);
         }
         println!(
             "symbols: {:?}\nnode id map {node_id_map:?}\ntransitions {:?}\nstates {:?}",
@@ -169,12 +193,7 @@ impl DfaBuilder {
         }
 
         // TODO
-        // - for any multi-edges of a given element variant to a given target,
-        // condense to a single composite edge
-        // - after this, any TokenSets which are subsets of a NotTokenSet to the same target
-        // can be removed after subtracting the chars from the NotTokenSet,
-        // - and the reverse for NotTokenSet against a superset TokenSet
-        // - filter the dfa to only nodes which are reachable by root
+        dfa.simplify();
         // - after this step, from this specific construction, any reachable leaf node is accepting
         // .. add missing transitions here? nope, can do later for negation only
         dfa
@@ -236,6 +255,35 @@ impl DfaBuilder {
     }
 }
 
+/*
+
+digraph G {
+    rankdir = TB;
+    remincross = true;
+    splines = true;
+    fontsize="40";
+
+    bgcolor = "#555555";
+    node[color = "#FFFFFF"];
+    node[fontcolor = "#FFFFFF"];
+    edge[color = "#FFFFFF", fontcolor="#FFFFFF"];
+
+    label = "dfa";
+
+  node_0 -> node_1 [label="a" fontsize="20pt"];
+  node_1 -> node_4 [label="!:" fontsize="20pt"];
+  node_4 -> node_5 [label="b" fontsize="20pt"];
+  node_4 -> node_4 [label="!`{':', 'b'}`" fontsize="20pt"];
+  node_5 -> node_5 [label="b" fontsize="20pt"];
+  node_5 -> node_4 [label="!`{':', 'b'}`" fontsize="20pt"];
+  node_0 [label="enter", shape="circle"]
+  node_1 [label="1", shape="circle"]
+  node_4 [label="4", shape="circle"]
+  node_5 [label="5", shape="doublecircle"]
+}
+
+*/
+
 #[test]
 fn test_element_from_language() {
     let _ = Element::from_language("a*b".to_string().chars().collect(), ());
@@ -285,6 +333,7 @@ impl FromLanguage<Element> for Element {
             }
             prior = current;
         }
+        builder.accepting_states.insert(prior);
         builder.build()
     }
 }
