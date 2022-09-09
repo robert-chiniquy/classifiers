@@ -182,7 +182,7 @@ impl DfaBuilder {
             .flat_map(|e| e.values().filter(|v| v.len() > 1).collect::<HashSet<_>>())
             .cloned()
             .collect();
-        let negation = Element::NotTokenSet(self.symbols.clone());
+        let negation = Element::NotTokenSet(&self.symbols | &BTreeSet::from([':']));
         while let Some(compound_state) = stack.pop() {
             // don't process the same compound state twice
             if self.states.contains_key(&compound_state) {
@@ -252,29 +252,24 @@ impl FromLanguage<Element> for Element {
             .collect();
         let mut builder: DfaBuilder = DfaBuilder::new(symbols.clone());
         let mut prior = builder.next_id();
+
+        let colon_free = Element::TokenSet(&symbols - &BTreeSet::from([':']));
+        let not_colon_free = Element::NotTokenSet(&symbols | &BTreeSet::from([':']));
         for c in &l {
             let current = builder.next_id();
             match c {
                 '?' => {
                     // transition via all symbols from prior to current
-                    builder.add_transition(&prior, &Element::TokenSet(symbols.clone()), &current);
-                    builder.add_transition(
-                        &prior,
-                        &Element::NotTokenSet(symbols.clone()),
-                        &current,
-                    );
+                    builder.add_transition(&prior, &colon_free.clone(), &current);
+                    builder.add_transition(&prior, &not_colon_free.clone(), &current);
                 }
                 '*' => {
                     // transition via all symbols from prior to current
                     // also have a self-loop (2 actually)
-                    builder.add_transition(&prior, &Element::TokenSet(symbols.clone()), &current);
-                    builder.add_transition(
-                        &prior,
-                        &Element::NotTokenSet(symbols.clone()),
-                        &current,
-                    );
-                    builder.add_transition(&prior, &Element::TokenSet(symbols.clone()), &prior);
-                    builder.add_transition(&prior, &Element::NotTokenSet(symbols.clone()), &prior);
+                    builder.add_transition(&prior, &colon_free.clone(), &current);
+                    builder.add_transition(&prior, &not_colon_free.clone(), &current);
+                    builder.add_transition(&prior, &colon_free.clone(), &prior);
+                    builder.add_transition(&prior, &not_colon_free.clone(), &prior);
                 }
                 c => {
                     // transition from prior to current via c
