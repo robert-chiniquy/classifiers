@@ -287,6 +287,8 @@ digraph G {
 #[test]
 fn test_element_from_language() {
     let _ = Element::from_language("a*b".to_string().chars().collect(), ());
+    let _ = Element::from_language("a*b*c".to_string().chars().collect(), ());
+    let _ = Element::from_language("a**b**c".to_string().chars().collect(), ());
 }
 
 impl FromLanguage<Element> for Element {
