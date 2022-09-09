@@ -330,8 +330,9 @@ where
 {
     // #[tracing::instrument(skip_all)]
     pub(crate) fn node_index(&mut self) -> NodeId {
+        let i = self.node_count;
         self.node_count += 1;
-        self.node_count
+        i
     }
 
     pub(crate) fn edge_index(&mut self) -> EdgeId {
@@ -481,6 +482,26 @@ where
         }
         // ensure any remaining lists of edges are non-empty
         // self.transitions.retain(|_k, v| !v.is_empty());
+    }
+
+    /// Restrict nodes and edges to those reachable from self.entry
+    pub(crate) fn shake(&mut self) {
+        // subtract visitable nodes from to_remove
+        let mut to_remove = self.nodes.keys().cloned().collect::<HashSet<_>>();
+        let mut stack = vec![self.entry];
+
+        while let Some(n) = stack.pop() {
+            if !to_remove.remove(&n) {
+                continue;
+            }
+            for (t, _) in self.edges_from(n) {
+                stack.push(*t);
+            }
+        }
+        println!("to_remove: {to_remove:?}");
+        // todo remove from self.edges
+        self.transitions.retain(|n, _| !to_remove.contains(n));
+        self.nodes.retain(|n, _| !to_remove.contains(n));
     }
 }
 

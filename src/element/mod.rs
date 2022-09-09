@@ -67,6 +67,7 @@ impl DfaBuilder {
         }
     }
 
+    // The entry node will always be 0
     pub fn next_id(&mut self) -> NodeId {
         let r = self.count;
         self.count += 1;
@@ -125,7 +126,11 @@ impl DfaBuilder {
     // TODO: M
     pub fn build(&mut self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
         self.construct();
-        self.build_dfa()
+        let mut d = self.build_dfa();
+        d.simplify();
+        debug_assert!(d.entry == 0);
+        d.graphviz_file("dfa.dot", "dfa");
+        d
     }
 
     fn build_dfa(&self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
@@ -136,6 +141,8 @@ impl DfaBuilder {
         let nodes: HashSet<_> = self.states.values().collect();
         let mut nodes: Vec<_> = nodes.iter().collect();
         nodes.sort();
+        debug_assert!(**nodes[0] == 0);
+        println!("the nodes: {nodes:?}");
         for node_id in nodes {
             let dfa_node_id = dfa.add_node(Default::default());
             node_id_map.insert(**node_id, dfa_node_id);
@@ -170,7 +177,6 @@ impl DfaBuilder {
         // - filter the dfa to only nodes which are reachable by root
         // - after this step, from this specific construction, any reachable leaf node is accepting
         // .. add missing transitions here? nope, can do later for negation only
-        dfa.graphviz_file("dfa.dot", "dfa");
         dfa
     }
 
@@ -232,7 +238,7 @@ impl DfaBuilder {
 
 #[test]
 fn test_element_from_language() {
-    let d = Element::from_language("a*b".to_string().chars().collect(), ());
+    let _ = Element::from_language("a*b".to_string().chars().collect(), ());
 }
 
 impl FromLanguage<Element> for Element {
@@ -252,6 +258,7 @@ impl FromLanguage<Element> for Element {
             .collect();
         let mut builder: DfaBuilder = DfaBuilder::new(symbols.clone());
         let mut prior = builder.next_id();
+        debug_assert!(prior == 0);
 
         let colon_free = Element::TokenSet(&symbols - &BTreeSet::from([':']));
         let not_colon_free = Element::NotTokenSet(&symbols | &BTreeSet::from([':']));
@@ -574,27 +581,97 @@ where
         nfa.node_mut(prior).state = Terminal::Accept(m);
         nfa
     }
-}
 
-impl Element {
-    fn simplify(&self) -> Option<Element> {
-        use Element::*;
-        match &self {
-            TokenSet(x) => {
-                if x.is_empty() {
-                    None
-                } else {
-                    Some(self.clone())
-                }
+    pub fn simplify(&mut self) {
+        for (s, targets) in &self.transitions.clone() {
+            if targets.len() <= 1 {
+                continue;
             }
-            NotTokenSet(x) => {
-                if x.is_empty() {
-                    None
+            // let target_map = targets.iter().cloned().collect::<HashMap<u32, Vec<u64>>>();
+            let mut collected_targets: HashMap<_, Vec<_>> = HashMap::new();
+            for (t, e) in targets {
+                collected_targets
+                    .entry(t)
+                    .and_modify(|tt| tt.push(e))
+                    .or_insert_with(|| vec![e]);
+            }
+            let mut positives = BTreeSet::new();
+            let mut negatives = BTreeSet::new();
+            for (target, ees) in collected_targets {
+                if ees.len() <= 1 {
+                    continue;
+                }
+                for e in &ees {
+                    match self.edge(e).map(|edge| &edge.criteria) {
+                        Some(Element::TokenSet(ref s)) => {
+                            positives = &positives | s;
+                        }
+                        Some(Element::NotTokenSet(ref s)) => {
+                            negatives = &negatives | s;
+                        }
+                        None => unreachable!(),
+                    }
+                }
+                println!("positives {positives:?} negatives: {negatives:?}");
+                // abd !a!b!c  -> d, !c
+                let overlapping = &negatives - &positives;
+                negatives = overlapping.clone();
+                positives = &positives - &overlapping;
+                println!("modified: positives {positives:?} negatives: {negatives:?}");
+                for e in ees {
+                    self.remove_edge(*s, *e);
+                }
+
+                if !negatives.is_empty() {
+                    self.add_edge(
+                        NfaEdge {
+                            criteria: Element::NotTokenSet(negatives.clone()),
+                        },
+                        *s,
+                        *target,
+                    );
+                } else if !positives.is_empty() {
+                    self.add_edge(
+                        NfaEdge {
+                            criteria: Element::TokenSet(positives.clone()),
+                        },
+                        *s,
+                        *target,
+                    );
                 } else {
-                    // TODO: see if we get rid of all ascii chars??
-                    Some(self.clone())
+                    self.add_edge(
+                        NfaEdge {
+                            criteria: Element::NotTokenSet(negatives.clone()),
+                        },
+                        *s,
+                        *target,
+                    );
                 }
             }
         }
+        self.shake();
     }
 }
+
+// impl Element {
+//     fn simplify(&self) -> Option<Element> {
+//         use Element::*;
+//         match &self {
+//             TokenSet(x) => {
+//                 if x.is_empty() {
+//                     None
+//                 } else {
+//                     Some(self.clone())
+//                 }
+//             }
+//             NotTokenSet(x) => {
+//                 if x.is_empty() {
+//                     None
+//                 } else {
+//                     // TODO: see if we get rid of all ascii chars??
+//                     Some(self.clone())
+//                 }
+//             }
+//         }
+//     }
+// }
