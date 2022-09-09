@@ -53,7 +53,7 @@ fn nodename(i: &NodeId) -> String {
 pub(crate) fn graphviz_wrap(s: String, label: &str) -> String {
     format!(
         r##"
-strict digraph G {{
+digraph G {{
     rankdir = TB;
     remincross = true;
     splines = true;

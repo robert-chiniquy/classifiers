@@ -1,4 +1,6 @@
-use std::ops::Add;
+use std::collections::hash_map::Entry::*;
+use std::collections::{BTreeMap, HashSet};
+use std::{collections::HashMap, ops::Add};
 
 use super::*;
 
@@ -13,8 +15,6 @@ fn test_equility() {
 
 #[derive(Debug, Clone, Eq, PartialEq, std::hash::Hash)]
 pub enum Element {
-    Question,
-    Star,
     TokenSet(BTreeSet<char>),
     NotTokenSet(BTreeSet<char>),
 }
@@ -41,8 +41,6 @@ impl Complement<Element> for Element {
     fn complement(&self) -> Option<Self> {
         use Element::*;
         match self {
-            Question => None,
-            Star => None,
             TokenSet(n) => Some(NotTokenSet(n.clone())),
             NotTokenSet(n) => Some(TokenSet(n.clone())),
         }
@@ -51,29 +49,223 @@ impl Complement<Element> for Element {
 
 impl ElementalLanguage<Element> for Element {}
 
+#[derive(Default, Debug)]
+struct DfaBuilder {
+    count: u32,
+    // {2,3} -> 23
+    states: HashMap<BTreeSet<NodeId>, NodeId>,
+    // (2, b) -> {2,3}
+    transitions: HashMap<NodeId, BTreeMap<Element, BTreeSet<NodeId>>>,
+}
+
+impl DfaBuilder {
+    fn non_optimal_accepting_transitions(
+        &self,
+        from: NodeId,
+        criteria: &Element,
+    ) -> BTreeSet<NodeId> {
+        todo!()
+    }
+
+    pub fn next_id(&mut self) -> NodeId {
+        let r = self.count;
+        self.count += 1;
+        r
+    }
+
+    pub fn add_transition(&mut self, from: NodeId, e: Element, to: NodeId) {
+        // surplus but not incorrect
+        self.states
+            .insert(FromIterator::from_iter(vec![from]), from);
+        self.states.insert(FromIterator::from_iter(vec![to]), to);
+
+        let entry = match self.transitions.entry((from, e)) {
+            Occupied(entry) => entry.into_mut(),
+            Vacant(entry) => entry.insert(Default::default()),
+        };
+        entry.insert(to);
+    }
+
+    // abc
+    // number of rows/nodes = number of chars in input + 1
+    // number of columns: number of symbols in input
+    //   a b c
+    // 1 2
+    // 2   3
+    // 3     4
+    // 4
+    // a*b
+    // the presence of * implies the complemement of all symbols
+    // 2,3 is added to the table as there is a transition that goes to 2 and 3 ... ?
+    //       | a   | b     | !a!b |
+    // 1     | 2   | Ø     | Ø    |
+    // 2     | 2,3 | 2,3   | 2,3  |
+    // 3     | Ø   | 4     | Ø    |
+    // 4     | Ø   | Ø     | Ø    |
+    // 2,3   | 2,3 | 2,3,4 | 2,3  |
+    // 2,3,4 | 2,3 | 2,3   | 2,3  |
+    // where-ever you have columns such as b and ab,
+    // a transition of ab from a node counts as a transition of b as well
+    // for the purpose of unioning the resulting transitions
+
+    // TODO: M
+    pub fn build(&mut self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
+        self.construct();
+        self.build_dfa()
+    }
+
+    fn build_dfa(&self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
+        let mut dfa: Nfa<NfaNode<()>, NfaEdge<Element>> = Default::default();
+        // builder NodeId -> dfa NodeId
+        let mut node_id_map: HashMap<NodeId, NodeId> = Default::default();
+        // add a node for each row
+        let nodes: HashSet<_> = self.states.values().collect();
+        // let rows: HashSet<_> = self.transitions.keys().map(|(k, _)| k).collect();
+        // let mut dfa_node_id = 0;
+        for node_id in nodes {
+            let dfa_node_id = dfa.add_node(Default::default());
+            node_id_map.insert(*node_id, dfa_node_id);
+        }
+        println!(
+            "{node_id_map:?}\n{:?}\n{:?}",
+            self.transitions.keys().collect::<Vec<_>>(),
+            self.states
+        );
+        // add edges after nodes exist
+        for ((builder_node_id, criteria), target) in &self.transitions {
+            let t = self.states.get(target).unwrap();
+            dfa.add_edge(
+                NfaEdge {
+                    criteria: criteria.clone(),
+                },
+                *node_id_map.get(builder_node_id).unwrap(),
+                *node_id_map.get(t).unwrap(),
+            );
+        }
+
+        // TODO
+        // filter the dfa to only nodes which are reachable by root
+        // after this step, from this specific construction, any reachable leaf node is accepting
+        // .. add missing transitions here? nope
+        dfa.graphviz_file("dfa.dot", "dfa");
+        dfa
+    }
+
+    fn construct(&mut self) {
+        let columns: HashSet<_> = self
+            .transitions
+            .keys()
+            .map(|(_, col)| col)
+            .cloned()
+            .collect();
+        // start with all compound values
+        let mut stack: Vec<_> = self
+            .transitions
+            .values()
+            .filter(|v| v.len() > 1)
+            .cloned()
+            .collect();
+        while let Some(compound_state) = stack.pop() {
+            // don't process the same compound state twice
+            if self.states.contains_key(&compound_state) {
+                continue;
+            }
+            // create a new state (index it in self.states) and push it on the stack
+            let compound_id = self.next_id();
+            self.states.insert(compound_state.clone(), compound_id);
+            // for every compound state on the stack,
+            // for every column,
+            // populate its value by unioning the transitions of its component states for that column
+            // where this entails creating a new compound state, push it on the stack
+            for col in &columns {
+                let mut unioned_transitions: BTreeSet<NodeId> = Default::default();
+                for component_state in &compound_state {
+                    // get the transitions of component states for this column
+                    if let Some(transitions) =
+                        self.transitions.get(&(*component_state, col.clone()))
+                    {
+                        unioned_transitions.extend(transitions);
+                    }
+                    // for every column, for every column which would accept that column,
+                    // also add the resulting transition from the accepting column to unioned_transitions
+                }
+                if unioned_transitions.is_empty() {
+                    continue;
+                }
+                self.transitions
+                    .insert((compound_id, col.clone()), unioned_transitions.clone());
+                // if unioned_transitions is already processed, this is caught at the beginning of the loop
+                // if it is length 1, then it is already in self.states
+                stack.push(unioned_transitions);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_element_from_language() {
+    let d = Element::from_language("a*b".to_string().chars().collect(), ());
+}
+
+impl FromLanguage<Element> for Element {
+    type Language = Vec<char>;
+
+    // FIXME
+    type Metadata = ();
+
+    fn from_language(
+        l: Self::Language,
+        m: Self::Metadata,
+    ) -> Nfa<NfaNode<Self::Metadata>, NfaEdge<Element>> {
+        let symbols: BTreeSet<_> = l
+            .iter()
+            .filter(|c| **c != '?' && **c != '*')
+            .cloned()
+            .collect();
+        let mut builder: DfaBuilder = Default::default();
+        let mut prior = builder.next_id();
+        for c in &l {
+            let current = builder.next_id();
+            match c {
+                '?' => {
+                    // transition via all symbols from prior to current
+                    builder.add_transition(prior, Element::TokenSet(symbols.clone()), current);
+                    builder.add_transition(prior, Element::NotTokenSet(symbols.clone()), current);
+                }
+                '*' => {
+                    // transition via all symbols from prior to current
+                    // also have a self-loop (2 actually)
+                    builder.add_transition(prior, Element::TokenSet(symbols.clone()), current);
+                    builder.add_transition(prior, Element::NotTokenSet(symbols.clone()), current);
+                    builder.add_transition(prior, Element::TokenSet(symbols.clone()), prior);
+                    builder.add_transition(prior, Element::NotTokenSet(symbols.clone()), prior);
+                }
+                c => {
+                    // transition from prior to current via c
+                    builder.add_transition(prior, c.into(), current);
+                }
+            }
+            prior = current;
+        }
+        builder.build()
+    }
+}
+
 impl Universal for Element {
     fn universal() -> Self {
-        Element::Star
+        Element::NotTokenSet(Default::default())
     }
 }
 
 impl From<char> for Element {
     fn from(c: char) -> Self {
-        match c {
-            '*' => Element::Star,
-            '?' => Element::Question,
-            c => Element::token(c),
-        }
+        Element::token(c)
     }
 }
 
 impl From<&char> for Element {
     fn from(c: &char) -> Self {
-        match c {
-            '*' => Element::Star,
-            '?' => Element::Question,
-            c => Element::token(*c),
-        }
+        Element::token(*c)
     }
 }
 
@@ -83,10 +275,6 @@ impl Accepts<Element> for Element {
         use Element::*;
         match (self, &l) {
             (x, y) if x == *y => true,
-            (Star, _) => true,
-            (_, Star) => false,
-            (Question, _) => true,
-            (_, Question) => false,
             // Are all other ASCII characters specified in the not token set?
             (TokenSet(x), NotTokenSet(y)) => {
                 x.len() + y.len() == ASCII_TOTAL_CHARS && x.is_disjoint(y)
@@ -101,8 +289,6 @@ impl Accepts<&char> for Element {
     #[tracing::instrument(skip_all, ret)]
     fn accepts(&self, l: &&char) -> bool {
         match self {
-            Element::Question => true,
-            Element::Star => true,
             Element::NotTokenSet(v) => !v.iter().any(|c| *c == **l),
             Element::TokenSet(v) => v.iter().any(|c| *c == **l),
         }
@@ -119,7 +305,7 @@ impl Accepts<char> for Element {
 // TODO: Remove the dep on Default for this stuff
 impl Default for Element {
     fn default() -> Self {
-        Element::Star
+        Self::universal()
     }
 }
 
@@ -128,8 +314,6 @@ impl std::fmt::Display for Element {
         f.write_fmt(format_args!(
             "{}",
             match self {
-                Element::Question => "?".to_string(),
-                Element::Star => "*".to_string(),
                 Element::NotTokenSet(v) => {
                     if v.len() == 1 {
                         format!("!{}", v.iter().next().unwrap())
@@ -156,50 +340,6 @@ impl Product<Element> for Element {
         use Element::*;
 
         let branches: Vec<NfaBranch<Element>> = match (a, b) {
-            (Star, Star) => vec![
-                NfaBranch::new(Star, Advance, Stay),
-                NfaBranch::new(Star, Stay, Advance),
-                NfaBranch::new(Star, Advance, Advance),
-            ],
-            (Star, Question) | (Star, TokenSet(_)) | (Star, NotTokenSet(_)) => {
-                let mut v = vec![
-                    NfaBranch::new(b.clone(), Stay, Advance),
-                    NfaBranch::new(b.clone(), Advance, Advance),
-                ];
-                let c = b.clone().complement();
-                if let Some(c) = c {
-                    v.push(NfaBranch::new(c, Advance, Stop));
-                }
-                v
-            }
-
-            (Question, Star) | (TokenSet(_), Star) | (NotTokenSet(_), Star) => {
-                let mut v = vec![
-                    NfaBranch::new(a.clone(), Advance, Stay),
-                    NfaBranch::new(a.clone(), Advance, Advance),
-                ];
-                let c = a.clone().complement();
-                if let Some(c) = c {
-                    v.push(NfaBranch::new(c, Stop, Advance));
-                }
-                v
-            }
-
-            /* Question */
-            (Question, Question) | (Question, TokenSet(_)) | (Question, NotTokenSet(_)) => {
-                let mut v = vec![NfaBranch::new(b.clone(), Advance, Advance)];
-                let c = b.clone().complement();
-                if let Some(c) = c {
-                    v.push(NfaBranch::new(c, Advance, Stop));
-                }
-                v
-            }
-
-            (TokenSet(_), Question) | (NotTokenSet(_), Question) => vec![
-                NfaBranch::new(a.clone(), Advance, Advance),
-                NfaBranch::new(a.clone().complement().unwrap(), Stop, Advance),
-            ],
-
             (TokenSet(x), TokenSet(y)) => {
                 let matching = x
                     .iter()
@@ -270,8 +410,6 @@ impl Product<Element> for Element {
         branches
             .into_iter()
             .filter(|b| match &b.kind {
-                Question => true,
-                Star => true,
                 TokenSet(v) => !v.is_empty(),
                 NotTokenSet(v) => !v.is_empty(),
             })
@@ -286,19 +424,11 @@ impl Add for Element {
         use Element::*;
 
         match (&self, &rhs) {
-            (TokenSet(_), Question) | (NotTokenSet(_), Question) => Question,
-            (TokenSet(_), Star) | (NotTokenSet(_), Star) => Star,
-            (Question, Question) => Question,
-            (Question, Star) => Star,
-            (Star, Question) => Star,
-            (Star, Star) => Star,
-            (Star, NotTokenSet(_)) | (Star, TokenSet(_)) => Star,
-            (Question, NotTokenSet(_)) | (Question, TokenSet(_)) => Question,
             (TokenSet(x), TokenSet(y)) => TokenSet(x | y),
             (NotTokenSet(y), TokenSet(x)) | (TokenSet(x), NotTokenSet(y)) => {
                 let z = y - x;
                 if z.is_empty() {
-                    Question
+                    Self::universal()
                 } else {
                     NotTokenSet(z)
                 }
@@ -312,7 +442,7 @@ impl Add for Element {
                 } else if y.is_subset(x) {
                     rhs.clone()
                 } else {
-                    Question
+                    Self::universal()
                 }
             }
         }
@@ -320,35 +450,17 @@ impl Add for Element {
 }
 
 impl Subtraction<Element> for Element {
-    fn difference(a: &Element, b: &Element) -> EDifference<Element> {
+    fn difference(a: &Element, b: &Element) -> Element {
         use Element::*;
 
         match (a, b) {
-            (TokenSet(_), Question)
-            | (TokenSet(_), Star)
-            | (NotTokenSet(_), Question)
-            | (NotTokenSet(_), Star) => EDifference::None,
-
-            (Question, Question) => EDifference::None,
-            (Question, Star) => EDifference::None,
-            (Star, Question) => EDifference::None,
-            (Star, Star) => EDifference::None,
-
-            (Star, NotTokenSet(v)) | (Question, NotTokenSet(v)) => {
-                EDifference::ToStar(TokenSet(v.clone()))
-            }
-            // FIXME: * - ab = subgraph(!ab -> * accepting)
-            (Star, TokenSet(y)) | (Question, TokenSet(y)) => {
-                EDifference::ToStar(NotTokenSet(y.clone()))
-            }
-
             (TokenSet(x), TokenSet(y)) => {
                 // ab - bc = a
-                EDifference::E(TokenSet(x - y)).simplify()
+                TokenSet(x - y)
             }
             (TokenSet(x), NotTokenSet(y)) => {
                 // remove from x any value which is not in y
-                EDifference::E(TokenSet(x & y)).simplify()
+                TokenSet(x & y)
                 // let mut x = x.clone();
                 // x.retain(|c| y.contains(c));
                 // TokenSet(x).simplify()
@@ -356,7 +468,7 @@ impl Subtraction<Element> for Element {
             (NotTokenSet(x), TokenSet(y)) => {
                 // !a!b abc
                 // !a!b!c
-                EDifference::E(NotTokenSet(x | y)).simplify()
+                NotTokenSet(x | y)
             }
 
             (NotTokenSet(x), NotTokenSet(y)) => {
@@ -369,7 +481,7 @@ impl Subtraction<Element> for Element {
                 // !a + !c = ? - !c =
 
                 //  !a - !c = c (b,c,d... - a,b,d.. = c)
-                EDifference::E(TokenSet(y - x)).simplify()
+                TokenSet(y - x)
                 // let mut x = x.clone();
                 // x.retain(|c| !y.contains(c));
                 // NotTokenSet(x).simplify()
@@ -380,37 +492,34 @@ impl Subtraction<Element> for Element {
 
 #[test]
 fn test_arithmetic() {
-    use Element::*;
+    // use Element::*;
     let nt = Element::not_token;
     let nts = Element::not_tokens;
     let ts = Element::tokens;
     let t = Element::token;
 
     // !c - a - b = !a!b!c
-    let r = Element::difference(&nt('c'), &t('a')).into();
-    let r: Element = Element::difference(&r, &t('b')).into();
+    let r = Element::difference(&nt('c'), &t('a'));
+    let r: Element = Element::difference(&r, &t('b'));
     assert_eq!(r, Element::not_tokens(&['a', 'b', 'c']));
 
     // * - a - b = !a!b
-    let mut r = Star;
-    r = Element::difference(&r, &t('a')).into();
-    r = Element::difference(&r, &t('b')).into();
+    let mut r = Element::universal();
+    r = Element::difference(&r, &t('a'));
+    r = Element::difference(&r, &t('b'));
     assert_eq!(r, nts(&['a', 'b']));
 
     // ? - a - b = !a!b
-    let r = Element::difference(&Question, &t('a'));
-    let r = Element::difference(&r.into(), &t('b'));
-    assert_eq!(r, EDifference::E(nts(&['a', 'b'])));
+    let r = Element::difference(&Element::universal(), &t('a'));
+    let r = Element::difference(&r, &t('b'));
+    assert_eq!(r, nts(&['a', 'b']));
 
     // ab - a -b = None
     let r = Element::difference(&ts(&['a', 'b']), &t('a'));
-    assert_eq!(EDifference::None, Element::difference(&r.into(), &t('b')));
+    assert_eq!(ts(&[]), Element::difference(&r, &t('b')));
 
     // !a - !c = c
-    assert_eq!(
-        Element::difference(&nt('a'), &nt('c')),
-        EDifference::E(t('c'))
-    );
+    assert_eq!(Element::difference(&nt('a'), &nt('c')), t('c'));
 }
 
 impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
@@ -440,7 +549,6 @@ impl Element {
     fn simplify(&self) -> Option<Element> {
         use Element::*;
         match &self {
-            Question | Star => Some(self.clone()),
             TokenSet(x) => {
                 if x.is_empty() {
                     None
@@ -456,38 +564,6 @@ impl Element {
                     Some(self.clone())
                 }
             }
-        }
-    }
-}
-
-impl EDifference<Element> {
-    pub fn simplify(&self) -> Self {
-        match self {
-            EDifference::E(e) => e.simplify().into(),
-            EDifference::ToStar(e) => {
-                EDifference::ToStar(e.simplify().unwrap_or_else(|| e.clone()))
-            }
-            EDifference::None => EDifference::None,
-        }
-    }
-}
-
-impl From<Option<Element>> for EDifference<Element> {
-    fn from(o: Option<Element>) -> Self {
-        match o {
-            Some(e) => EDifference::E(e),
-            None => EDifference::None,
-        }
-    }
-}
-
-#[cfg(test)]
-impl From<EDifference<Element>> for Element {
-    fn from(d: EDifference<Element>) -> Self {
-        match d {
-            EDifference::E(e) => e,
-            EDifference::ToStar(e) => e,
-            EDifference::None => unreachable!(),
         }
     }
 }

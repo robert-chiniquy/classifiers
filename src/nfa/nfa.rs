@@ -28,7 +28,6 @@ where
     pub fn from_language<C>(l: Vec<C>, m: M) -> Self
     where
         C: Into<E> + std::fmt::Debug,
-        // L: IntoIterator<Item = C>, // + std::iter::FromIterator<C>,
     {
         let mut nfa: Self = Default::default();
         let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));

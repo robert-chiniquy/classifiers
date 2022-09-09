@@ -23,7 +23,7 @@ fn test_a_v_q() {
     tests::setup();
 
     let n = Nfa::from_symbols(&[Element::not_token('a')], ());
-    let i = n.intersection(&Nfa::from_symbols(&[Element::Question], ()));
+    let i = n.intersection(&Nfa::from_symbols(&[Element::universal()], ()));
 
     assert!(!i.nodes.is_empty());
     i.graphviz_file("i.dot", "a_v_q");
@@ -65,20 +65,12 @@ where
                         Some((*id, E::universal()))
                     }
                 }
-                list => list
-                    .iter()
-                    .map(|(_target, edge)| self.edge(edge).unwrap().criteria.clone())
-                    .fold(Some(E::universal()), |acc, cur| match acc {
-                        None => None,
-                        Some(acc) => match E::difference(&acc, &cur) {
-                            EDifference::ToStar(e) | EDifference::E(e) => Some(e),
-                            EDifference::None => None,
-                        },
-                    })
-                    .map(|r| {
-                        // println!("r: {r:?}");
-                        (*id, r)
-                    }),
+                list => Some((
+                    *id,
+                    list.iter()
+                        .map(|(_target, edge)| self.edge(edge).unwrap().criteria.clone())
+                        .fold(E::universal(), |acc, cur| E::difference(&acc, &cur)),
+                )),
             })
             .collect();
 

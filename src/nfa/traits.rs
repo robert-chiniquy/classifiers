@@ -1,5 +1,7 @@
 use std::ops::Add;
 
+use super::*;
+
 #[derive(Debug)]
 pub enum GeneralError {
     Error(String),
@@ -31,7 +33,22 @@ pub trait ElementalLanguage<E>:
     + std::ops::Add<Output = E>
     + Product<E>
     + Universal
+    + FromLanguage<E>
+where
+    E: Eq + std::hash::Hash + Default + PartialEq,
 {
+}
+
+pub trait FromLanguage<E>
+where
+    E: Eq + std::hash::Hash + Default + PartialEq,
+{
+    type Language;
+    type Metadata: std::fmt::Debug + Clone + Ord + PartialOrd + Default + PartialEq + Eq;
+    fn from_language(
+        l: Self::Language,
+        m: Self::Metadata,
+    ) -> Nfa<NfaNode<Self::Metadata>, NfaEdge<E>>;
 }
 
 /// E: Accepts<L> implies a C: Into<E> and L: IntoIterator<Item = C>
@@ -46,25 +63,8 @@ where
     fn complement(&self) -> Option<Self>;
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum EDifference<E> {
-    E(E),
-    ToStar(E),
-    None,
-}
-
-// impl<E> EDifference<E> {
-//     pub fn unwrap(&self) -> E {
-//         match self {
-//             EDifference::ToStar(e) |
-//             EDifference::E(e) => e,
-//             EDifference::None => todo!(),
-//         }
-//     }
-// }
-
 pub trait Subtraction<E> {
-    fn difference(a: &E, b: &E) -> EDifference<E>;
+    fn difference(a: &E, b: &E) -> E;
 }
 
 pub trait Universal {
