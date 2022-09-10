@@ -414,6 +414,7 @@ impl DfaBuilder {
         for (builder_node_id, criteria_targets) in &self.transitions {
             for (criteria, target) in criteria_targets {
                 println!("builder_node_id {builder_node_id} criteria {criteria} target {target:?}");
+
                 let t = self.states.get(target).unwrap();
                 dfa.add_edge(
                     NfaEdge {
@@ -430,6 +431,23 @@ impl DfaBuilder {
         dfa.simplify();
         dfa
     }
+
+    /// Any input value which is a compound state will be turned into its components
+    // pub(crate) fn dissolve_state(&self, target: &BTreeSet<NodeId>) -> BTreeSet<NodeId> {
+    //     let mut ret: BTreeSet<u32> = Default::default();
+    //     for t in target {
+    //         match self.states.get(&BTreeSet::from([*t])) {
+    //             Some(s1) => {
+    //                 if s1 != t {
+    //                     ret.insert(*s1);
+    //                 }
+    //             }
+    //             None => ret.insert(t),
+    //         };
+    //     }
+    //     todo!();
+    //     ret
+    // }
 
     pub fn new(symbols: BTreeSet<char>) -> Self {
         Self {
