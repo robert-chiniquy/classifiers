@@ -2,8 +2,6 @@
 pub type NodeId = u32;
 pub type EdgeId = u64;
 
-use std::hash::Hash;
-
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -476,15 +474,12 @@ where
 
         for e in dead_edges {
             self.edges.remove(&e);
-            // TODO make more optimal
-            println!("XX {e} {:?}", self.transitions);
+            // println!("XX {e} {:?}", self.transitions);
             self.transitions
                 .iter_mut()
                 .for_each(|(_, edges)| edges.retain(|(_, ee)| *ee != e));
-            println!("YY {e} {:?}", self.transitions);
+            // println!("YY {e} {:?}", self.transitions);
         }
-        // ensure any remaining lists of edges are non-empty
-        // self.transitions.retain(|_k, v| !v.is_empty());
     }
 
     /// Restrict nodes and edges to those reachable from self.entry
@@ -525,7 +520,6 @@ where
     }
 
     pub(crate) fn shake(&mut self) {
-        // self.remove_node_set(self.non_reachable_nodes());
         self.remove_node_set(self.not_accepting_branch());
         println!("transitions post shakup: {:?}", self.transitions);
     }

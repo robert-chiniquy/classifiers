@@ -2,6 +2,8 @@ mod builder;
 
 use builder::*;
 
+pub use builder::*;
+
 use std::{collections::HashMap, ops::Add};
 
 use super::*;
@@ -379,6 +381,7 @@ where
                     .and_modify(|tt| tt.push(e))
                     .or_insert_with(|| vec![e]);
             }
+            
             let mut positives = BTreeSet::new();
             let mut negatives = BTreeSet::new();
             for (target, ees) in collected_targets {

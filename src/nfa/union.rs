@@ -11,6 +11,8 @@ where
     // Blindly copying states here allows M to vary widely
     #[tracing::instrument(skip(self, other))]
     pub fn union(&self, other: &Self) -> Self {
+
+        let dfabuilder : DfaBuilder = todo!();
         println!("union!");
         let mut union: Self = self.clone();
         let mut stack = vec![(union.entry, other.entry)];
