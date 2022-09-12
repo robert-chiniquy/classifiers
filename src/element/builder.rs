@@ -1,9 +1,7 @@
 use std::collections::BTreeSet;
 
-use std::collections::btree_map::Entry::*;
 use std::collections::HashMap;
 use std::collections::{BTreeMap, HashSet};
-use std::iter::FromIterator;
 
 use super::*;
 
@@ -53,28 +51,27 @@ digraph G {
 // a transition of ab from a node counts as a transition of b as well
 // for the purpose of unioning the resulting transitions
 
+type CompoundId = BTreeSet<NodeId>;
+
 #[derive(Default, Debug)]
 pub struct DfaBuilder {
-    entry: NodeId,
+    entry: CompoundId,
+    elements: BTreeSet<Element>,
     symbols: BTreeSet<char>,
-    count: u32,
-    // source state collection -> compound id
-    // {2,3} -> 23
-    states: HashMap<BTreeSet<NodeId>, NodeId>,
-    // (2, b) -> {2,3}
-    transitions: BTreeMap<NodeId, BTreeMap<Element, BTreeSet<NodeId>>>,
+    // a -> 1 -> [(2), (4), (2,3)]
+    transitions: BTreeMap<Element, BTreeMap<CompoundId, Vec<CompoundId>>>,
     accepting_states: BTreeSet<NodeId>,
 }
 
 #[test]
 fn test_product() {
-    // let a = DfaBuilder::from_language("ab".to_string().chars().collect());
-    // let b = DfaBuilder::from_language("ac".to_string().chars().collect());
-    // let _ = DfaBuilder::product(&a, &b);
-
-    let a = DfaBuilder::from_language("a*".to_string().chars().collect());
-    let b = DfaBuilder::from_language("*a".to_string().chars().collect());
+    let a = DfaBuilder::from_language("ab".to_string().chars().collect());
+    let b = DfaBuilder::from_language("ac".to_string().chars().collect());
     let _ = DfaBuilder::product(&a, &b);
+
+    // let a = DfaBuilder::from_language("a*".to_string().chars().collect());
+    // let b = DfaBuilder::from_language("*a".to_string().chars().collect());
+    // let _ = DfaBuilder::product(&a, &b);
 }
 
 impl DfaBuilder {
@@ -85,216 +82,94 @@ impl DfaBuilder {
         d
     }
 
+    /*
+
+    0 a-> 1 b-> (2)
+    4 a-> 5 c-> (6)
+
+    S  | a  | b | c
+    0  | 1  | Ø | Ø
+    1  | Ø  | 2 | Ø
+    4  | 5  | Ø | Ø
+    5  | Ø  | Ø | 6
+    04 | 15 | Ø | Ø
+    05 | 1  | Ø | 6
+    14 | 5  | 2 | Ø
+    15 | Ø  | 2 | 6
+
+    entry node is composite of A and B entry
+    TODO: accepting states are input accepting states as well as any product of them (chirality)
+
+    04 a-> 15 b -> (2)
+            c -> (6)
+    */
+
+    // the product id space will be the a space plus the b space offset by the a highest value / count
+    // we can copy a as-is, then copy b with an offset on all ids
+    //
+
+    // for every symbol,
+    // for every state in a
+    // for every state in b
+    //   insert into the product table (Union(δ(a id, symbol), δ(b id, symbol))) ...
+    // becomes (Some(product id for a id), Some(product id for b id)))
+    // becomes product.states.get({product id for a id, product id for b id})
+    // insert into product.transitions -> [(), S, SaSb] -> effectively the union of the targets
+    // (target ids must also be mapped into the product id space)
+
     fn construct_product(a: &Self, b: &Self) -> Self {
-        let b = b.offset_self(a.count + 1);
-        let mut product = DfaBuilder::new(&a.symbols | &b.symbols);
-
-        /*
-               transitions {
-                 0: {
-                   TokenSet({
-                     'a'
-                   }): {
-                     1
-                   }
-                 },
-                 1: {
-                   TokenSet({
-                     'b'
-                   }): {
-                     2
-                   }
-                 },
-                 4: {
-                   TokenSet({
-                     'a'
-                   }): {
-                     5
-                   }
-                 },
-                 5: {
-                   TokenSet({
-                     'c'
-                   }): {
-                     6
-                   }
-                 },
-                 12: {
-                   TokenSet({
-                     'a'
-                   }): {
-                     13
-                   }
-                 },
-                 13: {
-                   TokenSet({
-                     'b'
-                   }): {
-                     2
-                   },
-                   TokenSet({
-                     'c'
-                   }): {
-                     6
-                   }
-                 },
-                 14: {
-                   TokenSet({
-                     'a'
-                   }): {
-                     1
-                   },
-                   TokenSet({
-                     'c'
-                   }): {
-                     6
-                   }
-                 },
-                 15: {
-                   TokenSet({
-                     'a'
-                   }): {
-                     5
-                   },
-                   TokenSet({
-                     'b'
-                   }): {
-                     2
-                   }
-                 }
-               }
-        states {{4}: 4, {1}: 1, {1, 5}: 13, {6}: 6, {0, 5}: 14, {15}: 15, {0, 4}: 12, {5}: 5, {12}: 12, {1, 4}: 15, {14}: 14, {0}: 0, {2}: 2, {13}: 13}
-
-                12 (04), 13 (15), 14 (05), 15 (14)
-
-
-                */
-
-        /*
-        0 a-> 1 b-> (2)
-        4 a-> 5 c-> (6)
-
-        S  | a  | b | c
-        0  | 1  | Ø | Ø
-        1  | Ø  | 2 | Ø
-        4  | 5  | Ø | Ø
-        5  | Ø  | Ø | 6
-        04 | 15 | Ø | Ø
-        05 | 1  | Ø | 6
-        14 | 5  | 2 | Ø
-        15 | Ø  | 2 | 6
-
-        entry node is composite of A and B entry
-        TODO: accepting states are input accepting states as well as any product of them (chirality)
-
-        04 a-> 15 b -> (2)
-                c -> (6)
-        */
-
-        // the product id space will be the a space plus the b space offset by the a highest value / count
-        // we can copy a as-is, then copy b with an offset on all ids
-        //
-
-        // Ri - Li
-        // Li - Ri
-        // Ri - (Ri - Li)
-
-        // a, a
-        //
-        // Ri - Li: a - a = Ø
-        // Li - Ri: a - a = Ø
-        // Ri - (Ri - Li): a - (a - a) = a
-
-        // !a, !b
-        // ab, !a!b
-        // Ri - Li = !a - !b = !a!b
-        // Li - Ri = !b - !a = !a!b
-        // Ri - (Ri - Li) =
-
-        // (a node id, b node id) -> product node id
-        // product_nodes: HashMap<(Option<NodeId>, Option<NodeId>), NodeId>,
-
-        // for every symbol,
-        // for every state in a
-        // for every state in b
-        //   insert into the product table (Union(δ(a id, symbol), δ(b id, symbol))) ...
-        // becomes (Some(product id for a id), Some(product id for b id)))
-        // becomes product.states.get({product id for a id, product id for b id})
-        // insert into product.transitions -> [(), S, SaSb] -> effectively the union of the targets
-        // (target ids must also be mapped into the product id space)
-
-        let mut stack: Vec<BTreeSet<NodeId>> = Default::default();
-
-        product.count = a.count + b.count + 2;
-
-        product.entry = product.compound_id(&BTreeSet::from([a.entry, b.entry]));
-
-        for s in &product.symbols.clone() {
-            for (a_id, a_tree) in &a.transitions {
-                for (a_e, a_target) in a_tree {
-                    let a_accepts_s = a_e.accepts(&s);
-
-                    if a_accepts_s {
-                        product.add_transitions(a_id, &s.into(), a_target);
-                    }
-                    for (b_id, b_tree) in &b.transitions {
-                        for (b_e, b_target) in b_tree {
-                            let b_accepts_s = b_e.accepts(&s);
-                            if b_accepts_s {
-                                product.add_transitions(b_id, &s.into(), b_target);
-                            }
-                            let source_id = product.compound_id(&BTreeSet::from([*a_id, *b_id]));
-                            // stack.push(BTreeSet::from([source_id]));
-                            println!(
-                                "{a_id} {b_id} {a_accepts_s} {b_accepts_s} {a_target:?} {b_target:?}"
-                            );
-                            match (a_accepts_s, b_accepts_s) {
-                                (true, true) => {
-                                    let target_id = product.compound_id(&(a_target | b_target));
-                                    stack.push(BTreeSet::from([target_id]));
-                                    stack.push(a_target | b_target);
-
-                                    product.add_transition(&source_id, &s.into(), &target_id);
-                                }
-                                (true, false) => {
-                                    stack.push(a_target.clone());
-                                    product.add_transitions(&source_id, &s.into(), a_target);
-                                }
-                                (false, true) => {
-                                    stack.push(b_target.clone());
-                                    product.add_transitions(&source_id, &s.into(), b_target);
-                                }
-                                (false, false) => {
-                                    // product.compound_id(&(a_target | b_target));
-                                }
-                            }
-                        }
-                    }
+        let mut values = BTreeSet::new();
+        for (_, t) in a.transitions.clone() {
+            for (from, tos) in t {
+                values.extend(from);
+                for to in tos {
+                    values.extend(to);
                 }
             }
         }
-        // println!("lone_a: {lone_a:?}, lone_b: {lone_b:?}");
-        // iterate over a transitions
-        // iterate over b transitions
-        // ???
+        let max_a = values.iter().max().unwrap_or(&1);
+        let b = b.offset_self(max_a + 1);
 
-        // need construction logic here
+        let mut product = DfaBuilder::new_product(&a, &b);
+
+        let mut stack: Vec<BTreeSet<NodeId>> = Default::default();
+
+        // product.count = a.count + b.count + 2;
+        product.entry = &a.entry | &b.entry;
+
+        for e in &product.elements.clone() {
+            let a_transitions = a.transitions.get(e);
+            let b_transitions = b.transitions.get(e);
+
+            match (a_transitions, b_transitions) {
+                (None, None) => println!("nothing with symbol {e}...probably fine"),
+                (Some(t), None) | (None, Some(t)) => t.iter().for_each(|(from, toos)| {
+                    toos.iter()
+                        .for_each(|to| product._add_transition(from, e, to))
+                }),
+                (Some(a_t), Some(b_t)) => {
+                    a_t.iter().for_each(|(a_from, a_toos)| {
+                        b_t.iter().for_each(|(b_from, b_toos)| {
+                            let compound_id = a_from | b_from;
+                            stack.push(compound_id.clone());
+                            let mut to: CompoundId = Default::default();
+                            a_toos
+                                .iter()
+                                .chain(b_toos.iter())
+                                .for_each(|s| to.extend(s));
+
+                            product._add_transition(&compound_id, &e.clone(), &to);
+
+                            a_toos.iter().for_each(|to|product._add_transition(a_from, &e.clone(), to));
+                            b_toos.iter().for_each(|to|product._add_transition(b_from, &e.clone(), to));
+                        });
+                    });
+                }
+            }
+        }
+
         product.construct(stack);
         product
-    }
-
-    /// Get or set
-    pub(crate) fn compound_id(&mut self, compound_state: &BTreeSet<NodeId>) -> NodeId {
-        let c = BTreeSet::from_iter(compound_state.to_owned());
-        if let Some(id) = self.states.get(&c) {
-            *id
-        } else {
-            // create a new state (index it in self.states) and push it on the stack
-            let compound_id = self.next_id();
-            self.states
-                .insert(BTreeSet::from_iter(compound_state.to_owned()), compound_id);
-            compound_id
-        }
     }
 
     // TODO: M
@@ -308,62 +183,44 @@ impl DfaBuilder {
 
     fn compound_construct(&mut self) {
         // start with all compound values
-        let stack: Vec<_> = self
-            .transitions
-            .values()
-            .flat_map(|e| e.values().filter(|v| v.len() > 1).collect::<HashSet<_>>())
-            .cloned()
-            .collect();
+        let mut stack: Vec<_> = Default::default();
+        for (_, t) in &self.transitions {
+            for (from, tos) in t {
+                stack.push(from.clone());
+                for to in tos {
+                    stack.push(to.clone());
+                }
+            }
+        }
 
-        self.construct(stack);
+        self.construct(stack.iter().filter(|v| v.len() > 1).cloned().collect());
     }
 
     /// Stack should include any NodeIds which require traversal to complete transitions
-    fn construct(&mut self, mut stack: Vec<BTreeSet<NodeId>>) {
-        // TODO: Element -> E
-        let negation = Element::NotTokenSet(self.symbols.clone());
-        println!("🌮🌮🌮 the stack: {stack:?}\n\n");
+    fn construct(&mut self, mut stack: Vec<CompoundId>) {
+        println!("🌮🌮🌮 the stack: {stack:?}\n🌮🌮🌮 transitions: {:?}\n\n", self.transitions);
+
+        let visited: HashSet<CompoundId> = Default::default();
+
         while let Some(compound_state) = stack.pop() {
-            // don't process the same compound state twice
-            if self.states.contains_key(&compound_state) {
+            if visited.contains(&compound_state) {
                 continue;
             }
 
-            let compound_id = self.compound_id(&compound_state);
-
-            // For every symbol, and additionally also for the negation of all symbols,
-            // for every compound state (as non-compound-states are already populated),
-            // populate a transition value from the compound state via the symbol
-            // by unioning the transitions of its component states for that column
-            // where this entails creating a new compound state, push it on the stack
-            for symbol in self.symbols.clone() {
-                // for every transition from a component state of the compound state,
-                // see if it accepts this symbol, and if it does, add it to unioned_transitions
-                let mut unioned_transitions: BTreeSet<NodeId> = Default::default();
-                for component_state in &compound_state {
-                    if let Some(transitions) = self.transitions.get(component_state) {
-                        let transitions = transitions.clone();
-                        // for every component state, if it has a transition on the negation of all symbols,
-                        // union that transition into that negation column for the compound state
-                        if let Some(negative) = transitions.get(&negation) {
-                            self.add_transitions(&compound_id, &negation, negative);
-                            stack.push(negative.clone());
-                            // unioned_transitions.extend(negative);
-                        }
-                        for (element, targets) in &transitions {
-                            if element.accepts(&symbol) {
-                                unioned_transitions.extend(targets);
-                            }
-                        }
-                        self.add_transitions(
-                            &compound_id,
-                            &symbol.into(),
-                            &unioned_transitions.clone(),
-                        );
-                        // if unioned_transitions is already processed, this is caught at the beginning of the loop
-                        // if it is length 1, then it is already in self.states
+            for (element, transitions) in self.transitions.clone() {
+                let mut unioned_transitions: CompoundId = Default::default();
+                for c in compound_state.clone() {
+                    println!("looking for {c}");
+                    if let Some(toos) = transitions.get(&BTreeSet::from([c])) {
+                        println!("🌮🌮🌮🌮🌮 element: {element:?} c: {c:} toos: {toos:?}");
+                        unioned_transitions.extend(toos.iter().flatten());
                     }
                 }
+
+                if unioned_transitions.is_empty() {
+                    continue;
+                }
+                self._add_transition(&compound_state, &element, &unioned_transitions.clone());
                 stack.push(unioned_transitions);
             }
         }
@@ -372,57 +229,47 @@ impl DfaBuilder {
     fn build_dfa(&self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
         let mut dfa: Nfa<NfaNode<()>, NfaEdge<Element>> = Default::default();
         // builder NodeId -> dfa NodeId
-        let mut node_id_map: HashMap<NodeId, NodeId> = Default::default();
-        // add a node for each row
-        let nodes: HashSet<_> = self.states.values().collect();
-        let mut nodes: Vec<_> = nodes.iter().collect();
-        nodes.sort();
-        // debug_assert!(**nodes[0] == 0);
+        let mut node_id_map: HashMap<CompoundId, NodeId> = Default::default();
 
-        let mut accepting_states = HashSet::new();
-        for (compound, id) in self.states.clone() {
-            if self.accepting_states.contains(&id) {
-                accepting_states.insert(id);
-                continue;
-            }
-            for c in compound {
-                if self.accepting_states.contains(&c) {
-                    accepting_states.insert(id);
+        let mut nodes: HashSet<CompoundId> = Default::default();
+
+        for (_, transitions) in self.transitions.clone() {
+            for (from, to) in transitions {
+                nodes.insert(from);
+                for c_id in to {
+                    nodes.insert(c_id);
                 }
             }
         }
-        println!(
-            "the nodes: {nodes:?} {:?} {accepting_states:?}",
-            self.accepting_states
-        );
-        for builder_node_id in nodes {
+
+        for compound_id in nodes {
             let dfa_node_id = dfa.add_node(NfaNode {
-                state: match accepting_states.contains(builder_node_id) {
-                    // TODO: M
-                    true => Terminal::Accept(()),
-                    false => Default::default(),
+                state: match (&self.accepting_states & &compound_id).is_empty() {
+                    true => Default::default(),
+                    false => Terminal::Accept(()),
                 },
                 ..Default::default()
             });
-            node_id_map.insert(**builder_node_id, dfa_node_id);
+            node_id_map.insert(compound_id, dfa_node_id);
         }
-        println!(
-            "symbols: {:?}\nnode id map {node_id_map:?}\ntransitions {:?}\nstates {:?}\nentry {:?}",
-            self.symbols, self.transitions, self.states, self.entry
-        );
-        // add edges after nodes exist
-        for (builder_node_id, criteria_targets) in &self.transitions {
-            for (criteria, target) in criteria_targets {
-                println!("builder_node_id {builder_node_id} criteria {criteria} target {target:?}");
 
-                let t = self.states.get(target).unwrap();
-                dfa.add_edge(
-                    NfaEdge {
-                        criteria: criteria.clone(),
-                    },
-                    *node_id_map.get(builder_node_id).unwrap(),
-                    *node_id_map.get(t).unwrap(),
-                );
+        println!(
+            "symbols: {:?}\nnode id map {node_id_map:?}\ntransitions {:?}\nentry {:?}",
+            self.symbols, self.transitions, self.entry
+        );
+
+        // add edges after nodes exist
+        for (c, transitions) in self.transitions.clone() {
+            for (from, tos) in transitions {
+                for to in tos {
+                    dfa.add_edge(
+                        NfaEdge {
+                            criteria: c.clone(),
+                        },
+                        *node_id_map.get(&from).unwrap(),
+                        *node_id_map.get(&to).unwrap(),
+                    );
+                }
             }
         }
 
@@ -432,26 +279,26 @@ impl DfaBuilder {
         dfa
     }
 
-    /// Any input value which is a compound state will be turned into its components
-    // pub(crate) fn dissolve_state(&self, target: &BTreeSet<NodeId>) -> BTreeSet<NodeId> {
-    //     let mut ret: BTreeSet<u32> = Default::default();
-    //     for t in target {
-    //         match self.states.get(&BTreeSet::from([*t])) {
-    //             Some(s1) => {
-    //                 if s1 != t {
-    //                     ret.insert(*s1);
-    //                 }
-    //             }
-    //             None => ret.insert(t),
-    //         };
-    //     }
-    //     todo!();
-    //     ret
-    // }
+    pub fn new_product(a: &Self, b: &Self) -> Self {
+        let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
 
-    pub fn new(symbols: BTreeSet<char>) -> Self {
+        let mut elements: BTreeSet<Element> = symbols.iter().map(|c| c.into()).collect();
+        elements.insert(Element::NotTokenSet(symbols.clone()));
+
         Self {
             symbols,
+            elements,
+            ..Default::default()
+        }
+    }
+
+    pub fn new(symbols: BTreeSet<char>) -> Self {
+        let mut elements: BTreeSet<Element> = symbols.iter().map(|s| s.into()).collect();
+        elements.insert(Element::NotTokenSet(symbols.clone()));
+
+        Self {
+            symbols,
+            elements,
             ..Default::default()
         }
     }
@@ -460,38 +307,32 @@ impl DfaBuilder {
         self.accepting_states.insert(node)
     }
 
-    // The entry node will always be 0
-    pub fn next_id(&mut self) -> NodeId {
-        let r = self.count;
-        self.count += 1;
-        r
-    }
+    fn _add_transition(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
+        let mut no_e = true;
+        // println!("before: {:?}", self.transitions);
+        for element in &self.elements {
+            if !e.accepts(element) {
+                continue;
+            }
+            no_e = false;
+            self.transitions
+                .entry(element.clone())
+                .and_modify(|t| {
+                    t.entry(from.clone())
+                        .and_modify(|_from| _from.push(to.clone()))
+                        .or_insert_with(|| vec![to.clone()]);
+                })
+                .or_insert_with(|| BTreeMap::from([(from.clone(), vec![to.clone()])]));
+        }
 
-    // pub fn get_transition(&self, from: &NodeId, e: &Element) -> Option<&BTreeSet<NodeId>> {
-    //     self.transitions.get(from).and_then(|t| t.get(e))
-    // }
-
-    pub fn add_transitions(&mut self, from: &NodeId, e: &Element, to: &BTreeSet<NodeId>) {
-        for t in to {
-            self.add_transition(from, e, t);
+        // println!("after: {:?}", self.transitions);
+        if no_e {
+            panic!("did not add a transition for {from:?} -{e:?}-> {to:?}");
         }
     }
 
     pub fn add_transition(&mut self, from: &NodeId, e: &Element, to: &NodeId) {
-        // surplus but not incorrect
-        self.states.insert(BTreeSet::from([*from]), *from);
-        self.states.insert(BTreeSet::from([*to]), *to);
-
-        let entry = match self.transitions.entry(*from) {
-            Occupied(entry) => entry.into_mut(),
-            Vacant(entry) => entry.insert(Default::default()),
-        };
-        entry
-            .entry(e.clone())
-            .and_modify(|e| {
-                e.insert(*to);
-            })
-            .or_insert_with(|| BTreeSet::from([*to]));
+        self._add_transition(&BTreeSet::from([*from]), e, &BTreeSet::from([*to]));
     }
 
     pub(crate) fn from_language(l: Vec<char>) -> Self {
@@ -500,15 +341,15 @@ impl DfaBuilder {
             .map(|c| if *c == '?' || *c == '*' { ':' } else { *c })
             .collect();
 
-        let mut builder = DfaBuilder::new(symbols);
-        let mut prior = builder.next_id();
-        debug_assert!(prior == 0);
-        builder.entry = prior;
+        let mut builder = DfaBuilder::new(symbols.clone());
+        let mut prior = 0;
+        builder.entry = CompoundId::from([prior]);
 
-        let colon_free = Element::TokenSet(&builder.symbols - &BTreeSet::from([':']));
-        let not_colon_free = Element::NotTokenSet(&builder.symbols | &BTreeSet::from([':']));
+        let colon_free = Element::TokenSet(&symbols.clone() - &BTreeSet::from([':']));
+        let not_colon_free = Element::NotTokenSet(&symbols | &BTreeSet::from([':']));
+
         for c in &l {
-            let current = builder.next_id();
+            let current = prior + 1;
             match c {
                 '?' => {
                     // transition via all symbols from prior to current
@@ -530,67 +371,36 @@ impl DfaBuilder {
             }
             prior = current;
         }
+
         builder.set_accepting_state(prior);
         builder
     }
 
     /// Consume self, return a new self
     pub(crate) fn offset_self(&self, offset: u32) -> Self {
-        let mut states: HashMap<_, _> = Default::default();
-        for (k, v) in &self.states {
-            let k1 = k.iter().map(|u| *u + offset).collect();
-            states.insert(k1, v + offset);
-        }
+        let mut transitions: BTreeMap<Element, BTreeMap<CompoundId, Vec<CompoundId>>> =
+            Default::default();
+        for (element, v) in &self.transitions {
+            transitions.insert(element.clone(), Default::default());
+            for (from, to) in v {
+                let from: CompoundId = from.iter().map(|id| *id + offset).collect();
+                let to: Vec<CompoundId> = to
+                    .iter()
+                    .map(|vec| vec.iter().map(|id| *id + offset).collect())
+                    .collect();
 
-        let mut transitions: BTreeMap<_, BTreeMap<_, _>> = Default::default();
-        for (k, v) in &self.transitions {
-            let k = k + offset;
-            for (e, set) in v {
-                let set: BTreeSet<_> = set.iter().map(|u| *u + offset).collect();
                 transitions
-                    .entry(k)
-                    .and_modify(|c| {
-                        c.insert(e.clone(), set.clone());
-                    })
-                    .or_insert_with(|| BTreeMap::from_iter([(e.clone(), set)]));
+                    .get_mut(&element.clone())
+                    .unwrap()
+                    .insert(from.clone(), to.clone());
             }
         }
         Self {
-            entry: self.entry + offset,
+            entry: self.entry.iter().map(|id| *id + offset).collect(),
+            elements: self.elements.clone(),
             symbols: self.symbols.clone(),
-            count: self.count + offset,
-            states,
             transitions,
             accepting_states: self.accepting_states.iter().map(|u| u + offset).collect(),
         }
     }
 }
-
-/*
-
-digraph G {
-    rankdir = TB;
-    remincross = true;
-    splines = true;
-    fontsize="40";
-
-    bgcolor = "#555555";
-    node[color = "#FFFFFF"];
-    node[fontcolor = "#FFFFFF"];
-    edge[color = "#FFFFFF", fontcolor="#FFFFFF"];
-
-    label = "dfa";
-
-  node_0 -> node_1 [label="a" fontsize="20pt"];
-  node_1 -> node_4 [label="!:" fontsize="20pt"];
-  node_4 -> node_5 [label="b" fontsize="20pt"];
-  node_4 -> node_4 [label="!`{':', 'b'}`" fontsize="20pt"];
-  node_5 -> node_5 [label="b" fontsize="20pt"];
-  node_5 -> node_4 [label="!`{':', 'b'}`" fontsize="20pt"];
-  node_0 [label="enter", shape="circle"]
-  node_1 [label="1", shape="circle"]
-  node_4 [label="4", shape="circle"]
-  node_5 [label="5", shape="doublecircle"]
-}
-
-*/
