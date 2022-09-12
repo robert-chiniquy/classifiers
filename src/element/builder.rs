@@ -60,7 +60,7 @@ pub struct DfaBuilder {
     symbols: BTreeSet<char>,
     // a -> 1 -> [(2), (4), (2,3)]
     transitions: BTreeMap<Element, BTreeMap<CompoundId, Vec<CompoundId>>>,
-    accepting_states: BTreeSet<NodeId>,
+    accepting_states: BTreeSet<CompoundId>,
 }
 
 #[test]
@@ -70,14 +70,16 @@ fn test_product() {
     // let _ = DfaBuilder::product(&a, &b);
 
     let a = DfaBuilder::from_language("a*".to_string().chars().collect());
-    let b = DfaBuilder::from_language("*a".to_string().chars().collect());
+    let mut b = DfaBuilder::from_language("*a".to_string().chars().collect());
 
-    let dfa = DfaBuilder::product(&a, &b);
+    let mut i = DfaBuilder::intersect(&a, &mut b);
+    let dfa = i.build();
 
-    assert!(dfa.accepts(&vec!['a', 'a']).unwrap());
-    assert!(dfa.accepts(&vec!['a', 'a', 'a']).unwrap());
-    assert!(!dfa.accepts(&vec!['a', 'a', 'b']).unwrap());
-    assert!(!dfa.accepts(&vec!['a']).unwrap());
+
+    // assert!(dfa.accepts(&vec!['a', 'a']).unwrap());
+    // assert!(dfa.accepts(&vec!['a', 'a', 'a']).unwrap());
+    // assert!(!dfa.accepts(&vec!['a', 'a', 'b']).unwrap());
+    // assert!(!dfa.accepts(&vec!['a']).unwrap());
 }
 
 impl DfaBuilder {
@@ -95,8 +97,6 @@ impl DfaBuilder {
             accepting_states,
             ..Default::default()
         }
-
-
     }
 
     pub fn new(symbols: BTreeSet<char>) -> Self {
@@ -110,9 +110,9 @@ impl DfaBuilder {
         }
     }
 
-    fn product(a: &Self, b: &Self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
-        let b = DfaBuilder::construct_product(a, b);
-        let d = b.build_dfa();
+    fn product(a: &Self, b: &mut Self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
+        let product = DfaBuilder::construct_product(a, b);
+        let d = product.build_dfa();
         d.graphviz_file("product-dfa.dot", "dfa");
         d
     }
@@ -146,10 +146,10 @@ impl DfaBuilder {
     accepting states likewise come from A or B
 
     */
-    fn construct_product(a: &Self, b: &Self) -> Self {
+    fn construct_product(a: &Self, b: &mut Self) -> Self {
         let all_ids = a.ids();
-        let max_a = all_ids.iter().flatten().max().unwrap_or(&1);
-        let b = b.offset_self(max_a + 1);
+        let offset = all_ids.iter().flatten().max().unwrap_or(&1) + 1;
+        b.offset_self(offset);
 
         let mut product = DfaBuilder::new_product(&a, &b);
         product.entry = &a.entry | &b.entry;
@@ -190,6 +190,50 @@ impl DfaBuilder {
         product
     }
 
+
+    pub fn intersect(a: &Self, b: &mut Self) -> Self {
+        let mut product = Self::construct_product(a, b);
+
+        product.accepting_states = Default::default();
+
+        println!("a accepts: {:?}", a.accepting_states);
+        println!("b accepts: {:?}", b.accepting_states);
+
+        let both_accept = |id: &CompoundId| -> bool {
+            let mut a_accepts = false;
+            let mut b_accepts = false;
+            for i in id {
+                if a.accepting_states.iter().any(|s| s.contains(i)) {
+                    a_accepts = true;
+                } else if b.accepting_states.iter().any(|s| s.contains(i)) {
+                    b_accepts = true;
+                }
+            }
+            return a_accepts & b_accepts;
+        };
+
+        for id in &product.ids() {
+            if both_accept(id) {
+                product.accepting_states.insert(id.to_owned());
+            }
+        }
+
+        // a accepts: {{2}}
+        // b accepts: {{5}}
+        // intersecting states: {{1, 2, 3, 4, 5}, {1, 2, 5}}
+        // {1, 2, 3, 4, 5}: 16
+        // {1, 2, 5}: 15
+        // {1, 4}: 8
+        // {4}: 2
+        /* 
+        node id map {{3, 4, 5}: 9, {0}: 3, {1, 4}: 8, {0, 3}: 10, {5}: 5, {2}: 16, {1}: 4, {1, 2, 3, 4}: 13, {1, 5}: 11, {1, 3, 4}: 0, {1, 2, 3, 4, 5}: 14, {1, 2, 5}: 15, {4}: 2, {0, 4}: 7, {1, 2}: 17, {1, 3}: 12, {3}: 6, {3, 4}: 1}
+        transitions {TokenSet({'a'}): {{0}: [{1}, {1}], {0, 3}: [{1, 3, 4}, {1, 3, 4}], {0, 4}: [{1, 5}, {1, 5}], {1}: [{2}, {1}, {2}, {1}], {1, 2}: [{1, 2}], {1, 2, 3, 4}: [{1, 2, 3, 4, 5}], {1, 2, 3, 4, 5}: [{1, 2, 3, 4, 5}], {1, 2, 5}: [{1, 2}], {1, 3}: [{1, 2, 3, 4}, {1, 2, 3, 4}], {1, 3, 4}: [{1, 2, 3, 4, 5}], {1, 4}: [{1, 2, 5}, {1, 2, 5}], {1, 5}: [{1, 2}], {3}: [{4}, {3}, {4}, {3}], {3, 4}: [{3, 4, 5}], {3, 4, 5}: [{3, 4, 5}], {4}: [{5}, {5}]}, NotTokenSet({':', 'a'}): {{0, 3}: [{3, 4}], {1}: [{2}, {1}], {1, 2}: [{1, 2}], {1, 2, 3, 4}: [{1, 2, 3, 4}], {1, 2, 3, 4, 5}: [{1, 2, 3, 4}], {1, 2, 5}: [{1, 2}], {1, 3}: [{1, 2, 3, 4}, {1, 2, 3, 4}], {1, 3, 4}: [{1, 2, 3, 4}], {1, 4}: [{1, 2}], {1, 5}: [{1, 2}], {3}: [{4}, {3}], {3, 4}: [{3, 4}], {3, 4, 5}: [{3, 4}]}}
+        entry {0, 3}
+        */
+        println!("intersecting states: {:?}", product.accepting_states);
+        product
+    }
+
     pub fn find_compound_ids(&self) -> Vec<CompoundId>{
         //  We only care about compound ids since 
         self.ids().iter().filter(|v| v.len() > 1).cloned().collect()
@@ -198,7 +242,6 @@ impl DfaBuilder {
     // TODO: M
     pub fn build(&mut self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
         let d = self.build_dfa();
-        debug_assert!(d.entry == 0);
         d.graphviz_file("dfa.dot", "dfa");
         d
     }
@@ -253,16 +296,15 @@ impl DfaBuilder {
         let mut node_id_map: HashMap<CompoundId, NodeId> = Default::default();
 
 
-        for compound_id in self.ids() {
+        for id in self.ids() {
             let dfa_node_id = dfa.add_node(NfaNode {
-                state: match (&self.accepting_states & &compound_id).is_empty() {
-                    true => Default::default(),
-                    false => Terminal::Accept(()),
+                state: match self.accepting_states.contains(&id) {
+                    true => Terminal::Accept(()),
+                    false => Default::default(),
                 },
                 ..Default::default()
             });
-            // println!("dfa node: {:?}", dfa.node(dfa_node_id));
-            node_id_map.insert(compound_id, dfa_node_id);
+            node_id_map.insert(id, dfa_node_id);
         }
 
         println!(
@@ -292,7 +334,7 @@ impl DfaBuilder {
     }
 
     pub fn set_accepting_state(&mut self, node: NodeId) -> bool {
-        self.accepting_states.insert(node)
+        self.accepting_states.insert(BTreeSet::from([node]))
     }
 
     fn _add_transition(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
@@ -366,9 +408,10 @@ impl DfaBuilder {
     }
 
     /// Consume self, return a new self
-    pub(crate) fn offset_self(&self, offset: u32) -> Self {
+    pub(crate) fn offset_self(&mut self, offset: u32) {
         let mut transitions: BTreeMap<Element, BTreeMap<CompoundId, Vec<CompoundId>>> =
             Default::default();
+            
         for (element, v) in &self.transitions {
             transitions.insert(element.clone(), Default::default());
             for (from, to) in v {
@@ -384,12 +427,8 @@ impl DfaBuilder {
                     .insert(from.clone(), to.clone());
             }
         }
-        Self {
-            entry: self.entry.iter().map(|id| *id + offset).collect(),
-            elements: self.elements.clone(),
-            symbols: self.symbols.clone(),
-            transitions,
-            accepting_states: self.accepting_states.iter().map(|u| u + offset).collect(),
-        }
+        self.transitions = transitions;
+        self.entry = self.entry.iter().map(|id| *id + offset).collect();
+        self.accepting_states = self.accepting_states.iter().map(|s| s.iter().map(|u| u + offset).collect()).collect();
     }
 }
