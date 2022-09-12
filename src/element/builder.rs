@@ -109,9 +109,9 @@ impl DfaBuilder {
             ..Default::default()
         }
     }
-    
+
     fn product(a: &Self, b: &Self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
-        let b = DfaBuilder::initialize_product(a, b);
+        let b = DfaBuilder::construct_product(a, b);
         let d = b.build_dfa();
         d.graphviz_file("product-dfa.dot", "dfa");
         d
@@ -119,8 +119,15 @@ impl DfaBuilder {
 
     /*
 
-    0 a-> 1 b-> (2)
-    4 a-> 5 c-> (6)
+    // for every accepting symbol
+    // for every state in a
+    // for every state in b
+    //   add transition for (a_state, b_state):  `δ(a_state, symbol) U δ(b_state, symbol)))
+    
+    example: 
+
+    0 -a-> 1 -b-> (2)
+    4 -a-> 5 -c-> (6)
 
     S  | a  | b | c
     0  | 1  | Ø | Ø
@@ -132,27 +139,14 @@ impl DfaBuilder {
     14 | 5  | 2 | Ø
     15 | Ø  | 2 | 6
 
+    04 -a-> 15 -b -> (2)
+               -c -> (6)
+
     entry node is composite of A and B entry
-    TODO: accepting states are input accepting states as well as any product of them (chirality)
+    accepting states likewise come from A or B
 
-    04 a-> 15 b -> (2)
-            c -> (6)
     */
-
-    // the product id space will be the a space plus the b space offset by the a highest value / count
-    // we can copy a as-is, then copy b with an offset on all ids
-    //
-
-    // for every symbol,
-    // for every state in a
-    // for every state in b
-    //   insert into the product table (Union(δ(a id, symbol), δ(b id, symbol))) ...
-    // becomes (Some(product id for a id), Some(product id for b id)))
-    // becomes product.states.get({product id for a id, product id for b id})
-    // insert into product.transitions -> [(), S, SaSb] -> effectively the union of the targets
-    // (target ids must also be mapped into the product id space)
-
-    fn initialize_product(a: &Self, b: &Self) -> Self {
+    fn construct_product(a: &Self, b: &Self) -> Self {
         let mut values = BTreeSet::new();
         for (_, t) in a.transitions.clone() {
             for (from, tos) in t {
@@ -202,21 +196,11 @@ impl DfaBuilder {
             }
         }
 
-        product.construct(stack);
+        product.complete_transitions(stack);
         product
     }
 
-    // TODO: M
-    pub fn build(&mut self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
-        self.compound_construct();
-        let d = self.build_dfa();
-        debug_assert!(d.entry == 0);
-        d.graphviz_file("dfa.dot", "dfa");
-        d
-    }
-
-    fn compound_construct(&mut self) {
-        // start with all compound values
+    pub fn find_compound_ids(&self) -> Vec<CompoundId>{
         let mut stack: Vec<_> = Default::default();
         for (_, t) in &self.transitions {
             for (from, tos) in t {
@@ -226,12 +210,19 @@ impl DfaBuilder {
                 }
             }
         }
+        //  We only care about compound ids since 
+        stack.iter().filter(|v| v.len() > 1).cloned().collect()
 
-        self.construct(stack.iter().filter(|v| v.len() > 1).cloned().collect());
+    }
+    // TODO: M
+    pub fn build(&mut self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
+        let d = self.build_dfa();
+        debug_assert!(d.entry == 0);
+        d.graphviz_file("dfa.dot", "dfa");
+        d
     }
 
-    /// Stack should include any NodeIds which require traversal to complete transitions
-    fn construct(&mut self, mut stack: Vec<CompoundId>) {
+    pub fn complete_transitions(&mut self, mut stack: Vec<CompoundId>) {
         // println!("🌮🌮🌮 the stack: {stack:?}\n🌮🌮🌮 transitions: {:?}\n\n", self.transitions);
 
         let mut visited: HashSet<CompoundId> = Default::default();
@@ -263,9 +254,7 @@ impl DfaBuilder {
 
     fn build_dfa(&self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
         let mut dfa: Nfa<NfaNode<()>, NfaEdge<Element>> = Default::default();
-        // builder NodeId -> dfa NodeId
         let mut node_id_map: HashMap<CompoundId, NodeId> = Default::default();
-
         let mut nodes: HashSet<CompoundId> = Default::default();
 
         for (_, transitions) in self.transitions.clone() {

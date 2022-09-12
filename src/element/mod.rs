@@ -2,8 +2,6 @@ mod builder;
 
 use builder::*;
 
-use std::collections::btree_map::Entry::*;
-use std::collections::{BTreeMap, HashSet};
 use std::{collections::HashMap, ops::Add};
 
 use super::*;
@@ -71,6 +69,8 @@ impl FromLanguage<Element> for Element {
         _m: Self::Metadata,
     ) -> Nfa<NfaNode<Self::Metadata>, NfaEdge<Element>> {
         let mut builder: DfaBuilder = DfaBuilder::from_language(l);
+        let stack = builder.find_compound_ids();
+        builder.complete_transitions(stack);
         builder.build()
     }
 }
