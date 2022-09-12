@@ -524,23 +524,8 @@ where
 
     }
 
-    fn non_reachable_nodes(&self) -> HashSet<NodeId> {
-        let mut to_remove = self.nodes.keys().cloned().collect::<HashSet<_>>();
-        let mut stack = vec![self.entry];
-
-        while let Some(n) = stack.pop() {
-            if !to_remove.remove(&n) {
-                continue;
-            }
-            for (t, _) in self.edges_from(n) {
-                stack.push(*t);
-            }
-        }
-        to_remove
-    }
-
     pub(crate) fn shake(&mut self) {
-        self.remove_node_set(self.non_reachable_nodes());
+        // self.remove_node_set(self.non_reachable_nodes());
         self.remove_node_set(self.not_accepting_branch());
         println!("transitions post shakup: {:?}", self.transitions);
     }
@@ -567,12 +552,15 @@ where
         is_alive
     }
 
+    /// finds nodes that don't lead to an accepting node, including live/unreachable nodes.
     pub(crate) fn not_accepting_branch(&self) -> HashSet<NodeId>{
         let mut alive = Default::default();
         let mut visited = Default::default();
         self.accepting_branch(&self.entry, &mut visited, &mut alive);
-        println!("entry: {:?}\nalive: {alive:?}\nvisited: {visited:?}\ndead: {:?}", self.entry, &visited - &alive);
-        &visited - &alive
+
+        let all_nodes = self.nodes.keys().cloned().collect::<HashSet<_>>();
+        // println!("entry: {:?}\nalive: {alive:?}\nvisited: {visited:?}\ndead: {:?}", self.entry, &visited - &alive);
+        &all_nodes - &alive
     }
 
 }
