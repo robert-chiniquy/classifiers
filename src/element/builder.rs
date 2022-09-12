@@ -65,13 +65,13 @@ pub struct DfaBuilder {
 
 #[test]
 fn test_product() {
-    let a = DfaBuilder::from_language("ab".to_string().chars().collect());
-    let b = DfaBuilder::from_language("ac".to_string().chars().collect());
-    let _ = DfaBuilder::product(&a, &b);
-
-    // let a = DfaBuilder::from_language("a*".to_string().chars().collect());
-    // let b = DfaBuilder::from_language("*a".to_string().chars().collect());
+    // let a = DfaBuilder::from_language("ab".to_string().chars().collect());
+    // let b = DfaBuilder::from_language("ac".to_string().chars().collect());
     // let _ = DfaBuilder::product(&a, &b);
+
+    let a = DfaBuilder::from_language("a*".to_string().chars().collect());
+    let b = DfaBuilder::from_language("*a".to_string().chars().collect());
+    let _ = DfaBuilder::product(&a, &b);
 }
 
 impl DfaBuilder {
@@ -159,7 +159,6 @@ impl DfaBuilder {
                                 .for_each(|s| to.extend(s));
 
                             product._add_transition(&compound_id, &e.clone(), &to);
-
                             a_toos.iter().for_each(|to|product._add_transition(a_from, &e.clone(), to));
                             b_toos.iter().for_each(|to|product._add_transition(b_from, &e.clone(), to));
                         });
@@ -200,12 +199,13 @@ impl DfaBuilder {
     fn construct(&mut self, mut stack: Vec<CompoundId>) {
         println!("🌮🌮🌮 the stack: {stack:?}\n🌮🌮🌮 transitions: {:?}\n\n", self.transitions);
 
-        let visited: HashSet<CompoundId> = Default::default();
+        let mut visited: HashSet<CompoundId> = Default::default();
 
         while let Some(compound_state) = stack.pop() {
             if visited.contains(&compound_state) {
                 continue;
             }
+            visited.insert(compound_state.clone());
 
             for (element, transitions) in self.transitions.clone() {
                 let mut unioned_transitions: CompoundId = Default::default();
