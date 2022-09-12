@@ -147,24 +147,14 @@ impl DfaBuilder {
 
     */
     fn construct_product(a: &Self, b: &Self) -> Self {
-        let mut values = BTreeSet::new();
-        for (_, t) in a.transitions.clone() {
-            for (from, tos) in t {
-                values.extend(from);
-                for to in tos {
-                    values.extend(to);
-                }
-            }
-        }
-        let max_a = values.iter().max().unwrap_or(&1);
+        let all_ids = a.ids();
+        let max_a = all_ids.iter().flatten().max().unwrap_or(&1);
         let b = b.offset_self(max_a + 1);
 
         let mut product = DfaBuilder::new_product(&a, &b);
-
-        let mut stack: Vec<BTreeSet<NodeId>> = Default::default();
-
-        // product.count = a.count + b.count + 2;
         product.entry = &a.entry | &b.entry;
+        
+        let mut stack: Vec<BTreeSet<NodeId>> = Default::default();
 
         for e in &product.elements.clone() {
             let a_transitions = a.transitions.get(e);
@@ -201,17 +191,8 @@ impl DfaBuilder {
     }
 
     pub fn find_compound_ids(&self) -> Vec<CompoundId>{
-        let mut stack: Vec<_> = Default::default();
-        for (_, t) in &self.transitions {
-            for (from, tos) in t {
-                stack.push(from.clone());
-                for to in tos {
-                    stack.push(to.clone());
-                }
-            }
-        }
         //  We only care about compound ids since 
-        stack.iter().filter(|v| v.len() > 1).cloned().collect()
+        self.ids().iter().filter(|v| v.len() > 1).cloned().collect()
 
     }
     // TODO: M
@@ -251,22 +232,25 @@ impl DfaBuilder {
             }
         }
     }
-
-    fn build_dfa(&self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
-        let mut dfa: Nfa<NfaNode<()>, NfaEdge<Element>> = Default::default();
-        let mut node_id_map: HashMap<CompoundId, NodeId> = Default::default();
-        let mut nodes: HashSet<CompoundId> = Default::default();
+    fn ids(&self) -> HashSet<CompoundId> {
+        let mut ids: HashSet<CompoundId> = Default::default();
 
         for (_, transitions) in self.transitions.clone() {
             for (from, to) in transitions {
-                nodes.insert(from);
+                ids.insert(from);
                 for c_id in to {
-                    nodes.insert(c_id);
+                    ids.insert(c_id);
                 }
             }
         }
+        ids
+    }
+    fn build_dfa(&self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
+        let mut dfa: Nfa<NfaNode<()>, NfaEdge<Element>> = Default::default();
+        let mut node_id_map: HashMap<CompoundId, NodeId> = Default::default();
 
-        for compound_id in nodes {
+
+        for compound_id in self.ids() {
             let dfa_node_id = dfa.add_node(NfaNode {
                 state: match (&self.accepting_states & &compound_id).is_empty() {
                     true => Default::default(),
