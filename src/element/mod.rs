@@ -398,12 +398,12 @@ where
                         None => unreachable!(),
                     }
                 }
-                println!("positives {positives:?} negatives: {negatives:?}");
+                // println!("positives {positives:?} negatives: {negatives:?}");
                 // abd !a!b!c  -> d, !c
                 let overlapping = &negatives - &positives;
                 negatives = overlapping.clone();
                 positives = &positives - &overlapping;
-                println!("modified: positives {positives:?} negatives: {negatives:?}");
+                // println!("modified: positives {positives:?} negatives: {negatives:?}");
                 for e in ees {
                     self.remove_edge(*s, *e);
                 }

@@ -71,12 +71,47 @@ fn test_product() {
 
     let a = DfaBuilder::from_language("a*".to_string().chars().collect());
     let b = DfaBuilder::from_language("*a".to_string().chars().collect());
-    let _ = DfaBuilder::product(&a, &b);
+
+    let dfa = DfaBuilder::product(&a, &b);
+
+    assert!(dfa.accepts(&vec!['a', 'a']).unwrap());
+    assert!(dfa.accepts(&vec!['a', 'a', 'a']).unwrap());
+    assert!(!dfa.accepts(&vec!['a', 'a', 'b']).unwrap());
+    assert!(!dfa.accepts(&vec!['a']).unwrap());
 }
 
 impl DfaBuilder {
+    pub fn new_product(a: &Self, b: &Self) -> Self {
+        let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
+
+        let mut elements: BTreeSet<Element> = symbols.iter().map(|c| c.into()).collect();
+        elements.insert(Element::NotTokenSet(symbols.clone()));
+
+        let accepting_states = &a.accepting_states | & b.accepting_states;
+
+        Self {
+            symbols,
+            elements,
+            accepting_states,
+            ..Default::default()
+        }
+
+
+    }
+
+    pub fn new(symbols: BTreeSet<char>) -> Self {
+        let mut elements: BTreeSet<Element> = symbols.iter().map(|s| s.into()).collect();
+        elements.insert(Element::NotTokenSet(symbols.clone()));
+
+        Self {
+            symbols,
+            elements,
+            ..Default::default()
+        }
+    }
+    
     fn product(a: &Self, b: &Self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
-        let mut b = DfaBuilder::construct_product(a, b);
+        let b = DfaBuilder::initialize_product(a, b);
         let d = b.build_dfa();
         d.graphviz_file("product-dfa.dot", "dfa");
         d
@@ -117,7 +152,7 @@ impl DfaBuilder {
     // insert into product.transitions -> [(), S, SaSb] -> effectively the union of the targets
     // (target ids must also be mapped into the product id space)
 
-    fn construct_product(a: &Self, b: &Self) -> Self {
+    fn initialize_product(a: &Self, b: &Self) -> Self {
         let mut values = BTreeSet::new();
         for (_, t) in a.transitions.clone() {
             for (from, tos) in t {
@@ -197,7 +232,7 @@ impl DfaBuilder {
 
     /// Stack should include any NodeIds which require traversal to complete transitions
     fn construct(&mut self, mut stack: Vec<CompoundId>) {
-        println!("🌮🌮🌮 the stack: {stack:?}\n🌮🌮🌮 transitions: {:?}\n\n", self.transitions);
+        // println!("🌮🌮🌮 the stack: {stack:?}\n🌮🌮🌮 transitions: {:?}\n\n", self.transitions);
 
         let mut visited: HashSet<CompoundId> = Default::default();
 
@@ -210,9 +245,9 @@ impl DfaBuilder {
             for (element, transitions) in self.transitions.clone() {
                 let mut unioned_transitions: CompoundId = Default::default();
                 for c in compound_state.clone() {
-                    println!("looking for {c}");
+                    // println!("looking for {c}");
                     if let Some(toos) = transitions.get(&BTreeSet::from([c])) {
-                        println!("🌮🌮🌮🌮🌮 element: {element:?} c: {c:} toos: {toos:?}");
+                        // println!("🌮🌮🌮🌮🌮 element: {element:?} c: {c:} toos: {toos:?}");
                         unioned_transitions.extend(toos.iter().flatten());
                     }
                 }
@@ -250,6 +285,7 @@ impl DfaBuilder {
                 },
                 ..Default::default()
             });
+            // println!("dfa node: {:?}", dfa.node(dfa_node_id));
             node_id_map.insert(compound_id, dfa_node_id);
         }
 
@@ -277,30 +313,6 @@ impl DfaBuilder {
 
         dfa.simplify();
         dfa
-    }
-
-    pub fn new_product(a: &Self, b: &Self) -> Self {
-        let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
-
-        let mut elements: BTreeSet<Element> = symbols.iter().map(|c| c.into()).collect();
-        elements.insert(Element::NotTokenSet(symbols.clone()));
-
-        Self {
-            symbols,
-            elements,
-            ..Default::default()
-        }
-    }
-
-    pub fn new(symbols: BTreeSet<char>) -> Self {
-        let mut elements: BTreeSet<Element> = symbols.iter().map(|s| s.into()).collect();
-        elements.insert(Element::NotTokenSet(symbols.clone()));
-
-        Self {
-            symbols,
-            elements,
-            ..Default::default()
-        }
     }
 
     pub fn set_accepting_state(&mut self, node: NodeId) -> bool {
