@@ -2,6 +2,8 @@
 pub type NodeId = u32;
 pub type EdgeId = u64;
 
+use std::hash::Hash;
+
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -327,6 +329,7 @@ static EMPTY_VECTOR: Vec<(NodeId, EdgeId)> = Vec::new();
 impl<N, E> Nfa<N, E>
 where
     E: Eq + Clone + std::hash::Hash + std::default::Default,
+    N: Accepting,
 {
     // #[tracing::instrument(skip_all)]
     pub(crate) fn node_index(&mut self) -> NodeId {
@@ -492,11 +495,15 @@ where
     // - and the reverse for NotTokenSet against a superset TokenSet
     // - filter the dfa to only nodes which are reachable by root
     pub(crate) fn shake(&mut self) {
+        let dead_nodes = self.not_accepting_branch();
         // subtract visitable nodes from to_remove
         let mut to_remove = self.nodes.keys().cloned().collect::<HashSet<_>>();
         let mut stack = vec![self.entry];
 
         while let Some(n) = stack.pop() {
+            if dead_nodes.contains(&n) {
+                continue;
+            }
             if !to_remove.remove(&n) {
                 continue;
             }
@@ -512,10 +519,42 @@ where
             .flat_map(|(_, v)| v.iter().map(|(_, eid)| eid).collect::<HashSet<_>>())
             .cloned()
             .collect();
+
         self.edges.retain(|e, _| !to_remove_edges.contains(e));
         self.transitions.retain(|n, _| !to_remove.contains(n));
         self.nodes.retain(|n, _| !to_remove.contains(n));
     }
+
+    /// recurses, returning true if a subtree reaches an accepting state
+    fn _accepting(&self, node_id: &NodeId, visited: &mut HashSet<NodeId>, alive: &mut HashSet<NodeId>) -> bool {
+        if visited.contains(node_id) {
+            return alive.contains(node_id);
+        }
+        visited.insert(*node_id);
+
+        let mut is_alive = false;
+        if self.node(*node_id).accepting() {
+            alive.insert(*node_id);
+            is_alive = true;
+        }
+
+        for (target, _) in self.edges_from(*node_id) {
+            if self._accepting(&target.to_owned(), visited, alive) {
+                is_alive = true;
+                alive.insert(*node_id);
+            }
+        }
+        is_alive
+    }
+
+    pub(crate) fn not_accepting_branch(&self) -> HashSet<NodeId>{
+        let mut alive = Default::default();
+        let mut visited = Default::default();
+        self._accepting(&self.entry, &mut visited, &mut alive);
+        println!("entry: {:?}\nalive: {alive:?}\nvisited: {visited:?}\ndead: {:?}", self.entry, &visited - &alive);
+        &visited - &alive
+    }
+
 }
 
 impl<N, E> Nfa<N, NfaEdge<E>>

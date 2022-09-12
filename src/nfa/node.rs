@@ -9,6 +9,19 @@ where
     pub(crate) chirality: LRSemantics,
 }
 
+impl<M> Accepting for NfaNode<M> 
+where
+    M: std::fmt::Debug + Clone + Default,
+{
+    fn accepting(&self) -> bool {
+        match self.state {
+            Terminal::Not => false,
+            Terminal::Accept(_) => true,
+            Terminal::Reject(_) => true,
+        }
+    }
+}
+
 // TODO: Consider chirality
 impl<M> NfaNode<M>
 where
