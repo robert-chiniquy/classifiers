@@ -153,7 +153,7 @@ impl DfaBuilder {
 
         let mut product = DfaBuilder::new_product(&a, &b);
         product.entry = &a.entry | &b.entry;
-        
+
         let mut stack: Vec<BTreeSet<NodeId>> = Default::default();
 
         for e in &product.elements.clone() {
@@ -203,7 +203,7 @@ impl DfaBuilder {
         d
     }
 
-    pub fn complete_transitions(&mut self, mut stack: Vec<CompoundId>) {
+    fn complete_transitions(&mut self, mut stack: Vec<CompoundId>) {
         // println!("🌮🌮🌮 the stack: {stack:?}\n🌮🌮🌮 transitions: {:?}\n\n", self.transitions);
 
         let mut visited: HashSet<CompoundId> = Default::default();
@@ -232,6 +232,8 @@ impl DfaBuilder {
             }
         }
     }
+
+
     fn ids(&self) -> HashSet<CompoundId> {
         let mut ids: HashSet<CompoundId> = Default::default();
 
@@ -245,6 +247,7 @@ impl DfaBuilder {
         }
         ids
     }
+
     fn build_dfa(&self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
         let mut dfa: Nfa<NfaNode<()>, NfaEdge<Element>> = Default::default();
         let mut node_id_map: HashMap<CompoundId, NodeId> = Default::default();
@@ -358,6 +361,7 @@ impl DfaBuilder {
         }
 
         builder.set_accepting_state(prior);
+        builder.complete_transitions(builder.find_compound_ids());
         builder
     }
 

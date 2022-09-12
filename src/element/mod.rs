@@ -69,8 +69,6 @@ impl FromLanguage<Element> for Element {
         _m: Self::Metadata,
     ) -> Nfa<NfaNode<Self::Metadata>, NfaEdge<Element>> {
         let mut builder: DfaBuilder = DfaBuilder::from_language(l);
-        let stack = builder.find_compound_ids();
-        builder.complete_transitions(stack);
         builder.build()
     }
 }
