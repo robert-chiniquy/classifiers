@@ -494,16 +494,41 @@ where
     // can be removed after subtracting the chars from the NotTokenSet,
     // - and the reverse for NotTokenSet against a superset TokenSet
     // - filter the dfa to only nodes which are reachable by root
-    pub(crate) fn shake(&mut self) {
-        let dead_nodes = self.not_accepting_branch();
-        // subtract visitable nodes from to_remove
+
+    fn remove_node_set(&mut self, to_remove: HashSet<NodeId>) {
+        println!("dropping nodes: {to_remove:?}");
+
+        let mut to_remove_edges : HashSet<EdgeId>  = Default::default();
+        for (s, edges) in &self.transitions {
+            if to_remove.contains(s) {
+                to_remove_edges.extend(edges.iter().map(|(_, e)| e.to_owned()));
+                continue;
+            }
+            // drop all edges whose target is a node in to_remove
+            for (t, e) in edges {
+                if to_remove.contains(t) {
+                    to_remove_edges.insert(e.to_owned());
+                }
+            }
+        }
+
+        self.edges.retain(|e, _| !to_remove_edges.contains(e));
+        self.nodes.retain(|n, _| !to_remove.contains(n));
+        self.transitions = self.transitions.iter().flat_map(|(s, edges)| {
+            if to_remove.contains(s) {
+                return None;
+            }
+            let edges = edges.iter().filter(|(t, e)| !to_remove.contains(t) || !to_remove_edges.contains(e)).cloned().collect();
+            Some((*s, edges))
+        }).collect();
+
+    }
+
+    fn non_reachable_nodes(&self) -> HashSet<NodeId> {
         let mut to_remove = self.nodes.keys().cloned().collect::<HashSet<_>>();
         let mut stack = vec![self.entry];
 
         while let Some(n) = stack.pop() {
-            if dead_nodes.contains(&n) {
-                continue;
-            }
             if !to_remove.remove(&n) {
                 continue;
             }
@@ -511,22 +536,17 @@ where
                 stack.push(*t);
             }
         }
+        to_remove
+    }
 
-        let to_remove_edges: HashSet<EdgeId> = self
-            .transitions
-            .iter()
-            .filter(|(n, _)| to_remove.contains(n))
-            .flat_map(|(_, v)| v.iter().map(|(_, eid)| eid).collect::<HashSet<_>>())
-            .cloned()
-            .collect();
-
-        self.edges.retain(|e, _| !to_remove_edges.contains(e));
-        self.transitions.retain(|n, _| !to_remove.contains(n));
-        self.nodes.retain(|n, _| !to_remove.contains(n));
+    pub(crate) fn shake(&mut self) {
+        self.remove_node_set(self.non_reachable_nodes());
+        self.remove_node_set(self.not_accepting_branch());
+        println!("transitions post shakup: {:?}", self.transitions);
     }
 
     /// recurses, returning true if a subtree reaches an accepting state
-    fn _accepting(&self, node_id: &NodeId, visited: &mut HashSet<NodeId>, alive: &mut HashSet<NodeId>) -> bool {
+    fn accepting_branch(&self, node_id: &NodeId, visited: &mut HashSet<NodeId>, alive: &mut HashSet<NodeId>) -> bool {
         if visited.contains(node_id) {
             return alive.contains(node_id);
         }
@@ -539,7 +559,7 @@ where
         }
 
         for (target, _) in self.edges_from(*node_id) {
-            if self._accepting(&target.to_owned(), visited, alive) {
+            if self.accepting_branch(&target.to_owned(), visited, alive) {
                 is_alive = true;
                 alive.insert(*node_id);
             }
@@ -550,7 +570,7 @@ where
     pub(crate) fn not_accepting_branch(&self) -> HashSet<NodeId>{
         let mut alive = Default::default();
         let mut visited = Default::default();
-        self._accepting(&self.entry, &mut visited, &mut alive);
+        self.accepting_branch(&self.entry, &mut visited, &mut alive);
         println!("entry: {:?}\nalive: {alive:?}\nvisited: {visited:?}\ndead: {:?}", self.entry, &visited - &alive);
         &visited - &alive
     }
