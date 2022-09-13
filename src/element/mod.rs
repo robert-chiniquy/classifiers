@@ -1,8 +1,11 @@
 mod builder;
+mod relatable;
 
-use builder::*;
+// use builder::*;
+// use relatable::*;
 
 pub use builder::*;
+pub use relatable::*;
 
 use std::{collections::HashMap, ops::Add};
 
@@ -357,14 +360,14 @@ where
     #[tracing::instrument(skip_all)]
     pub fn from_str(s: &str, m: M) -> Self {
         let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
+        let mut prior = nfa.add_node(NfaNode::new(Terminal::None));
         nfa.entry = prior;
         for c in s.chars() {
-            let target = nfa.add_node(NfaNode::new(Terminal::Not));
+            let target = nfa.add_node(NfaNode::new(Terminal::None));
             let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
             prior = target;
         }
-        nfa.node_mut(prior).state = Terminal::Accept(m);
+        nfa.node_mut(prior).state = Terminal::Include(m);
         nfa
     }
 

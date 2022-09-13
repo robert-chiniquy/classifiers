@@ -88,7 +88,7 @@ where
         println!("stuff: {stuff:?}");
         for (source_node_id, criteria) in stuff {
             // TODO: M needs to be passed down to here...
-            let n = NfaNode::new(Terminal::Reject(Default::default()));
+            let n = NfaNode::new(Terminal::Exclude(Default::default()));
             let target = self.add_node(n);
             self.add_edge(
                 NfaEdge {
@@ -99,7 +99,7 @@ where
             );
 
             if criteria != E::universal() {
-                let n = NfaNode::new(Terminal::Reject(Default::default()));
+                let n = NfaNode::new(Terminal::Exclude(Default::default()));
                 let final_target = self.add_node(n);
                 self.add_edge(
                     NfaEdge {
@@ -121,9 +121,9 @@ where
         n.create_all_transitions().unwrap();
         n.nodes.iter_mut().for_each(|(_, n)| {
             n.state = match &n.state {
-                Terminal::Not => Terminal::Accept(Default::default()),
-                Terminal::Accept(_) => Terminal::Not,
-                Terminal::Reject(m) => Terminal::Accept(m.clone()),
+                Terminal::None => Terminal::Include(Default::default()),
+                Terminal::Include(_) => Terminal::None,
+                Terminal::Exclude(m) => Terminal::Include(m.clone()),
             }
         });
         n

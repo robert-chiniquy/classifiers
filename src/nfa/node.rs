@@ -15,9 +15,9 @@ where
 {
     fn accepting(&self) -> bool {
         match self.state {
-            Terminal::Not => false,
-            Terminal::Accept(_) => true,
-            Terminal::Reject(_) => true,
+            Terminal::None => false,
+            Terminal::Include(_) => true,
+            Terminal::Exclude(_) => true,
         }
     }
 }
@@ -157,27 +157,49 @@ impl<E: std::fmt::Display + Eq> std::fmt::Display for NfaEdge<E> {
     }
 }
 
+// Define complementation ... 
+// a -> b -> c(accept)
+// complement:
+// a(accept) -> b(accept) -> c
+// do non-accepting nodes contain an ption::None?
+// for homogenous trees with only 1 accepting state or multiple identical accepting states, this is fine
+// we need to also define complementation for trees with heterogenous accepting states
+// matt suggests the default state is like ... InverseInclude(M), so when complementation occurs,
+// you get the right match ... however ... 
+// so then, any operation which transforms a tree by changing the accepting Include(M) 
+// states to Exclude(M), (as in Classifier::Not) must also change the InverseInclude(M) to InverseExclude(M)
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum Terminal<M> {
-    Not, 
-    // NotButFormerlyWasAccept,
-    // NotButFormerlyWasReject,
-    Accept(M),
-    Reject(M),
+    // rename: None? Use an option?
+    NonAcceptingInclude(M),
+    NonAcceptingExclude(M),
+    Include(M),
+    Exclude(M),
+}
+
+impl <M> Terminal<M> {
+    pub fn invert(&self) -> Self {
+        match self {
+            Terminal::NonAcceptingInclude(m) =>Terminal::Include(*m),
+            Terminal::NonAcceptingExclude(m) => Terminal::Exclude(*m),
+            Terminal::Include(m) => Terminal::NonAcceptingInclude(*m),
+            Terminal::Exclude(m) => Terminal::Exclude(*m),
+        }
+    }
 }
 
 impl<M> Default for Terminal<M> {
     fn default() -> Self {
-        Terminal::Not
+        Terminal::None
     }
 }
 
 impl<M> std::fmt::Debug for Terminal<M> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Not => write!(f, ""),
-            Self::Accept(_) => f.debug_tuple("Accept").finish(),
-            Self::Reject(_) => f.debug_tuple("Reject").finish(),
+            Self::None => write!(f, ""),
+            Self::Include(_) => f.debug_tuple("Accept").finish(),
+            Self::Exclude(_) => f.debug_tuple("Reject").finish(),
         }
     }
 }
@@ -186,26 +208,26 @@ impl<M: std::fmt::Debug + Clone> Terminal<M> {
     #[tracing::instrument(ret)]
     fn negate(&self) -> Self {
         match self {
-            Terminal::Not => Terminal::Not,
-            Terminal::Accept(m) => Terminal::Reject(m.clone()),
-            Terminal::Reject(m) => Terminal::Accept(m.clone()),
+            Terminal::None => Terminal::None,
+            Terminal::Include(m) => Terminal::Exclude(m.clone()),
+            Terminal::Exclude(m) => Terminal::Include(m.clone()),
         }
     }
 
     fn sum(&self, other: &Self) -> Self {
         match (self, other) {
-            (Terminal::Not, Terminal::Not) => Terminal::Not,
-            (Terminal::Not, Terminal::Accept(_)) => other.clone(),
-            (Terminal::Not, Terminal::Reject(_)) => other.clone(),
-            (Terminal::Accept(_), Terminal::Not) => self.clone(),
-            (Terminal::Accept(_), Terminal::Accept(_)) => {
+            (Terminal::None, Terminal::None) => Terminal::None,
+            (Terminal::None, Terminal::Include(_)) => other.clone(),
+            (Terminal::None, Terminal::Exclude(_)) => other.clone(),
+            (Terminal::Include(_), Terminal::None) => self.clone(),
+            (Terminal::Include(_), Terminal::Include(_)) => {
                 // TODO: Worry about merging Ms
                 self.clone()
             }
-            (Terminal::Accept(_), Terminal::Reject(_)) => other.clone(),
-            (Terminal::Reject(_), Terminal::Not) => self.clone(),
-            (Terminal::Reject(_), Terminal::Accept(_)) => self.clone(),
-            (Terminal::Reject(_), Terminal::Reject(_)) => {
+            (Terminal::Include(_), Terminal::Exclude(_)) => other.clone(),
+            (Terminal::Exclude(_), Terminal::None) => self.clone(),
+            (Terminal::Exclude(_), Terminal::Include(_)) => self.clone(),
+            (Terminal::Exclude(_), Terminal::Exclude(_)) => {
                 // TODO: worry about merging Ms
                 self.clone()
             }

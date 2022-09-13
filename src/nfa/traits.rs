@@ -2,6 +2,36 @@ use std::ops::Add;
 
 use super::*;
 
+
+// 6 Relatables
+// 1,2,3,4,5,6
+// 1v2, 1v3, ..
+// 2,3, 2v4, ..
+// 1 > 2, 1 > 3, 2v3 - the work to do 2v3 was not done in 1v2 or 1v3
+// 1 ¥ 2, 1 ¥ 3, 2v3? 
+
+pub trait Relatable : std::fmt::Debug + Clone + PartialOrd + Ord {
+    type Language: std::fmt::Debug + Clone + PartialOrd + Ord;
+    type Element: ElementalLanguage<Self::Element>;
+    type Metadata: std::fmt::Debug + Clone + PartialOrd + Ord + Default;
+
+    fn from_language(l: &Self::Language, m: &Option<Self::Metadata>) -> Self;
+
+    // TODO(soon): Determine how to re-use the data computed in relation()
+    // ^ nm, rolling with the tuple return for now, see how it works out
+    // fn relation(&self, other: &Self) -> Relation;
+    /// Produces a Relation describing self v other 
+    /// as well as a re-usable Relatable capturing the relationship
+    fn relation(&self, other: &Self) -> (Relation, Self);
+
+    fn universal(m: &Option<Self::Metadata>) -> Self;
+    fn none(m: &Option<Self::Metadata>) -> Self;
+
+    fn negate(&self) -> Self;
+    fn union(&self, other: &Self) -> Self;
+    fn intersection(&self, other: &Self) -> Self;    
+}
+
 #[derive(Debug)]
 pub enum GeneralError {
     Error(String),

@@ -41,9 +41,9 @@ where
                 nodename(id),
                 nodelabel,
                 match node.state {
-                    Terminal::Not => "circle",
-                    Terminal::Accept(_) => "doublecircle",
-                    Terminal::Reject(_) => "doublecircle",
+                    Terminal::None => "circle",
+                    Terminal::Include(_) => "doublecircle",
+                    Terminal::Exclude(_) => "doublecircle",
                 }
             );
         }

@@ -10,118 +10,105 @@ pub enum Relation {
 }
 
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub enum Classifier<L>
+pub enum Classifier<R>
 where
-    L: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::hash::Hash,
+    R: Relatable,
 {
     Universal,
-    Literal(L),
-    Not(Box<Classifier<L>>),
+    Literal(R::Language, Option<R::Metadata>),
+    Not(Box<Classifier<R>>),
     /// Union
-    Any(BTreeSet<Classifier<L>>),
+    Any(BTreeSet<Classifier<R>>),
     /// Intersection
-    And(BTreeSet<Classifier<L>>),
+    And(BTreeSet<Classifier<R>>),
 }
 
-// TODO: Check membership
-impl<L> Classifier<L>
+/*
+Policy Statement 1
+Classifier C1
+
+PS2
+C2
+
+What is the relation between C1 and C2 ? 
+If one is allow, another is deny, that is a concern at the call site
+
+Classifier::Literal("s3:*")
+Classifier::Literal("s3:Get*")
+
+
+
+*/
+
+impl<R> Classifier<R>
 where
-    L: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::hash::Hash,
+    R: Relatable,
 {
     #[tracing::instrument(skip_all)]
-    pub fn relation<E, C>(&self, other: &Self) -> Relation
-    where
-        C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
-        L: IntoIterator<Item = C>,
-        E: ElementalLanguage<E>,
+    pub fn relation(&self, other: &Self) -> Relation
     {
         // 1. compile
         // 2. relate NFAs (product of NFAs, search terminal states)
-        // graphviz will help w/ this
-        let mut s: Nfa<NfaNode<()>, NfaEdge<_>> = Classifier::compile(self, ());
-        let mut o = Classifier::compile(other, ());
+        let mut s: R = Classifier::compile(self, &None);
+        let mut o = Classifier::compile(other, &None);
 
-        s.set_chirality(LRSemantics::L);
-        o.set_chirality(LRSemantics::R);
-        let union = s.product(&o);
-        let paths = union.accepting_paths();
-        match (
-            !paths.l.is_empty(),
-            !paths.lr.is_empty(),
-            !paths.r.is_empty(),
-        ) {
-            (true, true, true) => Relation::Intersection,
-            (true, true, false) => Relation::Superset,
-            (true, false, true) => Relation::Disjoint,
-            (true, false, false) => Relation::Disjoint,
-            (false, true, true) => Relation::Subset,
-            (false, true, false) => Relation::Equality,
-            (false, false, true) => Relation::Disjoint,
-            (false, false, false) => Relation::Disjoint,
-        }
+        let (relation, _work) = s.relation(&o);
+        relation
     }
 
     #[tracing::instrument(skip_all)]
-    pub fn not(c: Classifier<L>) -> Self {
+    pub fn not(c: Self) -> Self {
         Classifier::Not(Box::new(c))
     }
 
     #[tracing::instrument]
-    pub fn and(items: &[Classifier<L>]) -> Self {
+    pub fn and(items: &[Self]) -> Self {
         Classifier::And(BTreeSet::from_iter(items.iter().cloned()))
     }
 }
 
-impl Classifier<Vec<char>> {
-    pub fn literal(s: &str) -> Self {
-        Classifier::Literal(str_to_chars(s))
-    }
-}
+// impl Classifier<Vec<char>> {
+//     pub fn literal(s: &str) -> Self {
+//         Classifier::Literal(str_to_chars(s))
+//     }
+// }
 
-impl<L> Classifier<L>
+impl<R> Classifier<R> 
 where
-    L: std::fmt::Debug + std::hash::Hash + PartialOrd + Ord + PartialEq + Eq + Clone,
+    R: Relatable,
 {
-    // TODO: make Element default? or more inferable
     #[tracing::instrument(skip_all)]
-    pub fn compile<E, M, C>(&self, m: M) -> Nfa<NfaNode<M>, NfaEdge<E>>
-    where
-        E: ElementalLanguage<E>,
-        C: Into<E> + std::fmt::Debug + Eq + std::hash::Hash + Default,
-        L: IntoIterator<Item = C>,
-        M: std::fmt::Debug + Clone + PartialOrd + Ord + Default,
+    pub fn compile(&self, m: &Option<R::Metadata>) -> R
     {
         match self {
-            Classifier::Universal => Nfa::universal(m),
-            Classifier::Literal(l) => {
-                let arg = l.clone().into_iter().collect();
-                Nfa::from_language(arg, m)
+            Classifier::Universal => R::universal(m),
+            Classifier::Literal(l, m) => {
+                R::from_language(l, m)
             }
-            // NotToken?
             Classifier::Not(c) => Classifier::compile(c, m).negate(),
             Classifier::Any(v) => {
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {
-                    items.fold(Classifier::compile(acc, m.clone()), |acc, cur| {
-                        acc.union(&Classifier::compile(cur, m.clone()))
+                    items.fold(Classifier::compile(acc, m), |acc, cur| {
+                        acc.union(&Classifier::compile(cur, m))
                     })
                 } else {
-                    Nfa::universal(m).negate()
+                    R::none(m)
                 }
             }
             // how does this treat heterogenous states?
             Classifier::And(v) => {
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {
-                    let acc = Classifier::compile(acc, m.clone());
+                    let acc = Classifier::compile(acc, m);
                     items.fold(acc, |acc, cur| {
-                        // An intersection() method on Classifiers first which may delegate to Nfa::intersection() ? for heterogenous structures
-                        acc.intersection(&Classifier::compile(cur, m.clone()))
+                        // An intersection() method on Classifiers first which may delegate to R::intersection() ? for heterogenous structures
+                        acc.intersection(&Classifier::compile(cur, m))
                         // if we needed a conjunction state on all terminal states in the intersection,
                         // we could mutate and add it here, or does it happen in intersection?
                     })
                 } else {
-                    Nfa::universal(m).negate()
+                    R::none(m)
                 }
             }
         }

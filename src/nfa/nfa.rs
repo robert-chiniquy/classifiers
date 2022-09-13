@@ -30,24 +30,24 @@ where
         C: Into<E> + std::fmt::Debug,
     {
         let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
+        let mut prior = nfa.add_node(NfaNode::new(Terminal::None));
         nfa.entry = prior;
         for c in l {
-            let target = nfa.add_node(NfaNode::new(Terminal::Not));
+            let target = nfa.add_node(NfaNode::new(Terminal::None));
             let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
             prior = target;
         }
-        nfa.node_mut(prior).state = Terminal::Accept(m);
+        nfa.node_mut(prior).state = Terminal::Include(m);
         nfa
     }
 
     #[tracing::instrument(skip_all)]
     pub fn from_symbols(l: &[E], m: M) -> Self {
         let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new(Terminal::Not));
+        let mut prior = nfa.add_node(NfaNode::new(Terminal::None));
         nfa.entry = prior;
         for criteria in l {
-            let target = nfa.add_node(NfaNode::new(Terminal::Not));
+            let target = nfa.add_node(NfaNode::new(Terminal::None));
             let _ = nfa.add_edge(
                 NfaEdge {
                     criteria: criteria.clone(),
@@ -57,7 +57,7 @@ where
             );
             prior = target;
         }
-        nfa.node_mut(prior).state = Terminal::Accept(m);
+        nfa.node_mut(prior).state = Terminal::Include(m);
         nfa
     }
 
@@ -131,18 +131,18 @@ where
     #[tracing::instrument(skip(self), ret)]
     pub fn node_accepting(&self, i: NodeId) -> bool {
         match &self.node(i).state {
-            Terminal::Not => false,
-            Terminal::Accept(_) => true,
-            Terminal::Reject(_) => false,
+            Terminal::None => false,
+            Terminal::Include(_) => true,
+            Terminal::Exclude(_) => false,
         }
     }
 
     #[tracing::instrument(skip(self), ret)]
     pub fn node_rejecting(&self, i: NodeId) -> bool {
         match &self.node(i).state {
-            Terminal::Not => false,
-            Terminal::Accept(_) => false,
-            Terminal::Reject(_) => true,
+            Terminal::None => false,
+            Terminal::Include(_) => false,
+            Terminal::Exclude(_) => true,
         }
     }
 
@@ -294,8 +294,8 @@ where
     #[tracing::instrument]
     pub(crate) fn set_chirality(&mut self, c: LRSemantics) {
         self.nodes.iter_mut().for_each(|(_, mut n)| match n.state {
-            Terminal::Not => (),
-            Terminal::Reject(_) | Terminal::Accept(_) => n.chirality = c.clone(),
+            Terminal::None => (),
+            Terminal::Exclude(_) | Terminal::Include(_) => n.chirality = c.clone(),
         })
     }
 }
@@ -308,8 +308,8 @@ where
     #[tracing::instrument(skip_all)]
     pub fn universal(m: M) -> Self {
         let mut nfa: Self = Default::default();
-        let prior = nfa.add_node(NfaNode::new(Terminal::Not));
-        let target = nfa.add_node(NfaNode::new(Terminal::Accept(m)));
+        let prior = nfa.add_node(NfaNode::new(Terminal::None));
+        let target = nfa.add_node(NfaNode::new(Terminal::Include(m)));
         let _ = nfa.add_edge(
             NfaEdge {
                 criteria: E::universal(),

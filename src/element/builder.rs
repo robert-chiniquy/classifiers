@@ -53,14 +53,21 @@ digraph G {
 
 type CompoundId = BTreeSet<NodeId>;
 
-#[derive(Default, Debug)]
-pub struct DfaBuilder {
+#[derive(Default, Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
+pub struct DfaBuilder<T = Terminal<()>> {
     entry: CompoundId,
     elements: BTreeSet<Element>,
     symbols: BTreeSet<char>,
     // a -> 1 -> [(2), (4), (2,3)]
     transitions: BTreeMap<Element, BTreeMap<CompoundId, Vec<CompoundId>>>,
-    accepting_states: BTreeSet<CompoundId>,
+    // Any compound / product node may have several associated accepting states 
+    // propagated from the source graphs
+    // example: if you have the same DFA with the same M, you have 2 copies,
+    // in one copy, you change the Accept(M) to a Reject(M),
+    // and then you intersect them,
+    // you would get both an Accept and a Reject in this set
+    accepting_states: BTreeMap<CompoundId, BTreeSet<T>>,
+
 }
 
 #[test]
@@ -237,8 +244,8 @@ impl DfaBuilder {
     pub fn find_compound_ids(&self) -> Vec<CompoundId>{
         //  We only care about compound ids since 
         self.ids().iter().filter(|v| v.len() > 1).cloned().collect()
-
     }
+
     // TODO: M
     pub fn build(&mut self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
         let d = self.build_dfa();
@@ -299,7 +306,7 @@ impl DfaBuilder {
         for id in self.ids() {
             let dfa_node_id = dfa.add_node(NfaNode {
                 state: match self.accepting_states.contains(&id) {
-                    true => Terminal::Accept(()),
+                    true => Terminal::Include(()),
                     false => Default::default(),
                 },
                 ..Default::default()
