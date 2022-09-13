@@ -53,7 +53,7 @@ digraph G {
 
 type CompoundId = BTreeSet<NodeId>;
 
-#[derive(Default, Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
 pub struct DfaBuilder<M>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
@@ -69,7 +69,7 @@ where
     // in one copy, you change the Accept(M) to a Reject(M),
     // and then you intersect them,
     // you would get both an Accept and a Reject in this set
-    accepting_states: BTreeMap<CompoundId, BTreeSet<Terminal<M>>>,
+    states: BTreeMap<CompoundId, BTreeSet<Terminal<M>>>,
 
 }
 
@@ -97,7 +97,7 @@ where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
 
-    pub(crate) fn from_language(l: Vec<char>, m: Option<M>) -> Self {
+    pub(crate) fn from_language(l: Vec<char>, m: &Option<M>) -> Self {
         let symbols: BTreeSet<_> = l
             .iter()
             .map(|c| if *c == '?' || *c == '*' { ':' } else { *c })
@@ -156,11 +156,11 @@ where
             elements,
             entry: Default::default(),
             transitions: Default::default(),
-            accepting_states: Default::default(),
+            states: Default::default(),
         }
     }
 
-    fn product(a: &Self, b: &mut Self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
+    fn product(a: &Self, b: &mut Self) -> Nfa<NfaNode<M>, NfaEdge<Element>> {
         let product = DfaBuilder::construct_product(a, b);
         let d = product.build_dfa();
         d.graphviz_file("product-dfa.dot", "dfa");
@@ -206,13 +206,13 @@ where
         b.offset_self(offset);
 
         // Combining the accepting states requires that any offset must already have occurred
-        let mut accepting_states = a.accepting_states.clone();
-        accepting_states.extend(b.accepting_states.clone().into_iter());
+        let mut accepting_states = a.states.clone();
+        accepting_states.extend(b.states.clone().into_iter());
 
         let mut product = Self {
             symbols,
             elements,
-            accepting_states,
+            states: accepting_states,
             entry: &a.entry | &b.entry,
             transitions: Default::default(),
         };
@@ -237,7 +237,7 @@ where
                             // of the source NodeIds
                             let compound_id = a_from | b_from;
                             stack.push(compound_id.clone());
-                            let states = a.accepting_states.get(a_from).unwrap() | b.accepting_states.get(b_from).unwrap();
+                            let states = a.states.get(a_from).unwrap() | b.states.get(b_from).unwrap();
                             product.add_states(&compound_id, states);
                             let mut to: CompoundId = Default::default();
                             a_toos
@@ -262,19 +262,20 @@ where
     pub fn intersect(a: &Self, b: &mut Self) -> Self {
         let mut product = Self::construct_product(a, b);
 
-        product.accepting_states = Default::default();
+        product.states = Default::default();
 
-        println!("a accepts: {:?}", a.accepting_states);
-        println!("b accepts: {:?}", b.accepting_states);
+        println!("a accepts: {:?}", a.states);
+        println!("b accepts: {:?}", b.states);
 
         let both_accept = |id: &CompoundId| -> bool {
             let mut a_accepts = false;
             let mut b_accepts = false;
+
             for i in id {
-                if a.accepting_states.iter().any(|s| s.contains(i)) {
-                    a_accepts = true;
-                } else if b.accepting_states.iter().any(|s| s.contains(i)) {
-                    b_accepts = true;
+                if let Some(states) = a.states.get(id) {
+                    a_accepts = a_accepts || states.iter().any(|s| s.accepting());
+                } else if let Some(states) = b.states.get(id) {
+                    b_accepts = b_accepts || states.iter().any(|s| s.accepting());
                 }
             }
             return a_accepts & b_accepts;
@@ -282,23 +283,20 @@ where
 
         for id in &product.ids() {
             if both_accept(id) {
-                product.accepting_states.insert(id.to_owned());
+                // cheaper to redo the logic here, probably...
+                let mut all_states = Default::default();
+                for i in id {
+                    if let Some(states) = a.states.get(id) {
+                        all_states = &all_states | states;
+                    } else if let Some(states) = b.states.get(id) {
+                        all_states = &all_states | states;
+                    }
+                }
+                product.add_states(id, all_states);
             }
         }
 
-        // a accepts: {{2}}
-        // b accepts: {{5}}
-        // intersecting states: {{1, 2, 3, 4, 5}, {1, 2, 5}}
-        // {1, 2, 3, 4, 5}: 16
-        // {1, 2, 5}: 15
-        // {1, 4}: 8
-        // {4}: 2
-        /* 
-        node id map {{3, 4, 5}: 9, {0}: 3, {1, 4}: 8, {0, 3}: 10, {5}: 5, {2}: 16, {1}: 4, {1, 2, 3, 4}: 13, {1, 5}: 11, {1, 3, 4}: 0, {1, 2, 3, 4, 5}: 14, {1, 2, 5}: 15, {4}: 2, {0, 4}: 7, {1, 2}: 17, {1, 3}: 12, {3}: 6, {3, 4}: 1}
-        transitions {TokenSet({'a'}): {{0}: [{1}, {1}], {0, 3}: [{1, 3, 4}, {1, 3, 4}], {0, 4}: [{1, 5}, {1, 5}], {1}: [{2}, {1}, {2}, {1}], {1, 2}: [{1, 2}], {1, 2, 3, 4}: [{1, 2, 3, 4, 5}], {1, 2, 3, 4, 5}: [{1, 2, 3, 4, 5}], {1, 2, 5}: [{1, 2}], {1, 3}: [{1, 2, 3, 4}, {1, 2, 3, 4}], {1, 3, 4}: [{1, 2, 3, 4, 5}], {1, 4}: [{1, 2, 5}, {1, 2, 5}], {1, 5}: [{1, 2}], {3}: [{4}, {3}, {4}, {3}], {3, 4}: [{3, 4, 5}], {3, 4, 5}: [{3, 4, 5}], {4}: [{5}, {5}]}, NotTokenSet({':', 'a'}): {{0, 3}: [{3, 4}], {1}: [{2}, {1}], {1, 2}: [{1, 2}], {1, 2, 3, 4}: [{1, 2, 3, 4}], {1, 2, 3, 4, 5}: [{1, 2, 3, 4}], {1, 2, 5}: [{1, 2}], {1, 3}: [{1, 2, 3, 4}, {1, 2, 3, 4}], {1, 3, 4}: [{1, 2, 3, 4}], {1, 4}: [{1, 2}], {1, 5}: [{1, 2}], {3}: [{4}, {3}], {3, 4}: [{3, 4}], {3, 4, 5}: [{3, 4}]}}
-        entry {0, 3}
-        */
-        println!("intersecting states: {:?}", product.accepting_states);
+        println!("intersecting states: {:?}", product.states);
         product
     }
 
@@ -307,8 +305,7 @@ where
         self.ids().iter().filter(|v| v.len() > 1).cloned().collect()
     }
 
-    // TODO: M
-    pub fn build(&mut self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
+    pub fn build(&mut self) -> Nfa<NfaNode<M>, NfaEdge<Element>> {
         let d = self.build_dfa();
         d.graphviz_file("dfa.dot", "dfa");
         d
@@ -342,7 +339,7 @@ where
 
                 let mut states = Default::default();
                 for id in unioned_transitions {
-                    states = &states | self.accepting_states.get(&CompoundId::from([id])).unwrap();
+                    states = &states | self.states.get(&CompoundId::from([id])).unwrap();
                 }
                 // self.add_states(&unioned_transitions, unioned_transitions.iter().flat_map(|t| self.accepting_states.get(&CompoundId::from([*t])).unwrap()).collect::<BTreeSet<_>>());
                 self.add_states(&unioned_transitions, states);
@@ -372,8 +369,9 @@ where
         let mut node_id_map: HashMap<CompoundId, NodeId> = Default::default();
 
         for id in self.ids() {
+            let states = self.states.get(&id).unwrap().clone();
             let dfa_node_id = dfa.add_node(NfaNode {
-                state: self.accepting_states.get(&id).unwrap(),
+                state: states,
             });
             node_id_map.insert(id, dfa_node_id);
         }
@@ -405,13 +403,13 @@ where
     }
 
     pub fn add_state(&mut self, node: &CompoundId, state: Terminal<M>) {
-        self.accepting_states.entry(*node)
+        self.states.entry(*node)
             .and_modify(|t| {t.insert(state);})
             .or_insert_with(|| BTreeSet::from([state]));
     }
 
     pub fn add_states(&mut self, node: &CompoundId, states: BTreeSet<Terminal<M>>) {
-        self.accepting_states.entry(*node)
+        self.states.entry(*node)
             .and_modify(|t| {t.extend(states);})
             .or_insert_with(|| states);
     }
@@ -466,6 +464,6 @@ where
         }
         self.transitions = transitions;
         self.entry = self.entry.iter().map(|id| *id + offset).collect();
-        self.accepting_states = self.accepting_states.iter().map(|s| s.iter().map(|u| u + offset).collect()).collect();
+        self.states = self.states.iter().map(|(k, s)| (k.iter().map(|u| u + offset).collect(), s.clone())).collect();
     }
 }

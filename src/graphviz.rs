@@ -5,7 +5,7 @@ pub use super::*;
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
     E: ElementalLanguage<E>,
-    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
+    M: std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     #[tracing::instrument(skip_all)]
     pub fn graphviz_file(&self, filename: &str, label: &str) {

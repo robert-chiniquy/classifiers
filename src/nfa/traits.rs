@@ -13,7 +13,8 @@ use super::*;
 pub trait Relatable : std::fmt::Debug + Clone + PartialOrd + Ord {
     type Language: std::fmt::Debug + Clone + PartialOrd + Ord;
     type Element: ElementalLanguage<Self::Element>;
-    type Metadata: std::fmt::Debug + Clone + PartialOrd + Ord + Default;
+
+    type Metadata: std::fmt::Debug + Clone + PartialOrd + Ord;
 
     fn from_language(l: &Self::Language, m: &Option<Self::Metadata>) -> Self;
 

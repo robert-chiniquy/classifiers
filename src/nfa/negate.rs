@@ -18,27 +18,27 @@ fn test_basic_classifier_negation() {
     assert!(!nnn.accepts_string("bb"));
 }
 
-#[test]
-fn test_a_v_q() {
-    tests::setup();
+// #[test]
+// fn test_a_v_q() {
+//     tests::setup();
 
-    let n = Nfa::from_symbols(&[Element::not_token('a')], ());
-    let i = n.intersection(&Nfa::from_symbols(&[Element::universal()], ()));
+//     let n = Nfa::from_symbols(&[Element::not_token('a')], ());
+//     let i = n.intersection(&Nfa::from_symbols(&[Element::universal()], ()));
 
-    assert!(!i.nodes.is_empty());
-    i.graphviz_file("i.dot", "a_v_q");
-    assert!(!i.accepts_string("a"));
-}
+//     assert!(!i.nodes.is_empty());
+//     i.graphviz_file("i.dot", "a_v_q");
+//     assert!(!i.accepts_string("a"));
+// }
 
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
-    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + std::default::Default,
+    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq,
     E: ElementalLanguage<E>,
 {
     /// These maybe mostly makes a DFA by adding edges for all words in the language.
     //  All terminal paths must end with stars.
     #[tracing::instrument(skip(self))]
-    pub fn create_all_transitions(&mut self) -> Result<Self, GeneralError> {
+    pub fn complete_transitions(&mut self) -> Result<Self, GeneralError> {
         let complete_dfa: Self = self.clone();
 
         // for (node_id, _node) in &self.nodes {
@@ -116,16 +116,10 @@ where
 
     #[tracing::instrument(skip(self), ret)]
     pub fn negate(&self) -> Self {
-        // TODO: negate must take M and pass it down to create_all_transitions...
+        // TODO: negate must take M and pass it down to complete_transitions...
         let mut n = self.clone();
-        n.create_all_transitions().unwrap();
-        n.nodes.iter_mut().for_each(|(_, n)| {
-            n.state = match &n.state {
-                Terminal::None => Terminal::Include(Default::default()),
-                Terminal::Include(_) => Terminal::None,
-                Terminal::Exclude(m) => Terminal::Include(m.clone()),
-            }
-        });
+        n.complete_transitions().unwrap();
+        n.nodes.iter_mut().for_each(|(_, n)| n.state = n.state.negate());
         n
     }
 }

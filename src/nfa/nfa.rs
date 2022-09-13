@@ -22,7 +22,7 @@ where
 impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
 where
     E: ElementalLanguage<E>,
-    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
+    M: std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     #[tracing::instrument(skip_all)]
     pub fn from_language<C>(l: Vec<C>, m: Option<M>) -> Self
@@ -174,45 +174,7 @@ where
     where
         E: Accepts<E>,
     {
-        // For DFAs this is the cross-product
-        let mut a = self.clone();
-        a.set_chirality(LRSemantics::L);
-
-        let mut b = other.clone();
-        b.set_chirality(LRSemantics::R);
-
-        if a.size() == 0 || b.size() == 0 {
-            return Default::default();
-        }
-        let union = a.product(&b);
-        // println!("XXX\n{a:?}\n{b:?}\n{union:?}");
-        // FIXME accepting_paths is illogical, this must respect all terminal states (Accept & Reject, but not Not)
-        // ... .terminal_paths() -> Paths (where Paths additionally stores terminal state and/or M)
-        let paths = union.accepting_paths();
-
-        // if a method here returned all terminal states with their associated paths,
-        // (matt says intersection is a conjunction)
-        // then each terminal state could be marked as in conjunction
-        // println!("\n\n intersecting paths: {:?}\n\n", paths.lr);
-
-        // [*] ¥ [?, !aa, ***] -> ****, !aa, !aa***, ***, !aa*, !aa
-        // [*] ¥ [*** , !aa, ?] -> !aa, ?
-
-        // match (paths.l.is_empty(), paths.lr.is_empty(), paths.r.is_empty());
-        if paths.lr.is_empty() {
-            // println!("making default");
-            return Default::default();
-            // return Nfa::universal(Default::default()).negate();
-        }
-        // TODO: reduce LR paths
-        let lr_paths: Vec<_> = paths.lr.iter().collect();
-        lr_paths[1..].iter().fold(
-            Nfa::from_symbols(lr_paths[0], Default::default()),
-            |acc, cur| {
-                println!("adding in {:?}", cur);
-                acc.union(&Nfa::from_symbols(cur, Default::default()))
-            },
-        )
+        todo!()
     }
 
     // TODO: remove use of Default
@@ -222,73 +184,74 @@ where
         E: Accepts<E>,
     {
         // (current node id, current path: Vec<_>)
-        let mut stack: Vec<(_, Vec<E>)> = vec![(self.entry, Default::default())];
+        // let mut stack: Vec<(_, Vec<E>)> = vec![(self.entry, Default::default())];
 
-        let mut paths: Paths<E> = Default::default();
+        // let mut paths: Paths<E> = Default::default();
 
-        while let Some((current_node, current_path)) = stack.pop() {
-            // for each edge from current node, append the edge criteria to a copy of the path
-            // and push the edge target on the stack with the new path
+        // while let Some((current_node, current_path)) = stack.pop() {
+        //     // for each edge from current node, append the edge criteria to a copy of the path
+        //     // and push the edge target on the stack with the new path
 
-            // if the current node is an accepting state, push the path onto Paths based on the chirality
-            if self.node_accepting(current_node) {
-                match self.node(current_node).chirality {
-                    LRSemantics::L => {
-                        paths.l.insert(current_path.clone());
-                    }
-                    LRSemantics::R => {
-                        paths.r.insert(current_path.clone());
-                    }
-                    LRSemantics::LR => {
-                        paths.lr.insert(current_path.clone());
-                    }
-                    LRSemantics::None => {
-                        paths.none.insert(current_path.clone());
-                    }
-                }
-            }
+        //     // if the current node is an accepting state, push the path onto Paths based on the chirality
+        //     if self.node_accepting(current_node) {
+        //         match self.node(current_node).chirality {
+        //             LRSemantics::L => {
+        //                 paths.l.insert(current_path.clone());
+        //             }
+        //             LRSemantics::R => {
+        //                 paths.r.insert(current_path.clone());
+        //             }
+        //             LRSemantics::LR => {
+        //                 paths.lr.insert(current_path.clone());
+        //             }
+        //             LRSemantics::None => {
+        //                 paths.none.insert(current_path.clone());
+        //             }
+        //         }
+        //     }
 
-            for (next_node, edge_id) in self.edges_from(current_node) {
-                let mut next_path = current_path.to_vec();
-                next_path.push(self.edge(edge_id).unwrap().criteria.clone());
-                stack.push((*next_node, next_path));
-            }
-        }
-        for path in paths.l.iter() {
-            if paths.r.remove(path) {
-                paths.lr.insert(path.clone().to_owned());
-            }
-        }
+        //     for (next_node, edge_id) in self.edges_from(current_node) {
+        //         let mut next_path = current_path.to_vec();
+        //         next_path.push(self.edge(edge_id).unwrap().criteria.clone());
+        //         stack.push((*next_node, next_path));
+        //     }
+        // }
+        // for path in paths.l.iter() {
+        //     if paths.r.remove(path) {
+        //         paths.lr.insert(path.clone().to_owned());
+        //     }
+        // }
 
-        // ensure that all values in left_paths are not in left_paths.r
-        for path in paths.lr.iter() {
-            paths.l.remove(path);
-            paths.r.remove(path);
-        }
+        // // ensure that all values in left_paths are not in left_paths.r
+        // for path in paths.lr.iter() {
+        //     paths.l.remove(path);
+        //     paths.r.remove(path);
+        // }
 
-        #[allow(unused_assignments)]
-        let mut move_stuff = Default::default();
-        (move_stuff, paths.l) = paths.l.iter().cloned().partition(|path| {
-            self.terminal_on::<E>(path, &|t| {
-                let r = t == &LRSemantics::R || t == &LRSemantics::LR;
-                if r {
-                    println!("found an r for l!?!? {path:?} {t:?}");
-                }
-                r
-            })
-            .unwrap()
-        });
+        // #[allow(unused_assignments)]
+        // let mut move_stuff = Default::default();
+        // (move_stuff, paths.l) = paths.l.iter().cloned().partition(|path| {
+        //     self.terminal_on::<E>(path, &|t| {
+        //         let r = t == &LRSemantics::R || t == &LRSemantics::LR;
+        //         if r {
+        //             println!("found an r for l!?!? {path:?} {t:?}");
+        //         }
+        //         r
+        //     })
+        //     .unwrap()
+        // });
 
-        paths.lr.extend(move_stuff.into_iter());
+        // paths.lr.extend(move_stuff.into_iter());
 
-        (move_stuff, paths.r) = paths.r.iter().cloned().partition(|path| {
-            self.terminal_on(path, &|t| t == &LRSemantics::L || t == &LRSemantics::LR)
-                .unwrap()
-        });
+        // (move_stuff, paths.r) = paths.r.iter().cloned().partition(|path| {
+        //     self.terminal_on(path, &|t| t == &LRSemantics::L || t == &LRSemantics::LR)
+        //         .unwrap()
+        // });
 
-        paths.lr.extend(move_stuff.into_iter());
+        // paths.lr.extend(move_stuff.into_iter());
 
-        paths
+        // paths
+        todo!()
     }
 
     #[tracing::instrument]

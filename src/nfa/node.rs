@@ -5,30 +5,30 @@ pub struct NfaNode<M>
 where
     M: std::fmt::Debug + Clone,
 {
-    pub(crate) state: Terminal<M>,
+    pub(crate) state: BTreeSet<Terminal<Option<M>>>,
 }
 
-impl<M> Accepting for NfaNode<M> 
+impl<M> Accepting for NfaNode<M>
 where
     M: std::fmt::Debug + Clone + Default,
 {
     fn accepting(&self) -> bool {
-        match self.state {
+        self.state.iter().any(|s| match s {
             Terminal::Include(_) => true,
             Terminal::Exclude(_) => true,
             Terminal::InverseInclude(_) => false,
             Terminal::InverseExclude(_) => false,
-        }
+        })
     }
 }
 
 impl<M> NfaNode<M>
 where
-    M: std::fmt::Debug + Clone + Default,
+    M: std::fmt::Debug + Clone + Default + Ord + PartialOrd,
 {
-    pub fn new(state: Terminal<M>) -> Self {
+    pub fn new(state: Terminal<Option<M>>) -> Self {
         Self {
-            state,
+            state: BTreeSet::from([state]),
         }
     }
 }
@@ -49,21 +49,21 @@ where
 //     let n3 = n1.sum(n2);
 // }
 
-impl<M> NodeSum for NfaNode<M>
-where
-    M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + Default,
-{
-    #[tracing::instrument(skip(self, other), ret)]
-    fn sum(&self, other: &Self) -> Self {
-        NfaNode {
-            state: self.state.sum(&other.state),
-        }
-    }
-    #[tracing::instrument(skip(self, other))]
-    fn sum_mut(&mut self, other: &Self) {
-        self.state = self.state.sum(&other.state);
-    }
-}
+// impl<M> NodeSum for NfaNode<M>
+// where
+//     M: std::fmt::Debug + Clone + PartialOrd + Ord + PartialEq + Eq + Default,
+// {
+//     #[tracing::instrument(skip(self, other), ret)]
+//     fn sum(&self, other: &Self) -> Self {
+//         NfaNode {
+//             state: self.state.sum(&other.state),
+//         }
+//     }
+//     #[tracing::instrument(skip(self, other))]
+//     fn sum_mut(&mut self, other: &Self) {
+//         self.state = self.state.sum(&other.state);
+//     }
+// }
 
 impl<M> std::fmt::Display for NfaNode<M>
 where
@@ -82,7 +82,7 @@ where
     pub fn negate(&self) -> Self {
         println!("negate in NfaNode wtf");
         let mut node = self.clone();
-        node.state = node.state.negate();
+        node.state = node.state.clone().iter().map(|s| s.negate()).collect();
         node
     }
 }
@@ -158,6 +158,15 @@ impl <M> Terminal<M> where M: std::fmt::Debug {
             Terminal::InverseExclude(m) => Terminal::Exclude(*m),
             Terminal::Include(m) => Terminal::InverseInclude(*m),
             Terminal::Exclude(m) => Terminal::Exclude(*m),
+        }
+    }
+
+    pub fn accepting(&self) -> bool {
+        match self {
+            Terminal::InverseInclude(_) => false,
+            Terminal::InverseExclude(_) => false,
+            Terminal::Include(_) => true,
+            Terminal::Exclude(_) => true,
         }
     }
 }

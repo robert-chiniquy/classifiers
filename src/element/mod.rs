@@ -73,7 +73,7 @@ impl FromLanguage<Element> for Element {
         l: Self::Language,
         _m: Self::Metadata,
     ) -> Nfa<NfaNode<Self::Metadata>, NfaEdge<Element>> {
-        let mut builder: DfaBuilder = DfaBuilder::from_language(l);
+        let mut builder: DfaBuilder<()> = DfaBuilder::from_language(l, &None);
         builder.build()
     }
 }
@@ -360,14 +360,15 @@ where
     #[tracing::instrument(skip_all)]
     pub fn from_str(s: &str, m: M) -> Self {
         let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new(Terminal::None));
+        let mut prior = nfa.add_node(NfaNode::new(Terminal::InverseInclude(None)));
         nfa.entry = prior;
         for c in s.chars() {
-            let target = nfa.add_node(NfaNode::new(Terminal::None));
+            let target = nfa.add_node(NfaNode::new(Terminal::InverseInclude(None)));
             let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
             prior = target;
         }
-        nfa.node_mut(prior).state = Terminal::Include(m);
+        let s: Terminal<M> = Terminal::Include(m);
+        nfa.node_mut(prior).state = BTreeSet::from([s]);
         nfa
     }
 
