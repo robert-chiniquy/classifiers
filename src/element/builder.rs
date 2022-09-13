@@ -54,7 +54,10 @@ digraph G {
 type CompoundId = BTreeSet<NodeId>;
 
 #[derive(Default, Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
-pub struct DfaBuilder<T = Terminal<()>> {
+pub struct DfaBuilder<M>
+where
+    M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
+{
     entry: CompoundId,
     elements: BTreeSet<Element>,
     symbols: BTreeSet<char>,
@@ -66,7 +69,7 @@ pub struct DfaBuilder<T = Terminal<()>> {
     // in one copy, you change the Accept(M) to a Reject(M),
     // and then you intersect them,
     // you would get both an Accept and a Reject in this set
-    accepting_states: BTreeMap<CompoundId, BTreeSet<T>>,
+    accepting_states: BTreeMap<CompoundId, BTreeSet<Terminal<M>>>,
 
 }
 
@@ -76,8 +79,8 @@ fn test_product() {
     // let b = DfaBuilder::from_language("ac".to_string().chars().collect());
     // let _ = DfaBuilder::product(&a, &b);
 
-    let a = DfaBuilder::from_language("a*".to_string().chars().collect());
-    let mut b = DfaBuilder::from_language("*a".to_string().chars().collect());
+    let a = DfaBuilder::from_language("a*".to_string().chars().collect(), None);
+    let mut b = DfaBuilder::from_language("*a".to_string().chars().collect(), None);
 
     let mut i = DfaBuilder::intersect(&a, &mut b);
     let dfa = i.build();
@@ -89,23 +92,61 @@ fn test_product() {
     // assert!(!dfa.accepts(&vec!['a']).unwrap());
 }
 
-impl DfaBuilder {
-    pub fn new_product(a: &Self, b: &Self) -> Self {
-        let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
+impl<M> DfaBuilder<M> 
+where
+    M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
+{
 
-        let mut elements: BTreeSet<Element> = symbols.iter().map(|c| c.into()).collect();
-        elements.insert(Element::NotTokenSet(symbols.clone()));
+    pub(crate) fn from_language(l: Vec<char>, m: Option<M>) -> Self {
+        let symbols: BTreeSet<_> = l
+            .iter()
+            .map(|c| if *c == '?' || *c == '*' { ':' } else { *c })
+            .collect();
 
-        let accepting_states = &a.accepting_states | & b.accepting_states;
+        let mut builder = DfaBuilder::new(symbols.clone());
+        let mut prior = 0;
+        
 
-        Self {
-            symbols,
-            elements,
-            accepting_states,
-            ..Default::default()
+        builder.entry = CompoundId::from([prior]);
+
+        let colon_free = Element::TokenSet(&symbols.clone() - &BTreeSet::from([':']));
+        let not_colon_free = Element::NotTokenSet(&symbols | &BTreeSet::from([':']));
+
+        for c in &l {
+            let current = prior + 1;
+
+            match c {
+                '?' => {
+                    // transition via all symbols from prior to current
+                    builder.add_transition(&prior, &colon_free.clone(), &current);
+                    builder.add_transition(&prior, &not_colon_free.clone(), &current);
+                }
+                '*' => {
+                    // transition via all symbols from prior to current
+                    // also have a self-loop (2 actually)
+                    builder.add_transition(&prior, &colon_free.clone(), &current);
+                    builder.add_transition(&prior, &not_colon_free.clone(), &current);
+                    builder.add_transition(&prior, &colon_free.clone(), &prior);
+                    builder.add_transition(&prior, &not_colon_free.clone(), &prior);
+                }
+                c => {
+                    // transition from prior to current via c
+                    builder.add_transition(&prior, &c.into(), &current);
+                }
+            }
+            prior = current;
         }
+
+        for i in 0..prior {
+            builder.add_state(&CompoundId::from([i]), Terminal::InverseInclude(m));
+        }
+        builder.add_state(&CompoundId::from([prior]), Terminal::Include(m));
+        builder.calculate_transitions(builder.find_compound_ids());
+        builder
     }
 
+
+    /// Calling this method requires setting accepting states externally
     pub fn new(symbols: BTreeSet<char>) -> Self {
         let mut elements: BTreeSet<Element> = symbols.iter().map(|s| s.into()).collect();
         elements.insert(Element::NotTokenSet(symbols.clone()));
@@ -113,7 +154,9 @@ impl DfaBuilder {
         Self {
             symbols,
             elements,
-            ..Default::default()
+            entry: Default::default(),
+            transitions: Default::default(),
+            accepting_states: Default::default(),
         }
     }
 
@@ -154,13 +197,26 @@ impl DfaBuilder {
 
     */
     fn construct_product(a: &Self, b: &mut Self) -> Self {
-        let all_ids = a.ids();
-        let offset = all_ids.iter().flatten().max().unwrap_or(&1) + 1;
+        let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
+
+        let mut elements: BTreeSet<Element> = symbols.iter().map(|c| c.into()).collect();
+        elements.insert(Element::NotTokenSet(symbols.clone()));
+
+        let offset = a.ids().iter().flatten().max().unwrap_or(&1) + 1;
         b.offset_self(offset);
 
-        let mut product = DfaBuilder::new_product(&a, &b);
-        product.entry = &a.entry | &b.entry;
+        // Combining the accepting states requires that any offset must already have occurred
+        let mut accepting_states = a.accepting_states.clone();
+        accepting_states.extend(b.accepting_states.clone().into_iter());
 
+        let mut product = Self {
+            symbols,
+            elements,
+            accepting_states,
+            entry: &a.entry | &b.entry,
+            transitions: Default::default(),
+        };
+        
         let mut stack: Vec<BTreeSet<NodeId>> = Default::default();
 
         for e in &product.elements.clone() {
@@ -176,8 +232,13 @@ impl DfaBuilder {
                 (Some(a_t), Some(b_t)) => {
                     a_t.iter().for_each(|(a_from, a_toos)| {
                         b_t.iter().for_each(|(b_from, b_toos)| {
+                            // Where we construct a new CompoundId, 
+                            // we must also compound the accepting states
+                            // of the source NodeIds
                             let compound_id = a_from | b_from;
                             stack.push(compound_id.clone());
+                            let states = a.accepting_states.get(a_from).unwrap() | b.accepting_states.get(b_from).unwrap();
+                            product.add_states(&compound_id, states);
                             let mut to: CompoundId = Default::default();
                             a_toos
                                 .iter()
@@ -193,11 +254,11 @@ impl DfaBuilder {
             }
         }
 
-        product.complete_transitions(stack);
+        product.calculate_transitions(stack);
         product
     }
 
-
+    // Require that a and b both have accepting states
     pub fn intersect(a: &Self, b: &mut Self) -> Self {
         let mut product = Self::construct_product(a, b);
 
@@ -253,7 +314,7 @@ impl DfaBuilder {
         d
     }
 
-    fn complete_transitions(&mut self, mut stack: Vec<CompoundId>) {
+    fn calculate_transitions(&mut self, mut stack: Vec<CompoundId>) {
         // println!("🌮🌮🌮 the stack: {stack:?}\n🌮🌮🌮 transitions: {:?}\n\n", self.transitions);
 
         let mut visited: HashSet<CompoundId> = Default::default();
@@ -278,6 +339,14 @@ impl DfaBuilder {
                     continue;
                 }
                 self._add_transition(&compound_state, &element, &unioned_transitions.clone());
+
+                let mut states = Default::default();
+                for id in unioned_transitions {
+                    states = &states | self.accepting_states.get(&CompoundId::from([id])).unwrap();
+                }
+                // self.add_states(&unioned_transitions, unioned_transitions.iter().flat_map(|t| self.accepting_states.get(&CompoundId::from([*t])).unwrap()).collect::<BTreeSet<_>>());
+                self.add_states(&unioned_transitions, states);
+
                 stack.push(unioned_transitions);
             }
         }
@@ -298,18 +367,13 @@ impl DfaBuilder {
         ids
     }
 
-    fn build_dfa(&self) -> Nfa<NfaNode<()>, NfaEdge<Element>> {
+    fn build_dfa(&self) -> Nfa<NfaNode<M>, NfaEdge<Element>> {
         let mut dfa: Nfa<NfaNode<()>, NfaEdge<Element>> = Default::default();
         let mut node_id_map: HashMap<CompoundId, NodeId> = Default::default();
 
-
         for id in self.ids() {
             let dfa_node_id = dfa.add_node(NfaNode {
-                state: match self.accepting_states.contains(&id) {
-                    true => Terminal::Include(()),
-                    false => Default::default(),
-                },
-                ..Default::default()
+                state: self.accepting_states.get(&id).unwrap(),
             });
             node_id_map.insert(id, dfa_node_id);
         }
@@ -340,8 +404,16 @@ impl DfaBuilder {
         dfa
     }
 
-    pub fn set_accepting_state(&mut self, node: NodeId) -> bool {
-        self.accepting_states.insert(BTreeSet::from([node]))
+    pub fn add_state(&mut self, node: &CompoundId, state: Terminal<M>) {
+        self.accepting_states.entry(*node)
+            .and_modify(|t| {t.insert(state);})
+            .or_insert_with(|| BTreeSet::from([state]));
+    }
+
+    pub fn add_states(&mut self, node: &CompoundId, states: BTreeSet<Terminal<M>>) {
+        self.accepting_states.entry(*node)
+            .and_modify(|t| {t.extend(states);})
+            .or_insert_with(|| states);
     }
 
     fn _add_transition(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
@@ -370,48 +442,6 @@ impl DfaBuilder {
 
     pub fn add_transition(&mut self, from: &NodeId, e: &Element, to: &NodeId) {
         self._add_transition(&BTreeSet::from([*from]), e, &BTreeSet::from([*to]));
-    }
-
-    pub(crate) fn from_language(l: Vec<char>) -> Self {
-        let symbols: BTreeSet<_> = l
-            .iter()
-            .map(|c| if *c == '?' || *c == '*' { ':' } else { *c })
-            .collect();
-
-        let mut builder = DfaBuilder::new(symbols.clone());
-        let mut prior = 0;
-        builder.entry = CompoundId::from([prior]);
-
-        let colon_free = Element::TokenSet(&symbols.clone() - &BTreeSet::from([':']));
-        let not_colon_free = Element::NotTokenSet(&symbols | &BTreeSet::from([':']));
-
-        for c in &l {
-            let current = prior + 1;
-            match c {
-                '?' => {
-                    // transition via all symbols from prior to current
-                    builder.add_transition(&prior, &colon_free.clone(), &current);
-                    builder.add_transition(&prior, &not_colon_free.clone(), &current);
-                }
-                '*' => {
-                    // transition via all symbols from prior to current
-                    // also have a self-loop (2 actually)
-                    builder.add_transition(&prior, &colon_free.clone(), &current);
-                    builder.add_transition(&prior, &not_colon_free.clone(), &current);
-                    builder.add_transition(&prior, &colon_free.clone(), &prior);
-                    builder.add_transition(&prior, &not_colon_free.clone(), &prior);
-                }
-                c => {
-                    // transition from prior to current via c
-                    builder.add_transition(&prior, &c.into(), &current);
-                }
-            }
-            prior = current;
-        }
-
-        builder.set_accepting_state(prior);
-        builder.complete_transitions(builder.find_compound_ids());
-        builder
     }
 
     /// Consume self, return a new self

@@ -25,15 +25,15 @@ where
     M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     #[tracing::instrument(skip_all)]
-    pub fn from_language<C>(l: Vec<C>, m: M) -> Self
+    pub fn from_language<C>(l: Vec<C>, m: Option<M>) -> Self
     where
         C: Into<E> + std::fmt::Debug,
     {
         let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new(Terminal::None));
+        let mut prior = nfa.add_node(NfaNode::new(Terminal::InverseInclude(m)));
         nfa.entry = prior;
         for c in l {
-            let target = nfa.add_node(NfaNode::new(Terminal::None));
+            let target = nfa.add_node(NfaNode::new(Terminal::InverseInclude(m)));
             let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
             prior = target;
         }
@@ -42,12 +42,12 @@ where
     }
 
     #[tracing::instrument(skip_all)]
-    pub fn from_symbols(l: &[E], m: M) -> Self {
+    pub fn from_symbols(l: &[E], m: Option<M>) -> Self {
         let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new(Terminal::None));
+        let mut prior = nfa.add_node(NfaNode::new(Terminal::InverseInclude(m)));
         nfa.entry = prior;
         for criteria in l {
-            let target = nfa.add_node(NfaNode::new(Terminal::None));
+            let target = nfa.add_node(NfaNode::new(Terminal::InverseInclude(m)));
             let _ = nfa.add_edge(
                 NfaEdge {
                     criteria: criteria.clone(),

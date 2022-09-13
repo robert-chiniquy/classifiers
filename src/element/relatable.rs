@@ -1,14 +1,17 @@
 use super::*;
 
-impl Relatable for DfaBuilder {
+impl<M> Relatable for DfaBuilder<M> 
+where
+    M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
+{
     type Language = String;
 
     type Element = Element;
 
-    type Metadata = ();
+    type Metadata = M;
 
     fn from_language(l: &Self::Language, m: &Option<Self::Metadata>) -> Self {
-      let dfa = DfaBuilder::from_language(l.chars().collect());
+      let dfa = DfaBuilder::from_language(l.chars().collect(), m);
 
         todo!()
     }
