@@ -58,7 +58,7 @@ where
         let mut dfa = self.clone();
         dfa.simplify();
 
-        let vortex = self.ids().iter().map(|id| id).flatten().max().unwrap_or(&0) + 1;
+        let vortex = self.ids().iter().flatten().max().unwrap_or(&0) + 1;
         dfa.add_transition(&vortex, &Element::universal(), &vortex);
         dfa.add_state(
             &CompoundId::from([vortex]),
@@ -103,7 +103,7 @@ where
     }
 
     fn intersection(&self, other: &Self) -> Self {
-        let mut p = Dfa::intersect(self, &mut other.clone());
+        let mut p = Dfa::intersect(self, other);
         p.simplify();
         p.graphviz_file("intersection.dot", "intersection");
         println!("p: {:?}", p);

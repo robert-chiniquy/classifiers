@@ -1,5 +1,8 @@
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub enum State<M: std::fmt::Debug> {
+pub enum State<M>
+where
+    M: std::fmt::Debug,
+{
     /// The inverse / complement of Include
     InverseInclude(Option<M>),
     /// The inverse / complement of Exclude

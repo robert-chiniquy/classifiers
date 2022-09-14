@@ -57,7 +57,7 @@ fn test_negate1() {
     let mut d = c.compile(&None);
     d.simplify();
     d.graphviz_file("negation1.dot", "A*");
-    
+
     d = d.negate(&None);
     d.simplify();
     d.graphviz_file("negation2.dot", "!A*");

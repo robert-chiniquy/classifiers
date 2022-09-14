@@ -82,7 +82,7 @@ fn test_product() {
     let a = Dfa::<()>::from_language("a*".to_string().chars().collect(), &None);
     let mut b = Dfa::from_language("*a".to_string().chars().collect(), &None);
 
-    let mut i = Dfa::intersect(&a, &mut b);
+    let mut i = Dfa::intersect(&a, &b);
     let _dfa = i.build();
 
     // assert!(dfa.accepts(&vec!['a', 'a']).unwrap());
@@ -236,7 +236,7 @@ where
                         .and_modify(|existing_edges| {
                             existing_edges.extend(edges.clone());
                         })
-                        .or_insert(edges.clone());
+                        .or_insert_with(|| edges.clone());
                 }
             }
         }
@@ -320,44 +320,87 @@ where
         product
     }
 
+    pub fn intersect(a: &Self, b: &Self) -> Self {
+        let mut b = b.clone();
+        Self::painting_product(a, &mut b, &mut |a_states, b_states| {
+            // the intersection requires that accepting states only be propagated
+            // when the states are accepting on both sides
+            if a_states.is_empty() || b_states.is_empty() {
+                return Default::default();
+            }
+            &a_states | &b_states
+        })
+    }
+
     // Require that a and b both have accepting states
-    pub fn intersect(a: &Self, b: &mut Self) -> Self {
+    /// Receives a closure which can optionally paint all states, paint only intersecting states, or whatever
+    pub(super) fn painting_product(
+        a: &Self,
+        b: &mut Self,
+        painter: &mut impl Fn(BTreeSet<State<M>>, BTreeSet<State<M>>) -> BTreeSet<State<M>>,
+    ) -> Self {
         let mut product = Self::construct_product(a, b);
 
         product.states = Default::default();
 
-        println!("a accepts: {:?}", a.states);
-        println!("b accepts: {:?}", b.states);
+        let accepting_left = a
+            .states
+            .iter()
+            .map(|(id, states)| {
+                (
+                    id.clone(),
+                    states
+                        .iter()
+                        .filter(|s| s.accepting())
+                        .cloned()
+                        .collect::<BTreeSet<_>>(),
+                )
+            })
+            .filter(|(_, v)| !v.is_empty())
+            .collect::<BTreeMap<CompoundId, BTreeSet<State<M>>>>();
 
-        let both_accept = |id: &CompoundId| -> bool {
-            let mut a_accepts = false;
-            let mut b_accepts = false;
+        let accepting_right = b
+            .states
+            .iter()
+            .map(|(id, states)| {
+                (
+                    id.clone(),
+                    states
+                        .iter()
+                        .filter(|s| s.accepting())
+                        .cloned()
+                        .collect::<BTreeSet<_>>(),
+                )
+            })
+            .filter(|(_, v)| !v.is_empty())
+            .collect::<BTreeMap<CompoundId, BTreeSet<State<M>>>>();
 
-            for i in id {
-                let c_id = CompoundId::from([*i]);
-                if let Some(states) = a.states.get(&c_id) {
-                    a_accepts = a_accepts || states.iter().any(|s| s.accepting());
-                } else if let Some(states) = b.states.get(&c_id) {
-                    b_accepts = b_accepts || states.iter().any(|s| s.accepting());
-                }
-            }
-            a_accepts & b_accepts
-        };
+        println!("a accepts:\n{:?}\nal: {:?}", a.states, accepting_left);
+        println!("b accepts:\n{:?}\nar: {:?}", b.states, accepting_right);
 
         for id in &product.ids() {
-            if both_accept(id) {
-                // cheaper to redo the logic here, probably...
-                let mut all_states = Default::default();
-                for i in id.iter() {
-                    let c_id = CompoundId::from([*i]);
-                    if let Some(states) = a.states.get(&c_id) {
-                        all_states = &all_states | states;
-                    } else if let Some(states) = b.states.get(&c_id) {
-                        all_states = &all_states | states;
-                    }
-                }
-                product.add_states(id, all_states);
+            let mut left: BTreeSet<State<M>> = Default::default();
+            let mut right: BTreeSet<State<M>> = Default::default();
+
+            if let Some(states) = accepting_left.get(&id) {
+                left.extend(states.iter().filter(|s| s.accepting()).cloned());
+            } else if let Some(states) = accepting_right.get(&id) {
+                right.extend(states.iter().filter(|s| s.accepting()).cloned());
             }
+
+            for c_id in id {
+                let c_id = CompoundId::from([*c_id]);
+                if let Some(states) = accepting_left.get(&c_id) {
+                    left.extend(states.iter().filter(|s| s.accepting()).cloned());
+                } else if let Some(states) = accepting_right.get(&c_id) {
+                    right.extend(states.iter().filter(|s| s.accepting()).cloned());
+                }
+            }
+            let all_states = painter(left, right);
+            if all_states.is_empty() {
+                continue;
+            }
+            product.add_states(id, all_states);
         }
 
         println!("intersecting states: {:?}", product.states);
@@ -472,7 +515,10 @@ where
                 .or_default()
                 .insert(to.clone());
         }
-        debug_assert!(!no_e, "did not add a transition for {from:?} -{e:?}-> {to:?}\n\n{self:?}");
+        debug_assert!(
+            !no_e,
+            "did not add a transition for {from:?} -{e:?}-> {to:?}\n\n{self:?}"
+        );
     }
 
     /// This function assumes a CompoundId of only {from} and {to} respectively!
@@ -548,6 +594,7 @@ where
     }
 
     pub(crate) fn simplify(&mut self) {
+        // TODO: simplify should re-map all ids to be non-compound (len 1)
         self.shake();
 
         let by_edge = self.get_edges().0;
