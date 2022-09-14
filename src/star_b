@@ -1,0 +1,135 @@
+// digr
+
+// *B
+
+// matt thinking through what a graph should look like, then building the table, then running the algo
+// has an epsilon transition
+// 1 -*-> 2 -ε-> 3 -B-> 4
+//        2 -*-> 2 
+
+
+// S       B       !:B
+// 1       2       2
+// 2       24      2
+// 3       4       Ø
+// 4       Ø       Ø
+// 24      24      2
+//                           -B-> ((24))  
+// (1) -B-> (2)   -B->  ((24)) -!:B -> 2
+//               -!:B->  2
+
+
+// matt thinking through what ... the existing code does EXCEPT with an epsilon transition
+// 1 -*-> 2 -ε-> 3 -B-> 4
+// 1 -*-> 1 
+
+// S       B       !:B
+// 1       123     123
+// 2       3       3
+// 3       4       Ø
+// 4       Ø       Ø
+// 123     1234    123
+// 1234    1234    123
+
+// this is what the existing code does (no epsilon transition) 
+// 1 -*-> 2 -B-> 3
+// 1 -*-> 1 
+
+// S       B       !:B
+// 1       12      12
+// 2       3       Ø
+// 3       Ø       Ø
+// 12      123     12
+// 123     123     12
+
+/*
+
+transitions: {
+
+
+    TokenSet(
+        {
+            'B',
+        },
+    ): {
+        {
+            0,
+        }: {
+            {
+                0,
+            },
+            {
+                1,
+            },
+        },
+        {
+            1,
+        }: {
+            {
+                2,
+            },
+        },
+    },
+    NotTokenSet(
+        {
+            ':',
+            'B',
+        },
+    ): {
+        {
+            0,
+        }: {
+            {
+                0,
+            },
+            {
+                1,
+            },
+        },
+    },
+}
+
+
+*/
+digraph G {
+       label = "*b";
+    rankdir = TB;
+    remincross = true;
+    splines = true;
+    fontsize="40";
+
+    bgcolor = "#555555";
+    node[color = "#FFFFFF"];
+    node[fontcolor = "#FFFFFF"];
+    edge[color = "#FFFFFF", fontcolor="#FFFFFF"];
+
+  node1 -> node2 [label="B"];
+  node1 -> node2 [label="!:B"];
+  node2 -> node24 [label="B"];
+  node2 -> node2 [label="!:B"];
+//   node3 -> node4 [label="B"];
+  node24 -> node24 [label="B"];
+  node24 -> node2 [label="!:B"];
+
+       ep1 -> ep123 [label="B"];
+       ep1 -> ep123 [label="!:B"];
+       // ep2 -> ep3 [label="B"];
+       ep123 -> ep1234 [label="B"];
+       ep123 -> ep123 [label="!:B"];
+       ep1234 -> ep1234 [label="B"];
+       ep1234 -> ep123 [label="!:B"];
+
+
+       wep1 -> wep12 [label="B"];
+       wep1 -> wep12 [label="!:B"];
+       // wep2 -> wep3 [label="B"];
+       // wep2 -> wep1234 [label="B"];
+       wep12 -> wep123 [label="B"];
+       wep12 -> wep12 [label="!:B"];
+       wep123 -> wep123 [label="B"];
+       wep123 -> wep12 [label="!:B"];
+
+
+}
+
+

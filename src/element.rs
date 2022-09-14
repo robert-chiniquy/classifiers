@@ -125,12 +125,51 @@ impl std::fmt::Display for Element {
     }
 }
 
+
+impl std::iter::Sum for Element {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Element::TokenSet(Default::default()), |acc, cur| Element::add(acc, cur.clone()))
+    }
+}
+
+impl<'a> std::iter::Sum<&'a Element> for Element {
+    fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+        iter.fold(Element::TokenSet(Default::default()), |acc, cur| Element::add(acc, cur.clone()))
+    }
+}
+
+
+#[test]
+fn test_sum() {
+    let t = Element::token;
+    let nt = Element::not_token;
+    let nts = Element::not_tokens;
+
+    let e: Element = vec!['a', 'b', 'c'].iter().map(|c| t(*c)).sum();
+    assert_eq!(e, Element::tokens(&['a', 'b', 'c']));
+
+    let e: Element = vec![].iter().map(|c| t(*c)).sum();
+    assert_eq!(e, Element::tokens(&[]));
+
+    let e: Element = vec![t('a'), nt('a')].iter().sum();
+    assert_eq!(e, Element::not_tokens(&[]));
+
+    let e: Element = vec![nt('a'), nt('a')].iter().sum();
+    assert_eq!(e, Element::not_tokens(&['a']));
+
+
+    let e: Element = vec![nt('a'), nts(&['a', 'b'])].iter().sum();
+    assert_eq!(e, Element::not_tokens(&['a']));
+
+    let e: Element = vec![nt('a'), nt('b')].iter().sum();
+    assert_eq!(e, Element::not_tokens(&[]));
+}
+
 impl Add for Element {
     type Output = Element;
 
     fn add(self, rhs: Self) -> Self::Output {
         use Element::*;
-
         match (&self, &rhs) {
             (TokenSet(x), TokenSet(y)) => TokenSet(x | y),
             (NotTokenSet(y), TokenSet(x)) | (TokenSet(x), NotTokenSet(y)) => {

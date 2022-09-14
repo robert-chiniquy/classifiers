@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use super::*;
 
 impl<M> Relatable for Dfa<M>
@@ -60,7 +58,7 @@ where
         let mut dfa = self.clone();
         dfa.simplify();
 
-        let vortex = self.ids().iter().flatten().max().unwrap_or(&0) + 1;
+        let vortex = self.ids().iter().map(|id| id).flatten().max().unwrap_or(&0) + 1;
         dfa.add_transition(&vortex, &Element::universal(), &vortex);
         dfa.add_state(
             &CompoundId::from([vortex]),
@@ -70,28 +68,22 @@ where
         // Find the negative space of all existing edges from each source node
         for (source, edges) in self.get_edges().0 {
             if edges.is_empty() {
-                dfa._add_transition(&source, &Element::universal(), &CompoundId::from([vortex]));
+                dfa.add_transitions(&source, &Element::universal(), &CompoundId::from([vortex]));
                 continue;
             }
-            let sum: Vec<_> = edges.iter().map(|(element, _)| element).cloned().collect();
-
-            let mut sum = sum.iter();
-            let sum = if let Some(first) = sum.next() {
-                sum.fold(first.clone(), |acc, cur| Element::add(acc, cur.clone()))
-            } else {
-                unreachable!()
-            };
-
+            let sum: Element = edges.iter().map(|(element, _)| element).cloned().sum();
             let d = Element::difference(&Element::universal(), &sum);
+
+            println!("Universal - {sum:?} = {d:?}");
 
             match &d {
                 Element::TokenSet(s) => {
                     if !s.is_empty() {
-                        dfa._add_transition(&source, &d, &CompoundId::from([vortex]));
+                        dfa.add_transitions(&source, &d, &CompoundId::from([vortex]));
                     }
                 }
                 Element::NotTokenSet(_) => {
-                    dfa._add_transition(&source, &d, &CompoundId::from([vortex]));
+                    dfa.add_transitions(&source, &d, &CompoundId::from([vortex]));
                 }
             }
         }

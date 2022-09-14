@@ -21,6 +21,37 @@ use super::*;
 
 type NodeId = u32;
 pub type CompoundId = BTreeSet<NodeId>;
+// #[derive(Default, PartialOrd, Ord, PartialEq, Eq, Clone, std::hash::Hash)]
+// pub struct CompoundId(BTreeSet<NodeId>);
+
+// impl std::fmt::Debug for CompoundId {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         let s =  self.0.iter().map(|i| i.to_string()).collect::<Vec<_>>().join("_");
+//         f.write_str(&s)
+//     }
+// }
+
+// impl CompoundId {
+//     pub fn id(&self) -> &BTreeSet<NodeId> {
+//         &self.0
+//     }
+
+//     pub fn id_mut(&mut self) -> &mut BTreeSet<NodeId> {
+//         &mut self.0
+//     }
+
+//     pub fn from<const N: usize>(a: [NodeId; N]) -> Self {
+//         Self(BTreeSet::from(a))
+//     }
+
+//     pub fn iter(&self) -> std::collections::btree_set::Iter<'static, NodeId> {
+//         self.0.iter()
+//     }
+
+//     pub fn iter_mut(&mut self) -> std::collections::btree_set::Iter<'static, NodeId> {
+//         self.0.iter()
+//     }
+// }
 
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
 pub struct Dfa<M = ()>
@@ -60,6 +91,16 @@ fn test_product() {
     // assert!(!dfa.accepts(&vec!['a']).unwrap());
 }
 
+#[test]
+fn test_from_language_simple() {
+    let mut starb = Dfa::<()>::from_language("*B".to_string().chars().collect(), &None);
+    starb.simplify();
+    starb.graphviz_file("starB.dot", "*B");
+
+    assert!(starb.is_consistent());
+    // starb.simplify();
+}
+
 impl<M> Dfa<M>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
@@ -75,25 +116,28 @@ where
 
         builder.entry = CompoundId::from([prior]);
 
-        let colon_free = Element::TokenSet(&symbols - &BTreeSet::from([':']));
-        let not_colon_free = Element::NotTokenSet(&symbols | &BTreeSet::from([':']));
+        let positive_star = Element::TokenSet(&symbols - &BTreeSet::from([':']));
+        let negative_star = Element::NotTokenSet(&symbols | &BTreeSet::from([':']));
 
+        let mut stack: Vec<CompoundId> = Default::default();
+        // construct an NFA (with or without epsilons is the same)
         for c in &l {
             let current = prior + 1;
 
             match c {
                 '?' => {
                     // transition via all symbols from prior to current
-                    builder.add_transition(&prior, &colon_free.clone(), &current);
-                    builder.add_transition(&prior, &not_colon_free.clone(), &current);
+                    builder.add_transition(&prior, &positive_star, &current);
+                    builder.add_transition(&prior, &negative_star, &current);
                 }
                 '*' => {
-                    // transition via all symbols from prior to current
-                    // also have a self-loop (2 actually)
-                    builder.add_transition(&prior, &colon_free.clone(), &current);
-                    builder.add_transition(&prior, &not_colon_free.clone(), &current);
-                    builder.add_transition(&prior, &colon_free.clone(), &prior);
-                    builder.add_transition(&prior, &not_colon_free.clone(), &prior);
+                    // self loop/advance
+                    let source = CompoundId::from([prior]);
+                    let target = CompoundId::from([prior, current]);
+                    stack.push(target.clone());
+
+                    builder.add_transitions(&source, &positive_star, &target);
+                    builder.add_transitions(&source, &negative_star, &target);
                 }
                 c => {
                     // transition from prior to current via c
@@ -107,7 +151,8 @@ where
             builder.add_state(&CompoundId::from([i]), State::InverseInclude(m.clone()));
         }
         builder.add_state(&CompoundId::from([prior]), State::Include(m.clone()));
-        builder.calculate_transitions(builder.find_compound_ids());
+        // convert the NFA to a DFA
+        builder.calculate_transitions(stack);
         builder
     }
 
@@ -239,7 +284,7 @@ where
                 (None, None) => println!("nothing with symbol {e}...probably fine"),
                 (Some(t), None) | (None, Some(t)) => t.iter().for_each(|(from, toos)| {
                     toos.iter()
-                        .for_each(|to| product._add_transition(from, e, to))
+                        .for_each(|to| product.add_transitions(from, e, to))
                 }),
                 (Some(a_t), Some(b_t)) => {
                     a_t.iter().for_each(|(a_from, a_toos)| {
@@ -258,13 +303,13 @@ where
                                 .chain(b_toos.iter())
                                 .for_each(|s| to.extend(s));
 
-                            product._add_transition(&compound_id, &e.clone(), &to);
+                            product.add_transitions(&compound_id, &e.clone(), &to);
                             a_toos
                                 .iter()
-                                .for_each(|to| product._add_transition(a_from, &e.clone(), to));
+                                .for_each(|to| product.add_transitions(a_from, &e.clone(), to));
                             b_toos
                                 .iter()
-                                .for_each(|to| product._add_transition(b_from, &e.clone(), to));
+                                .for_each(|to| product.add_transitions(b_from, &e.clone(), to));
                         });
                     });
                 }
@@ -303,7 +348,7 @@ where
             if both_accept(id) {
                 // cheaper to redo the logic here, probably...
                 let mut all_states = Default::default();
-                for i in id {
+                for i in id.iter() {
                     let c_id = CompoundId::from([*i]);
                     if let Some(states) = a.states.get(&c_id) {
                         all_states = &all_states | states;
@@ -329,8 +374,13 @@ where
         d
     }
 
+    /// Walk the transitions table for a stack of rows to create product states
+    /// and rationalize transitions into a DFA
     fn calculate_transitions(&mut self, mut stack: Vec<CompoundId>) {
-        // println!("🌮🌮🌮 the stack: {stack:?}\n🌮🌮🌮 transitions: {:?}\n\n", self.transitions);
+        // println!(
+        //     "🌮🌮🌮 the stack: {stack:?}\n🌮🌮🌮 transitions: {:?}\n\n",
+        //     self.transitions
+        // );
 
         let mut visited: HashSet<CompoundId> = Default::default();
 
@@ -353,7 +403,7 @@ where
                 if unioned_transitions.is_empty() {
                     continue;
                 }
-                self._add_transition(&compound_state, &element, &unioned_transitions.clone());
+                self.add_transitions(&compound_state, &element, &unioned_transitions.clone());
 
                 let mut states = Default::default();
                 for id in &unioned_transitions {
@@ -365,6 +415,7 @@ where
                 stack.push(unioned_transitions);
             }
         }
+        // println!("transitions: {:#?}", self.transitions);
     }
 
     pub(super) fn ids(&self) -> HashSet<CompoundId> {
@@ -405,7 +456,7 @@ where
             .or_insert_with(|| states);
     }
 
-    pub(super) fn _add_transition(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
+    pub(super) fn add_transitions(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
         let mut no_e = true;
         // println!("before: {:?}", self.transitions);
         for element in &self.elements {
@@ -415,14 +466,10 @@ where
             no_e = false;
             self.transitions
                 .entry(element.clone())
-                .and_modify(|t| {
-                    t.entry(from.clone())
-                        .and_modify(|_from| {
-                            _from.insert(to.clone());
-                        })
-                        .or_insert_with(|| BTreeSet::from([to.clone()]));
-                })
-                .or_insert_with(|| BTreeMap::from([(from.clone(), BTreeSet::from([to.clone()]))]));
+                .or_default()
+                .entry(from.clone())
+                .or_default()
+                .insert(to.clone());
         }
 
         // println!("after: {:?}", self.transitions);
@@ -431,8 +478,9 @@ where
         }
     }
 
+    /// This function assumes a CompoundId of only {from} and {to} respectively!
     pub fn add_transition(&mut self, from: &NodeId, e: &Element, to: &NodeId) {
-        self._add_transition(&BTreeSet::from([*from]), e, &BTreeSet::from([*to]));
+        self.add_transitions(&BTreeSet::from([*from]), e, &BTreeSet::from([*to]));
     }
 
     pub(crate) fn offset_self(&mut self, offset: u32) {
@@ -549,6 +597,25 @@ where
                     .insert(target);
             }
         }
+    }
+
+    /// Return true if there are no overlapping edges out of a given node
+    #[cfg(test)]
+    fn is_consistent(&self) -> bool {
+        for (s, edges) in self.get_edges().0 {
+            for (i1, (e1, _)) in edges.clone().iter().enumerate() {
+                for (i2, (e2, _)) in edges.clone().iter().enumerate() {
+                    if i1 >= i2 {
+                        continue;
+                    }
+                    if e1.accepts(e2) || e2.accepts(e1) {
+                        print!("{s:?} {e1:?} {e2:?} {i1} v {i2}");
+                        return false;
+                    }
+                }
+            }
+        }
+        true
     }
 }
 

@@ -57,10 +57,6 @@ where
 {
 }
 
-pub trait Accepting {
-    fn accepting(&self) -> bool;
-}
-
 /// E: Accepts<L> implies a C: Into<E> and L: IntoIterator<Item = C>
 pub trait Accepts<E> {
     fn accepts(&self, l: &E) -> bool;
@@ -79,9 +75,4 @@ pub trait Subtraction<E> {
 
 pub trait Universal {
     fn universal() -> Self;
-}
-
-pub trait NodeSum {
-    fn sum(&self, other: &Self) -> Self;
-    fn sum_mut(&mut self, other: &Self);
 }

@@ -1,5 +1,4 @@
-#![cfg(test)]
-use std::vec;
+// #![cfg(test)]
 
 use super::*;
 
@@ -53,19 +52,21 @@ fn test_intersection() {
 #[test]
 fn test_negate1() {
     test_setup();
-    let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
-        Classifier::<Dfa>::Literal("A*".to_string(), None),
-    ])));
 
+    let c = Classifier::<Dfa>::Literal("A*".to_string(), None);
     let mut d = c.compile(&None);
     d.simplify();
-    d.graphviz_file("negation.dot", "!A*");
+    d.graphviz_file("negation1.dot", "A*");
+    
+    d = d.negate(&None);
+    d.graphviz_file("negation2.dot", "!A*");
+    // assert!(d.includes_path(&['A'.into()]));
 
-    d.negate(&None);
-    d.simplify();
-    d.graphviz_file("negation_negation.dot", "!!A*");
+    d = d.negate(&None);
+    // d.simplify();
+    d.graphviz_file("negation3.dot", "!!A*");
     let t = Element::token;
-    assert!(d.includes_path(&[t('A')]));
+    assert!(!d.includes_path(&['A'.into()]));
 }
 
 #[test]
