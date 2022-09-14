@@ -76,10 +76,12 @@ fn test_negate4() {
         Classifier::Literal("*A".to_string(), None),
     ])));
 
-    let d = c.compile(&None);
-
+    let mut d = c.compile(&None);
+    d.simplify();
+    d.graphviz_file("negate4.dot", "negate4.dot");
     let t = Element::token;
     assert!(!d.includes_path(&[t('A'), t('A')]));
+    assert!(!d.includes_path(&[t('A'), t('A'), t('A')]));
 }
 
 #[test]
