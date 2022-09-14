@@ -18,6 +18,8 @@ where
     }
 
     fn relation(&self, other: &Self) -> (Relation, Self) {
+        let product = Dfa::product(&self, &other);
+
         todo!()
     }
 

@@ -125,42 +125,15 @@ where
         }
     }
 
-    fn product(a: &Self, b: &mut Self) -> Self {
-        let product = Dfa::construct_product(a, b);
+    pub(crate) fn product(a: &Self, b: &Self) -> Self {
+        let mut b = b.clone();
+        let product = Dfa::construct_product(a, &mut b);
         let d = product.build_dfa();
         d.graphviz_file("product-dfa.dot", "dfa");
         d
     }
 
-    /*
-
-    // for every accepting symbol
-    // for every state in a
-    // for every state in b
-    //   add transition for (a_state, b_state):  `δ(a_state, symbol) U δ(b_state, symbol)))
-
-    example:
-
-    0 -a-> 1 -b-> (2)
-    4 -a-> 5 -c-> (6)
-
-    S  | a  | b | c
-    0  | 1  | Ø | Ø
-    1  | Ø  | 2 | Ø
-    4  | 5  | Ø | Ø
-    5  | Ø  | Ø | 6
-    04 | 15 | Ø | Ø
-    05 | 1  | Ø | 6
-    14 | 5  | 2 | Ø
-    15 | Ø  | 2 | 6
-
-    04 -a-> 15 -b -> (2)
-               -c -> (6)
-
-    entry node is composite of A and B entry
-    accepting states likewise come from A or B
-
-    */
+    // TODO: why make b mutable?
     pub(crate) fn construct_product(a: &Self, b: &mut Self) -> Self {
         let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
 
@@ -273,7 +246,6 @@ where
     }
 
     pub fn find_compound_ids(&self) -> Vec<CompoundId> {
-        //  We only care about compound ids since
         self.ids().iter().filter(|v| v.len() > 1).cloned().collect()
     }
 
@@ -389,7 +361,6 @@ where
         self._add_transition(&BTreeSet::from([*from]), e, &BTreeSet::from([*to]));
     }
 
-    /// Consume self, return a new self
     pub(crate) fn offset_self(&mut self, offset: u32) {
         let mut transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>> =
             Default::default();
