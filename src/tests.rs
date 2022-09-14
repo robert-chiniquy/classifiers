@@ -150,6 +150,24 @@ fn test_intersection() {
 }
 
 #[test]
+fn test_negate1() {
+    test_setup();
+    let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
+        Classifier::<Dfa>::Literal("A*".to_string(), None),
+    ])));
+
+    let mut d = c.compile(&None);
+    d.simplify();
+    d.graphviz_file("negation.dot", "!A*");
+
+    d.negate(&None);
+    d.simplify();
+    d.graphviz_file("negation_negation.dot", "!!A*");
+    let t = Element::token;
+    assert!(d.includes_path(&vec![t('A')]));
+}
+
+#[test]
 fn test_negate4() {
     test_setup();
     let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
