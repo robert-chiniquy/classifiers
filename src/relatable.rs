@@ -2,7 +2,7 @@ use std::ops::Add;
 
 use super::*;
 
-impl<M> Relatable for DFA<M>
+impl<M> Relatable for Dfa<M>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
@@ -13,7 +13,7 @@ where
     type Metadata = M;
 
     fn from_language(l: &Self::Language, m: &Option<Self::Metadata>) -> Self {
-        let dfa = DFA::from_language(l.chars().collect(), m);
+        let dfa = Dfa::from_language(l.chars().collect(), m);
         dfa
     }
 
@@ -24,7 +24,7 @@ where
     fn universal(m: &Option<Self::Metadata>) -> Self {
         // empty symbols
         let entry = CompoundId::from([1]);
-        let mut dfa = DFA::<Self::Metadata> {
+        let mut dfa = Dfa::<Self::Metadata> {
             symbols: BTreeSet::new(),
             elements: BTreeSet::new(),
             entry: entry.clone(),
@@ -40,7 +40,7 @@ where
     fn none(m: &Option<Self::Metadata>) -> Self {
         // empty symbols
         let entry = CompoundId::from([1]);
-        let mut dfa = DFA::<Self::Metadata> {
+        let mut dfa = Dfa::<Self::Metadata> {
             symbols: BTreeSet::new(),
             elements: BTreeSet::new(),
             entry: entry.clone(),
@@ -103,13 +103,13 @@ where
     }
 
     fn union(&self, other: &Self) -> Self {
-        let mut p = DFA::construct_product(self, &mut other.clone());
+        let mut p = Dfa::construct_product(self, &mut other.clone());
         p.simplify();
         p
     }
 
     fn intersection(&self, other: &Self) -> Self {
-        let mut p = DFA::intersect(self, &mut other.clone());
+        let mut p = Dfa::intersect(self, &mut other.clone());
         println!("p: {:?}", p);
         p.simplify();
         p

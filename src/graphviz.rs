@@ -1,6 +1,6 @@
 use super::*;
 
-impl<M> DFA<M>
+impl<M> Dfa<M>
 where
     M: std::fmt::Debug + Clone + PartialOrd + Ord,
 {
@@ -17,16 +17,16 @@ where
         let mut ret = "".to_string();
         for (element, edges) in &self.transitions {
             for (source, targets) in edges {
-              // ?
-              for target in targets {
-                ret = format!(
-                  r#"{ret}
+                // ?
+                for target in targets {
+                    ret = format!(
+                        r#"{ret}
                   {} -> {} [label="{}" fontsize="20pt"];"#,
-                  nodename(source),
-                  nodename(target),
-                  element
-                );
-              }
+                        nodename(source),
+                        nodename(target),
+                        element
+                    );
+                }
             }
         }
         for id in &self.ids() {
@@ -40,8 +40,13 @@ where
   {} [label="{}", shape="{}"]"#,
                 nodename(id),
                 nodelabel,
-              match self.states.get(id).iter().filter_map(|x| Some(x.iter().any(|s| s.accepting()))).any(|b| b)
-              {
+                match self
+                    .states
+                    .get(id)
+                    .iter()
+                    .map(|x| x.iter().any(|s| s.accepting()))
+                    .any(|b| b)
+                {
                     true => "doublecircle",
                     false => "circle",
                 }
@@ -52,7 +57,13 @@ where
 }
 
 fn nodename(i: &CompoundId) -> String {
-    format!("node_{}", i.iter().map(|s| s.to_string()).collect::<Vec<_>>().join("_"))
+    format!(
+        "node_{}",
+        i.iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .join("_")
+    )
 }
 
 pub(crate) fn graphviz_wrap(s: String, label: &str) -> String {

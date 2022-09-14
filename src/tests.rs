@@ -1,5 +1,5 @@
 #![cfg(test)]
-use super::*;
+// use super::*;
 
 #[test]
 fn test_accepts() {
@@ -169,17 +169,6 @@ fn test_rejection() {
 
     // assert that u has 3 edges
     // assert_eq!(u.edges.len(), 3);
-}
-
-fn write_graph(data: String, filename: &str) {
-    #[cfg(feature = "graphs")]
-    {
-        // use std::io::Write;
-
-        // let g = graphviz_wrap(data, filename);
-        // let mut output = std::fs::File::create(filename).unwrap();
-        // assert!(output.write_all(g.as_bytes()).is_ok());
-    }
 }
 
 #[test]

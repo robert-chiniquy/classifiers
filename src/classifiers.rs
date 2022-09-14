@@ -25,7 +25,7 @@ where
 
 #[test]
 fn test_basic_classifier() {
-    let c1 = Classifier::<DFA<()>>::Literal("a*".to_string(), None);
+    let c1 = Classifier::<Dfa<()>>::Literal("a*".to_string(), None);
     let c2 = Classifier::Literal("*a".to_string(), None);
     let c3 = Classifier::and(&[c1.clone(), c2.clone()]);
     let mut d = c3.compile(&None);
@@ -34,14 +34,12 @@ fn test_basic_classifier() {
     assert_eq!(c1.relation(&c2), Relation::Intersection);
 }
 
-
 impl<R> Classifier<R>
 where
     R: Relatable,
 {
     #[tracing::instrument(skip_all)]
-    pub fn relation(&self, other: &Self) -> Relation
-    {
+    pub fn relation(&self, other: &Self) -> Relation {
         // 1. compile
         // 2. relate NFAs (product of NFAs, search terminal states)
         let s: R = Classifier::compile(self, &None);
@@ -62,18 +60,15 @@ where
     }
 }
 
-impl<R> Classifier<R> 
+impl<R> Classifier<R>
 where
     R: Relatable,
 {
     #[tracing::instrument(skip_all)]
-    pub fn compile(&self, m: &Option<R::Metadata>) -> R
-    {
+    pub fn compile(&self, m: &Option<R::Metadata>) -> R {
         match self {
             Classifier::Universal => R::universal(m),
-            Classifier::Literal(l, m) => {
-                R::from_language(l, m)
-            }
+            Classifier::Literal(l, m) => R::from_language(l, m),
             Classifier::Not(c) => Classifier::compile(c, m).negate(m),
             Classifier::Any(v) => {
                 let mut items = v.iter();

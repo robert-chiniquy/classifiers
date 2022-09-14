@@ -23,7 +23,7 @@ type NodeId = u32;
 pub type CompoundId = BTreeSet<NodeId>;
 
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
-pub struct DFA<M = ()>
+pub struct Dfa<M = ()>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
@@ -48,10 +48,10 @@ fn test_product() {
     // let b = DfaBuilder::from_language("ac".to_string().chars().collect());
     // let _ = DfaBuilder::product(&a, &b);
 
-    let a = DFA::<()>::from_language("a*".to_string().chars().collect(), &None);
-    let mut b = DFA::from_language("*a".to_string().chars().collect(), &None);
+    let a = Dfa::<()>::from_language("a*".to_string().chars().collect(), &None);
+    let mut b = Dfa::from_language("*a".to_string().chars().collect(), &None);
 
-    let mut i = DFA::intersect(&a, &mut b);
+    let mut i = Dfa::intersect(&a, &mut b);
     let dfa = i.build();
 
     // assert!(dfa.accepts(&vec!['a', 'a']).unwrap());
@@ -60,7 +60,7 @@ fn test_product() {
     // assert!(!dfa.accepts(&vec!['a']).unwrap());
 }
 
-impl<M> DFA<M>
+impl<M> Dfa<M>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
@@ -70,12 +70,12 @@ where
             .map(|c| if *c == '?' || *c == '*' { ':' } else { *c })
             .collect();
 
-        let mut builder = DFA::new(symbols.clone());
+        let mut builder = Dfa::new(symbols.clone());
         let mut prior = 0;
 
         builder.entry = CompoundId::from([prior]);
 
-        let colon_free = Element::TokenSet(&symbols.clone() - &BTreeSet::from([':']));
+        let colon_free = Element::TokenSet(&symbols - &BTreeSet::from([':']));
         let not_colon_free = Element::NotTokenSet(&symbols | &BTreeSet::from([':']));
 
         for c in &l {
@@ -126,7 +126,7 @@ where
     }
 
     fn product(a: &Self, b: &mut Self) -> Self {
-        let product = DFA::construct_product(a, b);
+        let product = Dfa::construct_product(a, b);
         let d = product.build_dfa();
         d.graphviz_file("product-dfa.dot", "dfa");
         d
@@ -249,7 +249,7 @@ where
                     b_accepts = b_accepts || states.iter().any(|s| s.accepting());
                 }
             }
-            return a_accepts & b_accepts;
+            a_accepts & b_accepts
         };
 
         for id in &product.ids() {
@@ -279,7 +279,7 @@ where
 
     pub fn build(&mut self) -> Self {
         let d = self.build_dfa();
-        // d.graphviz_file("dfa.dot", "dfa");
+        d.graphviz_file("dfa.dot", "dfa");
         d
     }
 
@@ -443,7 +443,8 @@ where
 
     pub(super) fn get_edges(&self) -> EdgeIndex {
         // Build a convenient map of edges indexed differently
-        let mut map: BTreeMap<CompoundId, BTreeMap<Element, BTreeSet<CompoundId>>> = Default::default();
+        let mut map: BTreeMap<CompoundId, BTreeMap<Element, BTreeSet<CompoundId>>> =
+            Default::default();
         for (element, edges) in &self.transitions {
             for (from, to) in edges {
                 map.entry(from.clone())
@@ -532,11 +533,13 @@ where
     }
 }
 
-pub(super) struct EdgeIndex(pub(crate) BTreeMap<CompoundId, BTreeMap<Element, BTreeSet<CompoundId>>>);
+pub(super) struct EdgeIndex(
+    pub(crate) BTreeMap<CompoundId, BTreeMap<Element, BTreeSet<CompoundId>>>,
+);
 
 impl EdgeIndex {
     /// Return all CompoundIds which are in an accepting path
-    pub fn accepting_branches<M>(&self, dfa: &DFA<M>) -> HashSet<CompoundId>
+    pub fn accepting_branches<M>(&self, dfa: &Dfa<M>) -> HashSet<CompoundId>
     where
         M: std::fmt::Debug + PartialOrd + Ord + Clone,
     {
@@ -552,7 +555,7 @@ impl EdgeIndex {
         id: &CompoundId,
         visited: &mut HashSet<CompoundId>,
         alive: &mut HashSet<CompoundId>,
-        dfa: &DFA<M>,
+        dfa: &Dfa<M>,
     ) -> bool
     where
         M: std::fmt::Debug + PartialOrd + Ord + Clone,
@@ -570,15 +573,15 @@ impl EdgeIndex {
             }
         }
 
-        if let Some(map) = self.0.get(id).clone() {
-            for (_, targets) in &map.clone() {
+        if let Some(map) = self.0.get(id) {
+            map.clone().iter().for_each(|(_, targets)| {
                 for t in targets {
-                    if self._accepting_branch(&t, visited, alive, dfa) {
+                    if self._accepting_branch(t, visited, alive, dfa) {
                         is_alive = true;
                         alive.insert(id.clone());
                     }
                 }
-            }
+            });
         }
         is_alive
     }
