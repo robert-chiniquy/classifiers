@@ -1,13 +1,11 @@
-mod builder;
+mod dfa;
 mod relatable;
+mod graphviz;
 
-// use builder::*;
-// use relatable::*;
-
-pub use builder::*;
+pub use dfa::*;
 pub use relatable::*;
 
-use std::{collections::HashMap, ops::Add};
+use std::ops::Add;
 
 use super::*;
 
@@ -56,27 +54,27 @@ impl Complement<Element> for Element {
 
 impl ElementalLanguage<Element> for Element {}
 
-#[test]
-fn test_element_from_language() {
-    let _ = Element::from_language("a*b".to_string().chars().collect(), ());
-    let _ = Element::from_language("a*b*c".to_string().chars().collect(), ());
-    let _ = Element::from_language("a**b**c".to_string().chars().collect(), ());
-}
+// #[test]
+// fn test_element_from_language() {
+//     let _ = Element::from_language("a*b".to_string().chars().collect(), ());
+//     let _ = Element::from_language("a*b*c".to_string().chars().collect(), ());
+//     let _ = Element::from_language("a**b**c".to_string().chars().collect(), ());
+// }
 
-impl FromLanguage<Element> for Element {
-    type Language = Vec<char>;
+// impl FromLanguage<Element> for Element {
+//     type Language = Vec<char>;
 
-    // FIXME
-    type Metadata = ();
+//     // FIXME
+//     type Metadata = ();
 
-    fn from_language(
-        l: Self::Language,
-        _m: Self::Metadata,
-    ) -> Nfa<NfaNode<Self::Metadata>, NfaEdge<Element>> {
-        let mut builder: DfaBuilder<()> = DfaBuilder::from_language(l, &None);
-        builder.build()
-    }
-}
+//     fn from_language(
+//         l: Self::Language,
+//         _m: Self::Metadata,
+//     ) -> Nfa<NfaNode<Self::Metadata>, NfaEdge<Element>> {
+//         let mut builder: DfaBuilder<()> = DfaBuilder::from_language(l, &None);
+//         builder.build()
+//     }
+// }
 
 impl Universal for Element {
     fn universal() -> Self {
@@ -157,90 +155,6 @@ impl std::fmt::Display for Element {
                 }
             }
         ))
-    }
-}
-
-impl Product<Element> for Element {
-    // #[tracing::instrument(ret)]
-    fn product(a: &Self, b: &Self) -> Vec<NfaBranch<Element>> {
-        use EdgeTransition::*;
-        use Element::*;
-
-        let branches: Vec<NfaBranch<Element>> = match (a, b) {
-            (TokenSet(x), TokenSet(y)) => {
-                let matching = x
-                    .iter()
-                    .filter(|c| y.contains(c))
-                    .cloned()
-                    .collect::<BTreeSet<_>>();
-
-                let left = x
-                    .iter()
-                    .filter(|c| !matching.contains(c))
-                    .cloned()
-                    .collect();
-
-                let right = y
-                    .iter()
-                    .filter(|c| !matching.contains(c))
-                    .cloned()
-                    .collect();
-
-                vec![
-                    NfaBranch::new(TokenSet(left), Advance, Stop),
-                    NfaBranch::new(TokenSet(matching), Advance, Advance),
-                    NfaBranch::new(TokenSet(right), Stop, Advance),
-                ]
-            }
-
-            (NotTokenSet(x), NotTokenSet(y)) => {
-                // [!a,!b] X [!a,!c] -> [c], [!a,!b,!c], [b]
-                let left = y.iter().filter(|c| !x.contains(c)).cloned().collect();
-                let center = x.clone().union(y).cloned().collect::<BTreeSet<char>>();
-                let right = x.iter().filter(|c| !y.contains(c)).cloned().collect();
-
-                vec![
-                    NfaBranch::new(TokenSet(left), Advance, Stop),
-                    NfaBranch::new(NotTokenSet(center), Advance, Advance),
-                    NfaBranch::new(TokenSet(right), Stop, Advance),
-                ]
-            }
-
-            (TokenSet(x), NotTokenSet(y)) => {
-                // [a,b] X [!a,!c] = [a] [b] [!a,!b,!c]
-                //  left is matching
-                //  things in left not in right
-                //  right is dedup sum
-
-                let left = y.iter().filter(|c| x.contains(c)).cloned().collect();
-                let center = x.iter().filter(|c| !y.contains(c)).cloned().collect();
-                let right = y.clone().union(x).cloned().collect();
-
-                vec![
-                    NfaBranch::new(TokenSet(left), Advance, Stop),
-                    NfaBranch::new(TokenSet(center), Advance, Advance),
-                    NfaBranch::new(NotTokenSet(right), Stop, Advance),
-                ]
-            }
-            (NotTokenSet(x), TokenSet(y)) => {
-                let left = x.clone().union(y).cloned().collect();
-                let center = y.iter().filter(|c| !x.contains(c)).cloned().collect();
-                let right = x.iter().filter(|c| y.contains(c)).cloned().collect();
-
-                vec![
-                    NfaBranch::new(NotTokenSet(left), Advance, Stop),
-                    NfaBranch::new(TokenSet(center), Advance, Advance),
-                    NfaBranch::new(TokenSet(right), Stop, Advance),
-                ]
-            }
-        };
-        branches
-            .into_iter()
-            .filter(|b| match &b.kind {
-                TokenSet(v) => !v.is_empty(),
-                NotTokenSet(v) => !v.is_empty(),
-            })
-            .collect()
     }
 }
 
@@ -348,121 +262,3 @@ fn test_arithmetic() {
     // !a - !c = c
     assert_eq!(Element::difference(&nt('a'), &nt('c')), t('c'));
 }
-
-impl<M> Nfa<NfaNode<M>, NfaEdge<Element>>
-where
-    M: Default + std::fmt::Debug + Clone + PartialOrd + Ord,
-{
-    pub fn accepts_string(&self, s: &str) -> bool {
-        self.accepts(&str_to_chars(s)).unwrap()
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub fn from_str(s: &str, m: M) -> Self {
-        let mut nfa: Self = Default::default();
-        let mut prior = nfa.add_node(NfaNode::new(Terminal::InverseInclude(None)));
-        nfa.entry = prior;
-        for c in s.chars() {
-            let target = nfa.add_node(NfaNode::new(Terminal::InverseInclude(None)));
-            let _ = nfa.add_edge(NfaEdge { criteria: c.into() }, prior, target);
-            prior = target;
-        }
-        let s: Terminal<M> = Terminal::Include(m);
-        nfa.node_mut(prior).state = BTreeSet::from([s]);
-        nfa
-    }
-
-    pub fn simplify(&mut self) {
-        for (s, targets) in &self.transitions.clone() {
-            if targets.len() <= 1 {
-                continue;
-            }
-            // let target_map = targets.iter().cloned().collect::<HashMap<u32, Vec<u64>>>();
-            let mut collected_targets: HashMap<_, Vec<_>> = HashMap::new();
-            for (t, e) in targets {
-                collected_targets
-                    .entry(t)
-                    .and_modify(|tt| tt.push(e))
-                    .or_insert_with(|| vec![e]);
-            }
-            
-            let mut positives = BTreeSet::new();
-            let mut negatives = BTreeSet::new();
-            for (target, ees) in collected_targets {
-                if ees.len() <= 1 {
-                    continue;
-                }
-                for e in &ees {
-                    match self.edge(e).map(|edge| &edge.criteria) {
-                        Some(Element::TokenSet(ref s)) => {
-                            positives = &positives | s;
-                        }
-                        Some(Element::NotTokenSet(ref s)) => {
-                            negatives = &negatives | s;
-                        }
-                        None => unreachable!(),
-                    }
-                }
-                // println!("positives {positives:?} negatives: {negatives:?}");
-                // abd !a!b!c  -> d, !c
-                let overlapping = &negatives - &positives;
-                negatives = overlapping.clone();
-                positives = &positives - &overlapping;
-                // println!("modified: positives {positives:?} negatives: {negatives:?}");
-                for e in ees {
-                    self.remove_edge(*s, *e);
-                }
-
-                if !negatives.is_empty() {
-                    self.add_edge(
-                        NfaEdge {
-                            criteria: Element::NotTokenSet(negatives.clone()),
-                        },
-                        *s,
-                        *target,
-                    );
-                } else if !positives.is_empty() {
-                    self.add_edge(
-                        NfaEdge {
-                            criteria: Element::TokenSet(positives.clone()),
-                        },
-                        *s,
-                        *target,
-                    );
-                } else {
-                    self.add_edge(
-                        NfaEdge {
-                            criteria: Element::NotTokenSet(negatives.clone()),
-                        },
-                        *s,
-                        *target,
-                    );
-                }
-            }
-        }
-        self.shake();
-    }
-}
-
-// impl Element {
-//     fn simplify(&self) -> Option<Element> {
-//         use Element::*;
-//         match &self {
-//             TokenSet(x) => {
-//                 if x.is_empty() {
-//                     None
-//                 } else {
-//                     Some(self.clone())
-//                 }
-//             }
-//             NotTokenSet(x) => {
-//                 if x.is_empty() {
-//                     None
-//                 } else {
-//                     // TODO: see if we get rid of all ascii chars??
-//                     Some(self.clone())
-//                 }
-//             }
-//         }
-//     }
-// }

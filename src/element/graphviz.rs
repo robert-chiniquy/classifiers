@@ -1,10 +1,7 @@
-#![allow(unused)]
+use super::*;
 
-pub use super::*;
-
-impl<M, E> Nfa<NfaNode<M>, NfaEdge<E>>
+impl<M> DFA<M>
 where
-    E: ElementalLanguage<E>,
     M: std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     #[tracing::instrument(skip_all)]
@@ -18,32 +15,35 @@ where
     #[tracing::instrument(skip_all)]
     pub fn graphviz(&self) -> String {
         let mut ret = "".to_string();
-        for (source, edges) in &self.transitions {
-            for (target, edge) in edges {
+        for (element, edges) in &self.transitions {
+            for (source, targets) in edges {
+              // ?
+              for target in targets {
                 ret = format!(
-                    r#"{ret}
-  {} -> {} [label="{}" fontsize="20pt"];"#,
-                    nodename(source),
-                    nodename(target),
-                    self.edge(edge).unwrap()
+                  r#"{ret}
+                  {} -> {} [label="{}" fontsize="20pt"];"#,
+                  nodename(source),
+                  nodename(target),
+                  element
                 );
+              }
             }
         }
-        for (id, node) in &self.nodes {
+        for id in &self.ids() {
             let nodelabel = if self.entry == *id {
                 "enter".to_string()
             } else {
-                format!("{}", id)
+                format!("{:?}", id)
             };
             ret = format!(
                 r#"{ret}
   {} [label="{}", shape="{}"]"#,
                 nodename(id),
                 nodelabel,
-                match node.state {
-                    Terminal::None => "circle",
-                    Terminal::Include(_) => "doublecircle",
-                    Terminal::Exclude(_) => "doublecircle",
+              match self.states.get(id).iter().filter_map(|x| Some(x.iter().any(|s| s.accepting()))).any(|b| b)
+              {
+                    true => "doublecircle",
+                    false => "circle",
                 }
             );
         }
@@ -51,8 +51,8 @@ where
     }
 }
 
-fn nodename(i: &NodeId) -> String {
-    format!("node_{i}")
+fn nodename(i: &CompoundId) -> String {
+    format!("node_{}", i.iter().map(|s| s.to_string()).collect::<Vec<_>>().join("_"))
 }
 
 pub(crate) fn graphviz_wrap(s: String, label: &str) -> String {

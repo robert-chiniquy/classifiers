@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use std::collections::HashMap;
+// use std::collections::HashMap;
 use std::collections::{BTreeMap, HashSet};
 
 use super::*;
@@ -31,13 +31,6 @@ digraph G {
 
 // number of rows/nodes = number of chars in input + 1
 // number of columns: number of symbols in input
-// abc
-//   a b c
-// 1 2
-// 2   3
-// 3     4
-// 4
-// a*b
 // the presence of * implies the complemement of all symbols
 // 2,3 is added to the table as there is a transition that goes to 2 and 3 ... ?
 //       | a   | b     | !a!b |
@@ -51,26 +44,27 @@ digraph G {
 // a transition of ab from a node counts as a transition of b as well
 // for the purpose of unioning the resulting transitions
 
-type CompoundId = BTreeSet<NodeId>;
+type NodeId = u32;
+pub type CompoundId = BTreeSet<NodeId>;
 
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
-pub struct DfaBuilder<M>
+pub struct DFA<M = ()>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
-    entry: CompoundId,
-    elements: BTreeSet<Element>,
-    symbols: BTreeSet<char>,
-    // a -> 1 -> [(2), (4), (2,3)]
-    transitions: BTreeMap<Element, BTreeMap<CompoundId, Vec<CompoundId>>>,
-    // Any compound / product node may have several associated accepting states 
+    pub(super) entry: CompoundId,
+    pub(super) elements: BTreeSet<Element>,
+    pub(super) symbols: BTreeSet<char>,
+    // for a given element and source, there is only one outbound edge to a target
+    // the Vec is here to collect NodeIds during construction?
+    pub(super) transitions: BTreeMap<Element, BTreeMap<CompoundId, Vec<CompoundId>>>,
+    // Any compound / product node may have several associated accepting states
     // propagated from the source graphs
     // example: if you have the same DFA with the same M, you have 2 copies,
     // in one copy, you change the Accept(M) to a Reject(M),
     // and then you intersect them,
     // you would get both an Accept and a Reject in this set
-    states: BTreeMap<CompoundId, BTreeSet<Terminal<M>>>,
-
+    pub(super) states: BTreeMap<CompoundId, BTreeSet<Terminal<M>>>,
 }
 
 #[test]
@@ -79,12 +73,11 @@ fn test_product() {
     // let b = DfaBuilder::from_language("ac".to_string().chars().collect());
     // let _ = DfaBuilder::product(&a, &b);
 
-    let a = DfaBuilder::from_language("a*".to_string().chars().collect(), None);
-    let mut b = DfaBuilder::from_language("*a".to_string().chars().collect(), None);
+    let a = DFA::<()>::from_language("a*".to_string().chars().collect(), &None);
+    let mut b = DFA::from_language("*a".to_string().chars().collect(), &None);
 
-    let mut i = DfaBuilder::intersect(&a, &mut b);
+    let mut i = DFA::intersect(&a, &mut b);
     let dfa = i.build();
-
 
     // assert!(dfa.accepts(&vec!['a', 'a']).unwrap());
     // assert!(dfa.accepts(&vec!['a', 'a', 'a']).unwrap());
@@ -92,20 +85,18 @@ fn test_product() {
     // assert!(!dfa.accepts(&vec!['a']).unwrap());
 }
 
-impl<M> DfaBuilder<M> 
+impl<M> DFA<M>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
-
     pub(crate) fn from_language(l: Vec<char>, m: &Option<M>) -> Self {
         let symbols: BTreeSet<_> = l
             .iter()
             .map(|c| if *c == '?' || *c == '*' { ':' } else { *c })
             .collect();
 
-        let mut builder = DfaBuilder::new(symbols.clone());
+        let mut builder = DFA::new(symbols.clone());
         let mut prior = 0;
-        
 
         builder.entry = CompoundId::from([prior]);
 
@@ -138,13 +129,12 @@ where
         }
 
         for i in 0..prior {
-            builder.add_state(&CompoundId::from([i]), Terminal::InverseInclude(m));
+            builder.add_state(&CompoundId::from([i]), Terminal::InverseInclude(m.clone()));
         }
-        builder.add_state(&CompoundId::from([prior]), Terminal::Include(m));
+        builder.add_state(&CompoundId::from([prior]), Terminal::Include(m.clone()));
         builder.calculate_transitions(builder.find_compound_ids());
         builder
     }
-
 
     /// Calling this method requires setting accepting states externally
     pub fn new(symbols: BTreeSet<char>) -> Self {
@@ -160,8 +150,8 @@ where
         }
     }
 
-    fn product(a: &Self, b: &mut Self) -> Nfa<NfaNode<M>, NfaEdge<Element>> {
-        let product = DfaBuilder::construct_product(a, b);
+    fn product(a: &Self, b: &mut Self) -> Self {
+        let product = DFA::construct_product(a, b);
         let d = product.build_dfa();
         d.graphviz_file("product-dfa.dot", "dfa");
         d
@@ -173,8 +163,8 @@ where
     // for every state in a
     // for every state in b
     //   add transition for (a_state, b_state):  `δ(a_state, symbol) U δ(b_state, symbol)))
-    
-    example: 
+
+    example:
 
     0 -a-> 1 -b-> (2)
     4 -a-> 5 -c-> (6)
@@ -196,7 +186,7 @@ where
     accepting states likewise come from A or B
 
     */
-    fn construct_product(a: &Self, b: &mut Self) -> Self {
+    pub(crate) fn construct_product(a: &Self, b: &mut Self) -> Self {
         let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
 
         let mut elements: BTreeSet<Element> = symbols.iter().map(|c| c.into()).collect();
@@ -216,7 +206,7 @@ where
             entry: &a.entry | &b.entry,
             transitions: Default::default(),
         };
-        
+
         let mut stack: Vec<BTreeSet<NodeId>> = Default::default();
 
         for e in &product.elements.clone() {
@@ -232,12 +222,13 @@ where
                 (Some(a_t), Some(b_t)) => {
                     a_t.iter().for_each(|(a_from, a_toos)| {
                         b_t.iter().for_each(|(b_from, b_toos)| {
-                            // Where we construct a new CompoundId, 
+                            // Where we construct a new CompoundId,
                             // we must also compound the accepting states
                             // of the source NodeIds
                             let compound_id = a_from | b_from;
                             stack.push(compound_id.clone());
-                            let states = a.states.get(a_from).unwrap() | b.states.get(b_from).unwrap();
+                            let states =
+                                a.states.get(a_from).unwrap() | b.states.get(b_from).unwrap();
                             product.add_states(&compound_id, states);
                             let mut to: CompoundId = Default::default();
                             a_toos
@@ -246,8 +237,12 @@ where
                                 .for_each(|s| to.extend(s));
 
                             product._add_transition(&compound_id, &e.clone(), &to);
-                            a_toos.iter().for_each(|to|product._add_transition(a_from, &e.clone(), to));
-                            b_toos.iter().for_each(|to|product._add_transition(b_from, &e.clone(), to));
+                            a_toos
+                                .iter()
+                                .for_each(|to| product._add_transition(a_from, &e.clone(), to));
+                            b_toos
+                                .iter()
+                                .for_each(|to| product._add_transition(b_from, &e.clone(), to));
                         });
                     });
                 }
@@ -272,9 +267,10 @@ where
             let mut b_accepts = false;
 
             for i in id {
-                if let Some(states) = a.states.get(id) {
+                let c_id = CompoundId::from([*i]);
+                if let Some(states) = a.states.get(&c_id) {
                     a_accepts = a_accepts || states.iter().any(|s| s.accepting());
-                } else if let Some(states) = b.states.get(id) {
+                } else if let Some(states) = b.states.get(&c_id) {
                     b_accepts = b_accepts || states.iter().any(|s| s.accepting());
                 }
             }
@@ -286,9 +282,10 @@ where
                 // cheaper to redo the logic here, probably...
                 let mut all_states = Default::default();
                 for i in id {
-                    if let Some(states) = a.states.get(id) {
+                    let c_id = CompoundId::from([*i]);
+                    if let Some(states) = a.states.get(&c_id) {
                         all_states = &all_states | states;
-                    } else if let Some(states) = b.states.get(id) {
+                    } else if let Some(states) = b.states.get(&c_id) {
                         all_states = &all_states | states;
                     }
                 }
@@ -300,14 +297,14 @@ where
         product
     }
 
-    pub fn find_compound_ids(&self) -> Vec<CompoundId>{
-        //  We only care about compound ids since 
+    pub fn find_compound_ids(&self) -> Vec<CompoundId> {
+        //  We only care about compound ids since
         self.ids().iter().filter(|v| v.len() > 1).cloned().collect()
     }
 
-    pub fn build(&mut self) -> Nfa<NfaNode<M>, NfaEdge<Element>> {
+    pub fn build(&mut self) -> Self {
         let d = self.build_dfa();
-        d.graphviz_file("dfa.dot", "dfa");
+        // d.graphviz_file("dfa.dot", "dfa");
         d
     }
 
@@ -338,8 +335,8 @@ where
                 self._add_transition(&compound_state, &element, &unioned_transitions.clone());
 
                 let mut states = Default::default();
-                for id in unioned_transitions {
-                    states = &states | self.states.get(&CompoundId::from([id])).unwrap();
+                for id in &unioned_transitions {
+                    states = &states | self.states.get(&CompoundId::from([*id])).unwrap();
                 }
                 // self.add_states(&unioned_transitions, unioned_transitions.iter().flat_map(|t| self.accepting_states.get(&CompoundId::from([*t])).unwrap()).collect::<BTreeSet<_>>());
                 self.add_states(&unioned_transitions, states);
@@ -349,8 +346,7 @@ where
         }
     }
 
-
-    fn ids(&self) -> HashSet<CompoundId> {
+    pub(super) fn ids(&self) -> HashSet<CompoundId> {
         let mut ids: HashSet<CompoundId> = Default::default();
 
         for (_, transitions) in self.transitions.clone() {
@@ -364,57 +360,63 @@ where
         ids
     }
 
-    fn build_dfa(&self) -> Nfa<NfaNode<M>, NfaEdge<Element>> {
-        let mut dfa: Nfa<NfaNode<()>, NfaEdge<Element>> = Default::default();
-        let mut node_id_map: HashMap<CompoundId, NodeId> = Default::default();
+    fn build_dfa(&self) -> Self {
+        // let mut dfa: Nfa<NfaNode<()>, NfaEdge<Element>> = Default::default();
+        // let mut node_id_map: HashMap<CompoundId, NodeId> = Default::default();
 
-        for id in self.ids() {
-            let states = self.states.get(&id).unwrap().clone();
-            let dfa_node_id = dfa.add_node(NfaNode {
-                state: states,
-            });
-            node_id_map.insert(id, dfa_node_id);
-        }
+        // for id in self.ids() {
+        //     let states = self.states.get(&id).unwrap().clone();
+        //     let dfa_node_id = dfa.add_node(NfaNode {
+        //         state: states,
+        //     });
+        //     node_id_map.insert(id, dfa_node_id);
+        // }
 
-        println!(
-            "symbols: {:?}\nnode id map {node_id_map:?}\ntransitions {:?}\nentry {:?}",
-            self.symbols, self.transitions, self.entry
-        );
+        // println!(
+        //     "symbols: {:?}\nnode id map {node_id_map:?}\ntransitions {:?}\nentry {:?}",
+        //     self.symbols, self.transitions, self.entry
+        // );
 
-        // add edges after nodes exist
-        for (c, transitions) in self.transitions.clone() {
-            for (from, tos) in transitions {
-                for to in tos {
-                    dfa.add_edge(
-                        NfaEdge {
-                            criteria: c.clone(),
-                        },
-                        *node_id_map.get(&from).unwrap(),
-                        *node_id_map.get(&to).unwrap(),
-                    );
-                }
-            }
-        }
+        // // add edges after nodes exist
+        // for (c, transitions) in self.transitions.clone() {
+        //     for (from, tos) in transitions {
+        //         for to in tos {
+        //             dfa.add_edge(
+        //                 NfaEdge {
+        //                     criteria: c.clone(),
+        //                 },
+        //                 *node_id_map.get(&from).unwrap(),
+        //                 *node_id_map.get(&to).unwrap(),
+        //             );
+        //         }
+        //     }
+        // }
 
-        dfa.entry = *node_id_map.get(&self.entry).unwrap();
-
+        let mut dfa = self.clone();
         dfa.simplify();
+
         dfa
     }
 
     pub fn add_state(&mut self, node: &CompoundId, state: Terminal<M>) {
-        self.states.entry(*node)
-            .and_modify(|t| {t.insert(state);})
-            .or_insert_with(|| BTreeSet::from([state]));
+        self.states
+            .entry(node.to_owned())
+            .and_modify(|t| {
+                t.insert(state.clone());
+            })
+            .or_insert_with(|| BTreeSet::from([state.clone()]));
     }
 
     pub fn add_states(&mut self, node: &CompoundId, states: BTreeSet<Terminal<M>>) {
-        self.states.entry(*node)
-            .and_modify(|t| {t.extend(states);})
+        self.states
+            .entry(node.to_owned())
+            .and_modify(|t| {
+                t.extend(states.clone());
+            })
             .or_insert_with(|| states);
     }
 
-    fn _add_transition(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
+    pub(super) fn _add_transition(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
         let mut no_e = true;
         // println!("before: {:?}", self.transitions);
         for element in &self.elements {
@@ -446,7 +448,7 @@ where
     pub(crate) fn offset_self(&mut self, offset: u32) {
         let mut transitions: BTreeMap<Element, BTreeMap<CompoundId, Vec<CompoundId>>> =
             Default::default();
-            
+
         for (element, v) in &self.transitions {
             transitions.insert(element.clone(), Default::default());
             for (from, to) in v {
@@ -464,6 +466,175 @@ where
         }
         self.transitions = transitions;
         self.entry = self.entry.iter().map(|id| *id + offset).collect();
-        self.states = self.states.iter().map(|(k, s)| (k.iter().map(|u| u + offset).collect(), s.clone())).collect();
+        self.states = self
+            .states
+            .iter()
+            .map(|(k, s)| (k.iter().map(|u| u + offset).collect(), s.clone()))
+            .collect();
+    }
+
+    pub(crate) fn shake(&mut self) {
+        let alive = self.get_edges().accepting_branches(self);
+        println!("shake: alive: {alive:?}");
+
+        let mut dead_elements = vec![];
+        for (element, edges) in self.transitions.iter_mut() {
+            edges.retain(|k, _| alive.contains(k));
+            for (_, targets) in edges.iter_mut() {
+                targets.retain(|t| alive.contains(t));
+            }
+            edges.retain(|_, v| !v.is_empty());
+            if edges.is_empty() {
+                dead_elements.push(element.clone());
+            }
+        }
+
+        for e in dead_elements {
+            self.transitions.remove(&e);
+        }
+
+        self.states.retain(|k, _v| alive.contains(k));
+    }
+
+    pub(super) fn get_edges(&self) -> EdgeIndex {
+        // Build a convenient map of edges indexed differently
+        let mut map: BTreeMap<CompoundId, BTreeMap<Element, Vec<CompoundId>>> = Default::default();
+        for (element, edges) in &self.transitions {
+            for (from, to) in edges {
+                map.entry(from.clone())
+                    .and_modify(|e| {
+                        e.insert(element.clone(), to.clone());
+                    })
+                    .or_insert_with(|| BTreeMap::from([(element.clone(), to.clone())]));
+            }
+        }
+        EdgeIndex(map)
+    }
+
+    pub(crate) fn simplify(&mut self) {
+        self.shake();
+        //     pub fn simplify(&mut self) {
+        //         for (s, targets) in &self.transitions.clone() {
+        //             if targets.len() <= 1 {
+        //                 continue;
+        //             }
+        //             // let target_map = targets.iter().cloned().collect::<HashMap<u32, Vec<u64>>>();
+        //             let mut collected_targets: HashMap<_, Vec<_>> = HashMap::new();
+        //             for (t, e) in targets {
+        //                 collected_targets
+        //                     .entry(t)
+        //                     .and_modify(|tt| tt.push(e))
+        //                     .or_insert_with(|| vec![e]);
+        //             }
+
+        //             let mut positives = BTreeSet::new();
+        //             let mut negatives = BTreeSet::new();
+        //             for (target, ees) in collected_targets {
+        //                 if ees.len() <= 1 {
+        //                     continue;
+        //                 }
+        //                 for e in &ees {
+        //                     match self.edge(e).map(|edge| &edge.criteria) {
+        //                         Some(Element::TokenSet(ref s)) => {
+        //                             positives = &positives | s;
+        //                         }
+        //                         Some(Element::NotTokenSet(ref s)) => {
+        //                             negatives = &negatives | s;
+        //                         }
+        //                         None => unreachable!(),
+        //                     }
+        //                 }
+        //                 // println!("positives {positives:?} negatives: {negatives:?}");
+        //                 // abd !a!b!c  -> d, !c
+        //                 let overlapping = &negatives - &positives;
+        //                 negatives = overlapping.clone();
+        //                 positives = &positives - &overlapping;
+        //                 // println!("modified: positives {positives:?} negatives: {negatives:?}");
+        //                 for e in ees {
+        //                     self.remove_edge(*s, *e);
+        //                 }
+
+        //                 if !negatives.is_empty() {
+        //                     self.add_edge(
+        //                         NfaEdge {
+        //                             criteria: Element::NotTokenSet(negatives.clone()),
+        //                         },
+        //                         *s,
+        //                         *target,
+        //                     );
+        //                 } else if !positives.is_empty() {
+        //                     self.add_edge(
+        //                         NfaEdge {
+        //                             criteria: Element::TokenSet(positives.clone()),
+        //                         },
+        //                         *s,
+        //                         *target,
+        //                     );
+        //                 } else {
+        //                     self.add_edge(
+        //                         NfaEdge {
+        //                             criteria: Element::NotTokenSet(negatives.clone()),
+        //                         },
+        //                         *s,
+        //                         *target,
+        //                     );
+        //                 }
+        //             }
+        //         }
+        //         self.shake();
+        //     }
+        // }
+    }
+}
+
+pub(super) struct EdgeIndex(pub(crate) BTreeMap<CompoundId, BTreeMap<Element, Vec<CompoundId>>>);
+
+impl EdgeIndex {
+    /// Return all CompoundIds which are in an accepting path
+    pub fn accepting_branches<M>(&self, dfa: &DFA<M>) -> HashSet<CompoundId>
+    where
+        M: std::fmt::Debug + PartialOrd + Ord + Clone,
+    {
+        let mut visited: HashSet<CompoundId> = Default::default();
+        let mut alive: HashSet<CompoundId> = Default::default();
+        self._accepting_branch(&dfa.entry, &mut visited, &mut alive, dfa);
+        alive
+    }
+
+    /// Find all accepting branches under a subtree
+    fn _accepting_branch<M>(
+        &self,
+        id: &CompoundId,
+        visited: &mut HashSet<CompoundId>,
+        alive: &mut HashSet<CompoundId>,
+        dfa: &DFA<M>,
+    ) -> bool
+    where
+        M: std::fmt::Debug + PartialOrd + Ord + Clone,
+    {
+        if visited.contains(id) {
+            return alive.contains(id);
+        }
+        visited.insert(id.clone());
+
+        let mut is_alive = false;
+        if let Some(states) = dfa.states.get(id) {
+            if states.iter().any(|s| s.accepting()) {
+                alive.insert(id.clone());
+                is_alive = true;
+            }
+        }
+
+        if let Some(map) = self.0.get(id).clone() {
+            for (_, targets) in &map.clone() {
+                for t in targets {
+                    if self._accepting_branch(&t, visited, alive, dfa) {
+                        is_alive = true;
+                        alive.insert(id.clone());
+                    }
+                }
+            }
+        }
+        is_alive
     }
 }

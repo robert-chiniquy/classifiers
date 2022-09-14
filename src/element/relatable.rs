@@ -1,6 +1,8 @@
+use std::collections::BTreeMap;
+
 use super::*;
 
-impl<M> Relatable for DfaBuilder<M> 
+impl<M> Relatable for DFA<M>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
@@ -11,9 +13,8 @@ where
     type Metadata = M;
 
     fn from_language(l: &Self::Language, m: &Option<Self::Metadata>) -> Self {
-      let dfa = DfaBuilder::from_language(l.chars().collect(), m);
-
-        todo!()
+        let dfa = DFA::from_language(l.chars().collect(), m);
+        dfa
     }
 
     fn relation(&self, other: &Self) -> (Relation, Self) {
@@ -21,23 +22,96 @@ where
     }
 
     fn universal(m: &Option<Self::Metadata>) -> Self {
-        todo!()
+        // empty symbols
+        let entry = CompoundId::from([1]);
+        let mut dfa = DFA::<Self::Metadata> {
+            symbols: BTreeSet::new(),
+            elements: BTreeSet::new(),
+            entry: entry.clone(),
+            transitions: Default::default(),
+            states: Default::default(),
+        };
+        // add a self-loop with a NotTokenSet of nothing
+        dfa.add_transition(&1, &Element::NotTokenSet(BTreeSet::new()), &1);
+        dfa.add_state(&entry, Terminal::Include(m.clone()));
+        dfa
     }
 
     fn none(m: &Option<Self::Metadata>) -> Self {
-        todo!()
+        // empty symbols
+        let entry = CompoundId::from([1]);
+        let mut dfa = DFA::<Self::Metadata> {
+            symbols: BTreeSet::new(),
+            elements: BTreeSet::new(),
+            entry: entry.clone(),
+            transitions: Default::default(),
+            states: Default::default(),
+        };
+        dfa.add_state(&entry, Terminal::InverseInclude(m.clone()));
+        dfa
     }
 
-    fn negate(&self) -> Self {
-        todo!()
+    /// Return a "completed DFA": a DFA with a complement of all states
+    /// and universally accepting self-loop edges out of any non-universally-accepting state
+    fn negate(&self, m: &Option<Self::Metadata>) -> Self {
+        // Start with all IDs and remove any found to have an outbound edge
+        let mut dfa = self.clone();
+        dfa.simplify();
+
+        let vortex = self.ids().iter().flatten().max().unwrap_or(&0) + 1;
+        dfa.add_transition(&vortex, &Element::universal(), &vortex);
+        dfa.add_state(
+            &CompoundId::from([vortex]),
+            Terminal::InverseInclude(m.clone()),
+        );
+
+        // Find the negative space of all existing edges from each source node
+        for (source, edges) in self.get_edges().0 {
+            if edges.is_empty() {
+                dfa._add_transition(&source, &Element::universal(), &CompoundId::from([vortex]));
+                continue;
+            }
+            let sum: Vec<_> = edges.iter().map(|(element, _)| element).cloned().collect();
+
+            let mut sum = sum.iter();
+            let sum = if let Some(first) = sum.next() {
+                sum.fold(first.clone(), |acc, cur| Element::add(acc, cur.clone()))
+            } else {
+                unreachable!()
+            };
+
+            let d = Element::difference(&Element::universal(), &sum);
+
+            match &d {
+                Element::TokenSet(s) => {
+                    if !s.is_empty() {
+                        dfa._add_transition(&source, &d, &CompoundId::from([vortex]));
+                    }
+                }
+                Element::NotTokenSet(_) => {
+                    dfa._add_transition(&source, &d, &CompoundId::from([vortex]));
+                }
+            }
+        }
+
+        dfa.states = dfa
+            .states
+            .into_iter()
+            .map(|(id, states)| (id, states.iter().map(|s| s.negate()).collect()))
+            .collect();
+        dfa
     }
 
     fn union(&self, other: &Self) -> Self {
-        todo!()
+        let mut p = DFA::construct_product(self, &mut other.clone());
+        p.simplify();
+        p
     }
 
     fn intersection(&self, other: &Self) -> Self {
-        todo!()
+        let mut p = DFA::intersect(self, &mut other.clone());
+        println!("p: {:?}", p);
+        p.simplify();
+        p
     }
-
 }

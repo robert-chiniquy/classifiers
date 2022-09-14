@@ -23,22 +23,19 @@ where
     And(BTreeSet<Classifier<R>>),
 }
 
-/*
-Policy Statement 1
-Classifier C1
-
-PS2
-C2
-
-What is the relation between C1 and C2 ? 
-If one is allow, another is deny, that is a concern at the call site
-
-Classifier::Literal("s3:*")
-Classifier::Literal("s3:Get*")
+#[test]
+fn test_basic_classifier() {
+    let c1 = Classifier::<DFA<()>>::Literal("a*".to_string(), None);
+    let c2 = Classifier::Literal("*a".to_string(), None);
+    let c3 = Classifier::and(&[c1, c2]);
+    let mut d = c3.compile(&None);
+    d.simplify();
+    d.graphviz_file("new-test.dot", "a* & *a");
+    // assert_eq!(c1.relation(&c2), Relation::Equality);
+}
 
 
 
-*/
 
 impl<R> Classifier<R>
 where
@@ -85,7 +82,7 @@ where
             Classifier::Literal(l, m) => {
                 R::from_language(l, m)
             }
-            Classifier::Not(c) => Classifier::compile(c, m).negate(),
+            Classifier::Not(c) => Classifier::compile(c, m).negate(m),
             Classifier::Any(v) => {
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {
