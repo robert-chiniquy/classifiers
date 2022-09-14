@@ -1,127 +1,56 @@
 #![cfg(test)]
-// use super::*;
-
-#[test]
-fn test_accepts() {
-    todo!()
-    // let d1: Nfa<NfaNode<()>, NfaEdge<Element>> = Nfa::from_language(str_to_chars("abc"), ());
-    // assert!(d1.accepts_string("abc"));
-    // assert!(!d1.accepts(&str_to_chars("ab")).unwrap());
-    // assert!(!d1.accepts(&str_to_chars("a")).unwrap());
-    // assert!(!d1.accepts(&str_to_chars("abcc")).unwrap());
-}
-
-// #[test]
-// fn test_graphviz_one() {
-//     use std::io::Write;
-
-//     test_setup();
-//     // let asdf: Nfa<NfaNode<()>, NfaEdge<Element>> = Nfa::from_language(str_to_chars("XYZ"), ());
-//     let lhs = Classifier::Any(BTreeSet::from_iter([
-//         Classifier::Literal(str_to_chars("ABC")),
-//         Classifier::Literal(str_to_chars("XYZ")),
-//     ]));
-
-//     // not ABC and not XYZ
-//     let rhs = Classifier::And(BTreeSet::from_iter([
-//         Classifier::not(Classifier::Literal(str_to_chars("ABC"))),
-//         Classifier::not(Classifier::Literal(str_to_chars("XYZ"))),
-//     ]));
-
-//     let c1: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile::<Element, (), char>(&lhs, ());
-//     let c2: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile(&rhs, ());
-
-//     let cat = c1.concatenate(&c2);
-
-//     let g = graphviz_wrap(cat.graphviz(), "c1, c2");
-//     let mut output = std::fs::File::create("./one.dot").unwrap();
-//     assert!(output.write_all(g.as_bytes()).is_ok());
-
-//     let _adsf: Vec<char> = "OOABC".chars().collect();
-
-//     assert_eq!(Relation::Disjoint, lhs.relation::<Element, char>(&rhs));
-// }
+use super::*;
 
 #[test]
 fn test_intersection_of_heterogenous_states() {
     // #![allow(unused)]
     // let everything_but_tacos = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal(str_to_chars("tacos"))),
-    //     Classifier::Literal(str_to_chars("*")),
+    //     Classifier::not(Classifier::Literal("tacos"))),
+    //     Classifier::Literal("*")),
     // ]));
 
     // let all_ts_but_tacos = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::Literal(str_to_chars("t*")),
-    //     Classifier::not(Classifier::Literal(str_to_chars("tacos"))),
+    //     Classifier::Literal("t*")),
+    //     Classifier::not(Classifier::Literal("tacos"))),
     // ]));
 
-    // consider all ts but tacos with this thought:
-    // matt suggests that in walking an NFA if you encounter a rejection state on i.e. taco while your
-    // path does NOT terminate on that rejection state, you interpret it as an accepting state
-    // If my input query is "fish" and I walk the whole graph and I encounter a rejecting state on tacos,
-    // i can't treat it as affirmation? fish is not t*
-
     // let all_ts_but_q = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::Literal(str_to_chars("t*")),
-    //     Classifier::not(Classifier::Literal(str_to_chars("*q"))),
+    //     Classifier::Literal("t*")),
+    //     Classifier::not(Classifier::Literal("*q"))),
     // ]));
 
     // let combo = Classifier::Any(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal(str_to_chars("tacos"))),
-    //     Classifier::Literal(str_to_chars("*")),
+    //     Classifier::not(Classifier::Literal("tacos"))),
+    //     Classifier::Literal("*")),
     //     Classifier::And(BTreeSet::from_iter([
-    //         Classifier::Literal(str_to_chars("t*")),
-    //         Classifier::not(Classifier::Literal(str_to_chars("*q"))),
+    //         Classifier::Literal("t*")),
+    //         Classifier::not(Classifier::Literal("*q"))),
     //     ])),
     // ]));
-
-    // matt suggests that in walking an NFA if you encounter a rejection state on i.e. taco while your
-    // path does NOT terminate on that rejection state, you interpret it as an accepting state
-
-    // matt rephrases this to say that a rejection state is not a rejection state, it is an
-    // acceptance state of anything which is not the path leading to the rejection
-
-    // * and taco are intersecting paths
-    // an intersection function could logically evaluate and identify the intersection of these paths
-    // without regard to the type of the terminal state (accepting or rejecting) ..
-    // then, logically, the remaining intersecting path (taco) must have a rejecting state in the result as it does in the input
-    // - observe that this understanding of intersection here is in line with the heuristic that
-    //   And(something, *) = something
-    // this result for intersection relies on an interpretation of a rejecting state in an NFA as matt described above
-    // how does it handle a smaller subset of * containing taco ?
-    // ?
 
     // let c = Classifier::compile::<Element, (), char>(&everything_but_tacos, ());
 }
 
 #[test]
 fn test_terminal_on() {
-    // if the higher combinator were And, this would include nothing
-    // but since it is Any, Robert thinks it includes everything
-    // Robert's original heuristic / convention was that encountering a
-    // reject state on any path supersedes any accept state on that path,
-    // using that rule, an And here of these two values would be an empty set
-    // minimization would be nice ...
-    // we don't have a single graph semantics which works with both And and Any
     // let zzz = Classifier::Any(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal(str_to_chars("AB"))),
-    //     Classifier::Literal(str_to_chars("AB")),
+    //     Classifier::not(Classifier::Literal("AB"))),
+    //     Classifier::Literal("AB")),
     // ]));
     // Matt is suggesting a Element::NotToken, doesn't need to be a public interface
     // let zzz = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal(str_to_chars("A*"))),
-    //     Classifier::Literal(str_to_chars("*B")),
+    //     Classifier::not(Classifier::Literal("A*"))),
+    //     Classifier::Literal("*B")),
     // ]));
 
     // // only 1 char
     // let _ = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal(str_to_chars("**"))),
-    //     Classifier::Literal(str_to_chars("*")),
+    //     Classifier::not(Classifier::Literal("**"))),
+    //     Classifier::Literal("*")),
     // ]));
 
     // let c = Classifier::compile::<Element, (), char>(&zzz, ());
     // write_graph(c.graphviz(), "terminal_on_zzz1.dot");
-    // assert!(c.accepts_string("BB"));
     // how do we ask c if it accepts any state which is not AB
     // (c could also accept AB in addition to some other state)
     // - c minus an NFA which accepts AB
@@ -139,13 +68,13 @@ fn test_rejection() {
     // 2 NFAs, with all rejecting states, having 1 edge in common
 
     // let lhs = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal(str_to_chars("AB"))),
-    //     Classifier::not(Classifier::Literal(str_to_chars("XY"))),
+    //     Classifier::not(Classifier::Literal("AB"))),
+    //     Classifier::not(Classifier::Literal("XY"))),
     // ]));
 
     // let rhs = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal(str_to_chars("AB"))),
-    //     Classifier::not(Classifier::Literal(str_to_chars("CD"))),
+    //     Classifier::not(Classifier::Literal("AB"))),
+    //     Classifier::not(Classifier::Literal("CD"))),
     // ]));
 
     todo!()
@@ -177,11 +106,11 @@ fn test_negate() {
     // the set of P
     // - accepts P
     // - rejects not P
-    todo!()
-    // let cp = Classifier::literal("P");
-    // let dp: Nfa<NfaNode<()>, NfaEdge<Element>> = cp.compile(());
+    let cp = Classifier::<Dfa>::Literal("P".to_string(), None);
+    let dp = cp.compile(&None);
 
     // assert!(dp.accepts_string("P"));
+    todo!()
 }
 #[test]
 fn test_negate2() {
@@ -189,42 +118,37 @@ fn test_negate2() {
     // // the set of all things excluding P
     // // - accepts not P
     // // - rejects P
-    // let c = Classifier::not(Classifier::literal("P"));
-    todo!()
-    // let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
+    let c = Classifier::not(Classifier::Literal::<Dfa>("P".to_string(), None));
+    let _d = c.compile(&None);
     // assert!(!d.accepts_string("P"));
+    todo!()
 }
 
 #[test]
 fn test_simpler_intersection() {
-    // let a = Classifier::Literal(str_to_chars("*b"));
-    // let b = Classifier::Literal(str_to_chars("a"));
-    // let c = Classifier::Any(BTreeSet::from_iter([a.clone(), b.clone()]));
+    let a = Classifier::<Dfa>::Literal("*b".to_string(), None);
+    let b = Classifier::Literal("a".to_string(), None);
+    let c = Classifier::Any(BTreeSet::from_iter([a, b]));
+    let _d = c.compile(&None);
 
     todo!()
-    // let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
-    // write_graph(d.graphviz(), "simpler-*b-v-a.dot");
 }
 
 #[test]
 fn test_intersection() {
     setup();
 
-    // let astar = Classifier::Literal(str_to_chars("A*"));
-    // let stara = Classifier::Literal(str_to_chars("*b"));
-    // let c = Classifier::And(BTreeSet::from_iter([astar.clone(), stara.clone()]));
+    let astar = Classifier::<Dfa>::Literal("A*".to_string(), None);
+    let stara = Classifier::Literal("*b".to_string(), None);
+    let _c = Classifier::And(BTreeSet::from_iter([astar, stara]));
 
     todo!()
 
-    // let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
-    // write_graph(d.graphviz(), "intersection.dot");
-    // assert_eq!(d.edges.len(), 2);
+    // let d = c.compile(());
     // assert!(d.accepts_string("AAb"));
 
     // let mut b: Nfa<NfaNode<()>, NfaEdge<Element>> = astar.compile(());
     // let mut a = stara.compile(());
-    // a.set_chirality(LRSemantics::L);
-    // b.set_chirality(LRSemantics::R);
     // let product = a.product(&b);
 
     // write_graph(product.graphviz(), "product-intersection.dot");
@@ -232,17 +156,14 @@ fn test_intersection() {
 
 #[test]
 fn test_negate4() {
-    setup();
-    // let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
-    //     Classifier::Literal(str_to_chars("A*")),
-    //     Classifier::Literal(str_to_chars("*A")),
-    // ])));
+    test_setup();
+    let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
+        Classifier::<Dfa>::Literal("A*".to_string(), None),
+        Classifier::Literal("*A".to_string(), None),
+    ])));
 
+    let _d = c.compile(&None);
     todo!()
-    // let d: Nfa<NfaNode<()>, NfaEdge<Element>> = c.compile(());
-
-    // // write_graph(d.graphviz(), "negate1.dot");
-
     // assert!(!d.accepts_string("AA"));
 }
 
@@ -256,9 +177,9 @@ static TEST_SETUP: once_cell::sync::Lazy<bool> = once_cell::sync::Lazy::new(|| {
     true
 });
 
-pub fn setup() {
+fn setup() {
     // #[ignore]
-    // #[cfg(feature = "trace")]
+    #[cfg(feature = "trace")]
     {
         let subscriber = tracing_subscriber::fmt()
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
