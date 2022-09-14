@@ -152,7 +152,7 @@ where
         }
         builder.add_state(&CompoundId::from([prior]), State::Include(m.clone()));
         // convert the NFA to a DFA
-        builder.calculate_transitions(stack);
+        builder.powerset_construction(stack);
         builder
     }
 
@@ -316,7 +316,7 @@ where
             }
         }
 
-        product.calculate_transitions(stack);
+        product.powerset_construction(stack);
         product
     }
 
@@ -376,7 +376,8 @@ where
 
     /// Walk the transitions table for a stack of rows to create product states
     /// and rationalize transitions into a DFA
-    fn calculate_transitions(&mut self, mut stack: Vec<CompoundId>) {
+    /// see eg https://en.wikipedia.org/wiki/Powerset_construction
+    fn powerset_construction(&mut self, mut stack: Vec<CompoundId>) {
         // println!(
         //     "🌮🌮🌮 the stack: {stack:?}\n🌮🌮🌮 transitions: {:?}\n\n",
         //     self.transitions
@@ -471,11 +472,7 @@ where
                 .or_default()
                 .insert(to.clone());
         }
-
-        // println!("after: {:?}", self.transitions);
-        if no_e {
-            panic!("did not add a transition for {from:?} -{e:?}-> {to:?}\n\n{self:?}");
-        }
+        debug_assert!(!no_e, "did not add a transition for {from:?} -{e:?}-> {to:?}\n\n{self:?}");
     }
 
     /// This function assumes a CompoundId of only {from} and {to} respectively!

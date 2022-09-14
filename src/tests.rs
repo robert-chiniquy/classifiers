@@ -59,11 +59,12 @@ fn test_negate1() {
     d.graphviz_file("negation1.dot", "A*");
     
     d = d.negate(&None);
+    d.simplify();
     d.graphviz_file("negation2.dot", "!A*");
     // assert!(d.includes_path(&['A'.into()]));
 
     d = d.negate(&None);
-    // d.simplify();
+    d.simplify();
     d.graphviz_file("negation3.dot", "!!A*");
     let t = Element::token;
     assert!(!d.includes_path(&['A'.into()]));
