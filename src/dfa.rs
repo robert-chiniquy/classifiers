@@ -149,7 +149,7 @@ where
                 }
             }
         }
-        println!("transitions for:\nlanguage: {language:?}:\n{:?}\n{:?}", self.transitions, new_transitions);
+        println!("transitions for {language:?}:\n{:?}\n{:?}", self.transitions, new_transitions);
         self.transitions = new_transitions;
     }
 
@@ -454,7 +454,12 @@ where
     }
 
     pub(crate) fn simplify(&mut self) {
-        for (s, edges) in &self.get_edges().0 {
+        self.shake();
+
+        let by_edge = self.get_edges().0;
+        self.transitions = Default::default();
+    
+        for (source, edges) in &by_edge {
             let mut targets_to_edges: BTreeMap<CompoundId, Vec<&Element>> = Default::default();
 
             for (element, targets) in edges {
@@ -466,11 +471,11 @@ where
                 }
             }
 
-            for (_target, elements) in targets_to_edges {
+            for (target, elements) in targets_to_edges {
                 // source -> target -> element
                 let mut positives = BTreeSet::new();
                 let mut negatives = BTreeSet::new();
-                for element in &elements {
+                for element in elements {
                     match element {
                         Element::TokenSet(ref s) => {
                             positives = &positives | s;
@@ -480,42 +485,20 @@ where
                         }
                     }
                 }
-                let overlapping = &negatives - &positives;
-
-                println!("{s:?} -{elements:?}-> {negatives:?} {positives:?} {overlapping:?}");
-                //     for e in ees {
-                //         self.remove_edge(*s, *e);
-                //     }
-
-                //     if !negatives.is_empty() {
-                //         self.add_edge(
-                //             NfaEdge {
-                //                 criteria: Element::NotTokenSet(negatives.clone()),
-                //             },
-                //             *s,
-                //             *target,
-                //         );
-                //     } else if !positives.is_empty() {
-                //         self.add_edge(
-                //             NfaEdge {
-                //                 criteria: Element::TokenSet(positives.clone()),
-                //             },
-                //             *s,
-                //             *target,
-                //         );
-                //     } else {
-                //         self.add_edge(
-                //             NfaEdge {
-                //                 criteria: Element::NotTokenSet(negatives.clone()),
-                //             },
-                //             *s,
-                //             *target,
-                //         );
-                //     }
-                // }
+                let overlapping = match (!negatives.is_empty(), !positives.is_empty()) {
+                    (true, true) => Element::NotTokenSet(&negatives - &positives),
+                    (true, false) => Element::NotTokenSet(negatives),
+                    (false, true) => Element::TokenSet(positives),
+                    (false, false) => continue,
+                };
+                
+                self.transitions.entry(overlapping)
+                    .or_default()
+                    .entry(source.clone())
+                    .or_default()
+                    .insert(target);
             }
         }
-        self.shake();
     }
 }
 

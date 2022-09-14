@@ -131,7 +131,7 @@ fn test_simpler_intersection() {
     let c = Classifier::Any(BTreeSet::from_iter([a, b]));
     let _d = c.compile(&None);
 
-    todo!()
+    // todo!()
 }
 
 #[test]
