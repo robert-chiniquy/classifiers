@@ -30,7 +30,7 @@ fn test_intersection_of_heterogenous_states() {
     //     ])),
     // ]));
 
-    // let c = Classifier::compile::<Element, (), char>(&everything_but_tacos, ());
+    // let c = Classifier::compile(&everything_but_tacos, ());
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn test_terminal_on() {
     //     Classifier::Literal("*")),
     // ]));
 
-    // let c = Classifier::compile::<Element, (), char>(&zzz, ());
+    // let c = Classifier::compile(&zzz, ());
     // write_graph(c.graphviz(), "terminal_on_zzz1.dot");
     // how do we ask c if it accepts any state which is not AB
     // (c could also accept AB in addition to some other state)
@@ -81,7 +81,7 @@ fn test_rejection() {
 
     todo!()
 
-    // let c1: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile::<Element, (), char>(&lhs, ());
+    // let c1: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile(&lhs, ());
     // let c2: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile(&rhs, ());
 
     // c1.graphviz_file("test_rejection.1.dot", "![ab] X ![xy]");
@@ -143,7 +143,7 @@ fn test_intersection() {
     let astar = Classifier::<Dfa>::Literal("B*".to_string(), None);
     let stara = Classifier::Literal("*A".to_string(), None);
     let i = Classifier::And(BTreeSet::from_iter([astar, stara]));
-    
+
     let d = i.compile(&None);
     assert!(!d.transitions.is_empty());
     assert!(!d.states.is_empty());
@@ -176,7 +176,7 @@ fn test_negate4() {
     ])));
 
     let d = c.compile(&None);
-    
+
     let t = Element::token;
     assert!(!d.includes_path(&vec![t('A'), t('A')]));
 }

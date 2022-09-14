@@ -18,7 +18,7 @@ where
     }
 
     fn relation(&self, other: &Self) -> (Relation, Self) {
-        let _product = Dfa::product(&self, &other);
+        let _product = Dfa::product(self, other);
 
         todo!()
     }
