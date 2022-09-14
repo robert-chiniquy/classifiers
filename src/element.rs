@@ -58,6 +58,15 @@ impl From<&char> for Element {
     }
 }
 
+
+#[test]
+fn test_accepts() {
+    let a = Element::not_tokens(&['a', ':']);
+    let b = Element::not_tokens(&['a', 'b', ':']);
+    assert!(a.accepts(&b));
+    assert!(!b.accepts(&a));
+}
+
 impl Accepts<Element> for Element {
     #[tracing::instrument(ret)]
     fn accepts(&self, l: &Element) -> bool {
@@ -69,7 +78,8 @@ impl Accepts<Element> for Element {
                 x.len() + y.len() == ASCII_TOTAL_CHARS && x.is_disjoint(y)
             }
             (NotTokenSet(x), TokenSet(y)) => x.is_disjoint(y),
-            (_, _) => false,
+            (NotTokenSet(x), NotTokenSet(y)) => x.is_subset(y),
+            _ => false
         }
     }
 }

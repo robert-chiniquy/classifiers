@@ -52,7 +52,7 @@ fn test_product() {
     let mut b = Dfa::from_language("*a".to_string().chars().collect(), &None);
 
     let mut i = Dfa::intersect(&a, &mut b);
-    let dfa = i.build();
+    let _dfa = i.build();
 
     // assert!(dfa.accepts(&vec!['a', 'a']).unwrap());
     // assert!(dfa.accepts(&vec!['a', 'a', 'a']).unwrap());
@@ -133,12 +133,37 @@ where
         d
     }
 
+    fn write_into_language(&mut self, language: &BTreeSet<Element>) {
+        // !a!:, !b!:, -> !a!b!:
+        let mut new_transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>> = Default::default();
+
+        for word in language {
+            for (element, edges) in self.transitions.clone() {
+                if element.accepts(word) {
+                    new_transitions
+                        .entry(word.clone())
+                        .and_modify(|existing_edges| {
+                            existing_edges.extend(edges.clone());
+                        })
+                        .or_insert(edges.clone());
+                }
+            }
+        }
+        println!("transitions for:\nlanguage: {language:?}:\n{:?}\n{:?}", self.transitions, new_transitions);
+        self.transitions = new_transitions;
+    }
+
     // TODO: why make b mutable?
     pub(crate) fn construct_product(a: &Self, b: &mut Self) -> Self {
         let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
 
         let mut elements: BTreeSet<Element> = symbols.iter().map(|c| c.into()).collect();
         elements.insert(Element::NotTokenSet(symbols.clone()));
+
+        let mut a = a.clone();
+        a.write_into_language(&elements);
+        b.write_into_language(&elements);
+        // let a = a.rewrite_with_symbols(symbols);
 
         let offset = a.ids().iter().flatten().max().unwrap_or(&1) + 1;
         b.offset_self(offset);
@@ -353,7 +378,7 @@ where
 
         // println!("after: {:?}", self.transitions);
         if no_e {
-            panic!("did not add a transition for {from:?} -{e:?}-> {to:?}");
+            panic!("did not add a transition for {from:?} -{e:?}-> {to:?}\n\n{self:?}");
         }
     }
 
@@ -429,78 +454,68 @@ where
     }
 
     pub(crate) fn simplify(&mut self) {
+        for (s, edges) in &self.get_edges().0 {
+            let mut targets_to_edges: BTreeMap<CompoundId, Vec<&Element>> = Default::default();
+
+            for (element, targets) in edges {
+                for t in targets {
+                    targets_to_edges
+                        .entry(t.clone())
+                        .and_modify(|v| v.push(element))
+                        .or_insert_with(|| vec![element]);
+                }
+            }
+
+            for (_target, elements) in targets_to_edges {
+                // source -> target -> element
+                let mut positives = BTreeSet::new();
+                let mut negatives = BTreeSet::new();
+                for element in &elements {
+                    match element {
+                        Element::TokenSet(ref s) => {
+                            positives = &positives | s;
+                        }
+                        Element::NotTokenSet(ref s) => {
+                            negatives = &negatives | s;
+                        }
+                    }
+                }
+                let overlapping = &negatives - &positives;
+
+                println!("{s:?} -{elements:?}-> {negatives:?} {positives:?} {overlapping:?}");
+                //     for e in ees {
+                //         self.remove_edge(*s, *e);
+                //     }
+
+                //     if !negatives.is_empty() {
+                //         self.add_edge(
+                //             NfaEdge {
+                //                 criteria: Element::NotTokenSet(negatives.clone()),
+                //             },
+                //             *s,
+                //             *target,
+                //         );
+                //     } else if !positives.is_empty() {
+                //         self.add_edge(
+                //             NfaEdge {
+                //                 criteria: Element::TokenSet(positives.clone()),
+                //             },
+                //             *s,
+                //             *target,
+                //         );
+                //     } else {
+                //         self.add_edge(
+                //             NfaEdge {
+                //                 criteria: Element::NotTokenSet(negatives.clone()),
+                //             },
+                //             *s,
+                //             *target,
+                //         );
+                //     }
+                // }
+            }
+        }
         self.shake();
-        //     pub fn simplify(&mut self) {
-        //         for (s, targets) in &self.transitions.clone() {
-        //             if targets.len() <= 1 {
-        //                 continue;
-        //             }
-        //             // let target_map = targets.iter().cloned().collect::<HashMap<u32, Vec<u64>>>();
-        //             let mut collected_targets: HashMap<_, Vec<_>> = HashMap::new();
-        //             for (t, e) in targets {
-        //                 collected_targets
-        //                     .entry(t)
-        //                     .and_modify(|tt| tt.push(e))
-        //                     .or_insert_with(|| vec![e]);
-        //             }
-
-        //             let mut positives = BTreeSet::new();
-        //             let mut negatives = BTreeSet::new();
-        //             for (target, ees) in collected_targets {
-        //                 if ees.len() <= 1 {
-        //                     continue;
-        //                 }
-        //                 for e in &ees {
-        //                     match self.edge(e).map(|edge| &edge.criteria) {
-        //                         Some(Element::TokenSet(ref s)) => {
-        //                             positives = &positives | s;
-        //                         }
-        //                         Some(Element::NotTokenSet(ref s)) => {
-        //                             negatives = &negatives | s;
-        //                         }
-        //                         None => unreachable!(),
-        //                     }
-        //                 }
-        //                 // println!("positives {positives:?} negatives: {negatives:?}");
-        //                 // abd !a!b!c  -> d, !c
-        //                 let overlapping = &negatives - &positives;
-        //                 negatives = overlapping.clone();
-        //                 positives = &positives - &overlapping;
-        //                 // println!("modified: positives {positives:?} negatives: {negatives:?}");
-        //                 for e in ees {
-        //                     self.remove_edge(*s, *e);
-        //                 }
-
-        //                 if !negatives.is_empty() {
-        //                     self.add_edge(
-        //                         NfaEdge {
-        //                             criteria: Element::NotTokenSet(negatives.clone()),
-        //                         },
-        //                         *s,
-        //                         *target,
-        //                     );
-        //                 } else if !positives.is_empty() {
-        //                     self.add_edge(
-        //                         NfaEdge {
-        //                             criteria: Element::TokenSet(positives.clone()),
-        //                         },
-        //                         *s,
-        //                         *target,
-        //                     );
-        //                 } else {
-        //                     self.add_edge(
-        //                         NfaEdge {
-        //                             criteria: Element::NotTokenSet(negatives.clone()),
-        //                         },
-        //                         *s,
-        //                         *target,
-        //                     );
-        //                 }
-        //             }
-        //         }
-        //         self.shake();
-        //     }
-        // }
     }
 }
 

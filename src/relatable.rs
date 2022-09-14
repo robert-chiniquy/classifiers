@@ -18,7 +18,7 @@ where
     }
 
     fn relation(&self, other: &Self) -> (Relation, Self) {
-        let product = Dfa::product(&self, &other);
+        let _product = Dfa::product(&self, &other);
 
         todo!()
     }
@@ -112,8 +112,9 @@ where
 
     fn intersection(&self, other: &Self) -> Self {
         let mut p = Dfa::intersect(self, &mut other.clone());
-        println!("p: {:?}", p);
         p.simplify();
+        p.graphviz_file("intersection.dot", "intersection");
+        println!("p: {:?}", p);
         p
     }
 }

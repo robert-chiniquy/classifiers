@@ -107,7 +107,7 @@ fn test_negate() {
     // - accepts P
     // - rejects not P
     let cp = Classifier::<Dfa>::Literal("P".to_string(), None);
-    let dp = cp.compile(&None);
+    let _dp = cp.compile(&None);
 
     // assert!(dp.accepts_string("P"));
     todo!()
@@ -127,7 +127,7 @@ fn test_negate2() {
 #[test]
 fn test_simpler_intersection() {
     let a = Classifier::<Dfa>::Literal("*b".to_string(), None);
-    let b = Classifier::Literal("a".to_string(), None);
+    let b = Classifier::Literal("*a".to_string(), None);
     let c = Classifier::Any(BTreeSet::from_iter([a, b]));
     let _d = c.compile(&None);
 
@@ -138,20 +138,13 @@ fn test_simpler_intersection() {
 fn test_intersection() {
     setup();
 
-    let astar = Classifier::<Dfa>::Literal("A*".to_string(), None);
-    let stara = Classifier::Literal("*b".to_string(), None);
-    let _c = Classifier::And(BTreeSet::from_iter([astar, stara]));
-
-    todo!()
-
-    // let d = c.compile(());
-    // assert!(d.accepts_string("AAb"));
-
-    // let mut b: Nfa<NfaNode<()>, NfaEdge<Element>> = astar.compile(());
-    // let mut a = stara.compile(());
-    // let product = a.product(&b);
-
-    // write_graph(product.graphviz(), "product-intersection.dot");
+    let astar = Classifier::<Dfa>::Literal("B*".to_string(), None);
+    let stara = Classifier::Literal("*A".to_string(), None);
+    let i = Classifier::And(BTreeSet::from_iter([astar, stara]));
+    
+    let d = i.compile(&None);
+    assert!(!d.transitions.is_empty());
+    assert!(!d.states.is_empty());
 }
 
 #[test]
@@ -178,7 +171,6 @@ static TEST_SETUP: once_cell::sync::Lazy<bool> = once_cell::sync::Lazy::new(|| {
 });
 
 fn setup() {
-    // #[ignore]
     #[cfg(feature = "trace")]
     {
         let subscriber = tracing_subscriber::fmt()
