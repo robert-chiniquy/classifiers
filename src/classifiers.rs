@@ -1,5 +1,16 @@
 use super::*;
 
+#[test]
+fn test_basic_classifier() {
+    let c1 = Classifier::<Dfa>::Literal("a*".to_string(), None);
+    let c2 = Classifier::Literal("*a".to_string(), None);
+    let c3 = Classifier::and(&[c1.clone(), c2.clone()]);
+    let mut d = c3.compile(&None);
+    d.simplify();
+    d.graphviz_file("new-test.dot", "a* & *a");
+    assert_eq!(c1.relation(&c2), Relation::Intersection);
+}
+
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum Relation {
     Disjoint,
@@ -18,20 +29,10 @@ where
     Literal(R::Language, Option<R::Metadata>),
     Not(Box<Classifier<R>>),
     /// Union
+    // TODO: rename to Or() ?
     Any(BTreeSet<Classifier<R>>),
     /// Intersection
     And(BTreeSet<Classifier<R>>),
-}
-
-#[test]
-fn test_basic_classifier() {
-    let c1 = Classifier::<Dfa>::Literal("a*".to_string(), None);
-    let c2 = Classifier::Literal("*a".to_string(), None);
-    let c3 = Classifier::and(&[c1.clone(), c2.clone()]);
-    let mut d = c3.compile(&None);
-    d.simplify();
-    d.graphviz_file("new-test.dot", "a* & *a");
-    assert_eq!(c1.relation(&c2), Relation::Intersection);
 }
 
 impl<R> Classifier<R>
@@ -40,8 +41,6 @@ where
 {
     #[tracing::instrument(skip_all)]
     pub fn relation(&self, other: &Self) -> Relation {
-        // 1. compile
-        // 2. relate NFAs (product of NFAs, search terminal states)
         let s: R = Classifier::compile(self, &None);
         let o = Classifier::compile(other, &None);
 
@@ -80,7 +79,6 @@ where
                     R::none(m)
                 }
             }
-            // how does this treat heterogenous states?
             Classifier::And(v) => {
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {

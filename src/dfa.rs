@@ -15,7 +15,7 @@ use super::*;
 // 4     | Ø   | Ø     | Ø    |
 // 2,3   | 2,3 | 2,3,4 | 2,3  |
 // 2,3,4 | 2,3 | 2,3   | 2,3  |
-// where-ever you have columns such as b and ab,
+// where ever you have columns such as b and ab,
 // a transition of ab from a node counts as a transition of b as well
 // for the purpose of unioning the resulting transitions
 

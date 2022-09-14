@@ -4,13 +4,6 @@ use super::*;
 
 const ASCII_TOTAL_CHARS: usize = 128;
 
-#[test]
-fn test_equility() {
-    let a = Element::not_tokens(&['a', 'b', 'c']);
-    let b = Element::not_tokens(&['a', 'b', 'c']);
-    assert_eq!(a, b);
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, std::hash::Hash, PartialOrd, Ord)]
 pub enum Element {
     TokenSet(BTreeSet<char>),
@@ -46,28 +39,6 @@ impl Complement<Element> for Element {
 }
 
 impl ElementalLanguage<Element> for Element {}
-
-// #[test]
-// fn test_element_from_language() {
-//     let _ = Element::from_language("a*b".to_string().chars().collect(), ());
-//     let _ = Element::from_language("a*b*c".to_string().chars().collect(), ());
-//     let _ = Element::from_language("a**b**c".to_string().chars().collect(), ());
-// }
-
-// impl FromLanguage<Element> for Element {
-//     type Language = Vec<char>;
-
-//     // FIXME
-//     type Metadata = ();
-
-//     fn from_language(
-//         l: Self::Language,
-//         _m: Self::Metadata,
-//     ) -> Nfa<NfaNode<Self::Metadata>, NfaEdge<Element>> {
-//         let mut builder: DfaBuilder<()> = DfaBuilder::from_language(l, &None);
-//         builder.build()
-//     }
-// }
 
 impl Universal for Element {
     fn universal() -> Self {
@@ -117,13 +88,6 @@ impl Accepts<char> for Element {
     #[tracing::instrument(skip_all, ret)]
     fn accepts(&self, l: &char) -> bool {
         self.accepts(&l)
-    }
-}
-
-// TODO: Remove the dep on Default for this stuff
-impl Default for Element {
-    fn default() -> Self {
-        Self::universal()
     }
 }
 
