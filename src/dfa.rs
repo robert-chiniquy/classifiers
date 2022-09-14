@@ -125,6 +125,51 @@ where
         }
     }
 
+    pub fn includes_path(&self, path: &[Element]) -> bool {
+        let edges = self.get_edges();
+        let path_index = 0;
+        let mut stack = vec![(path_index, self.entry.clone())];
+
+        while let Some((path_index, current)) = stack.pop() {
+            if path.len() >= path_index {
+                // check if current is an Include?
+                match self.states.get(&current) {
+                    // did not find an accepting state on this path within the scope of the input
+                    None => continue,
+                    Some(s) => {
+                        for state in s {
+                            match state {
+                                State::Include(_) => return true,
+                                // did not find an accepting state on this path within the scope of the input
+                                State::InverseExclude(_)
+                                | State::InverseInclude(_)
+                                | State::Exclude(_) => continue,
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+            match edges.0.get(&current) {
+                Some(edges) => {
+                    for (element, targets) in edges {
+                        if element.accepts(&path[path_index]) {
+                            for t in targets {
+                                stack.push((path_index + 1, t.clone()));
+                            }
+                        }
+                    }
+                }
+                None => (),
+            }
+        }
+        false
+    }
+
+    // pub fn excludes_path() -> bool {
+
+    // }
+
     pub(crate) fn product(a: &Self, b: &Self) -> Self {
         let mut b = b.clone();
         let product = Dfa::construct_product(a, &mut b);
@@ -135,7 +180,8 @@ where
 
     fn write_into_language(&mut self, language: &BTreeSet<Element>) {
         // !a!:, !b!:, -> !a!b!:
-        let mut new_transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>> = Default::default();
+        let mut new_transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>> =
+            Default::default();
 
         for word in language {
             for (element, edges) in self.transitions.clone() {
@@ -149,7 +195,10 @@ where
                 }
             }
         }
-        println!("transitions for {language:?}:\n{:?}\n{:?}", self.transitions, new_transitions);
+        println!(
+            "transitions for {language:?}:\n{:?}\n{:?}",
+            self.transitions, new_transitions
+        );
         self.transitions = new_transitions;
     }
 
@@ -458,7 +507,7 @@ where
 
         let by_edge = self.get_edges().0;
         self.transitions = Default::default();
-    
+
         for (source, edges) in &by_edge {
             let mut targets_to_edges: BTreeMap<CompoundId, Vec<&Element>> = Default::default();
 
@@ -491,8 +540,9 @@ where
                     (false, true) => Element::TokenSet(positives),
                     (false, false) => continue,
                 };
-                
-                self.transitions.entry(overlapping)
+
+                self.transitions
+                    .entry(overlapping)
                     .or_default()
                     .entry(source.clone())
                     .or_default()

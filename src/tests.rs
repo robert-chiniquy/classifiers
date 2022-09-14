@@ -1,4 +1,6 @@
 #![cfg(test)]
+use std::vec;
+
 use super::*;
 
 #[test]
@@ -155,9 +157,10 @@ fn test_negate4() {
         Classifier::Literal("*A".to_string(), None),
     ])));
 
-    let _d = c.compile(&None);
-    todo!()
-    // assert!(!d.accepts_string("AA"));
+    let d = c.compile(&None);
+    
+    let t = Element::token;
+    assert!(!d.includes_path(&vec![t('A'), t('A')]));
 }
 
 #[allow(dead_code)]
