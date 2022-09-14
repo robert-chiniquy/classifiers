@@ -1,33 +1,8 @@
 use std::collections::BTreeSet;
 
-// use std::collections::HashMap;
 use std::collections::{BTreeMap, HashSet};
 
 use super::*;
-
-/*
-
-digraph G {
-    rankdir = TB;
-    remincross = true;
-    splines = true;
-    fontsize="40";
-
-    bgcolor = "#555555";
-    node[color = "#FFFFFF"];
-    node[fontcolor = "#FFFFFF"];
-    edge[color = "#FFFFFF", fontcolor="#FFFFFF"];
-
-    label = "dfa";
-
-  node_0 -> node_1 [label="a" fontsize="20pt"];
-  node_1 -> node_2 [label="b" fontsize="20pt"];
-  node_0 [label="enter", shape="circle"]
-  node_1 [label="1", shape="circle"]
-  node_2 [label="2", shape="circle"]
-}
-
-*/
 
 // number of rows/nodes = number of chars in input + 1
 // number of columns: number of symbols in input
@@ -64,7 +39,7 @@ where
     // in one copy, you change the Accept(M) to a Reject(M),
     // and then you intersect them,
     // you would get both an Accept and a Reject in this set
-    pub(super) states: BTreeMap<CompoundId, BTreeSet<Terminal<M>>>,
+    pub(super) states: BTreeMap<CompoundId, BTreeSet<State<M>>>,
 }
 
 #[test]
@@ -129,9 +104,9 @@ where
         }
 
         for i in 0..prior {
-            builder.add_state(&CompoundId::from([i]), Terminal::InverseInclude(m.clone()));
+            builder.add_state(&CompoundId::from([i]), State::InverseInclude(m.clone()));
         }
-        builder.add_state(&CompoundId::from([prior]), Terminal::Include(m.clone()));
+        builder.add_state(&CompoundId::from([prior]), State::Include(m.clone()));
         builder.calculate_transitions(builder.find_compound_ids());
         builder
     }
@@ -366,7 +341,7 @@ where
         dfa
     }
 
-    pub fn add_state(&mut self, node: &CompoundId, state: Terminal<M>) {
+    pub fn add_state(&mut self, node: &CompoundId, state: State<M>) {
         self.states
             .entry(node.to_owned())
             .and_modify(|t| {
@@ -375,7 +350,7 @@ where
             .or_insert_with(|| BTreeSet::from([state.clone()]));
     }
 
-    pub fn add_states(&mut self, node: &CompoundId, states: BTreeSet<Terminal<M>>) {
+    pub fn add_states(&mut self, node: &CompoundId, states: BTreeSet<State<M>>) {
         self.states
             .entry(node.to_owned())
             .and_modify(|t| {

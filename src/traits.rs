@@ -71,18 +71,6 @@ where
 {
 }
 
-// pub trait FromLanguage<E>
-// where
-//     E: Eq + std::hash::Hash + Default + PartialEq,
-// {
-//     type Language;
-//     type Metadata: std::fmt::Debug + Clone + Ord + PartialOrd + Default + PartialEq + Eq;
-//     fn from_language(
-//         l: Self::Language,
-//         m: Self::Metadata,
-//     ) -> Nfa<NfaNode<Self::Metadata>, NfaEdge<E>>;
-// }
-
 pub trait Accepting {
     fn accepting(&self) -> bool;
 }

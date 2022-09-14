@@ -10,7 +10,7 @@
 // so then, any operation which transforms a tree by changing the accepting Include(M) 
 // states to Exclude(M), (as in Classifier::Not) must also change the InverseInclude(M) to InverseExclude(M)
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub enum Terminal<M: std::fmt::Debug> {
+pub enum State<M: std::fmt::Debug> {
     InverseInclude(Option<M>),
     InverseExclude(Option<M>),
     Include(Option<M>),
@@ -19,34 +19,34 @@ pub enum Terminal<M: std::fmt::Debug> {
 
 
 // TODO: validate
-impl <M> Terminal<M> 
+impl <M> State<M> 
 where 
     M: std::fmt::Debug + Clone
 {
     pub fn negate(&self) -> Self {
         match self {
-            Terminal::InverseInclude(m) =>Terminal::Include(m.clone()),
-            Terminal::InverseExclude(m) => Terminal::Exclude(m.clone()),
-            Terminal::Include(m) => Terminal::InverseInclude(m.clone()),
-            Terminal::Exclude(m) => Terminal::Exclude(m.clone()),
+            State::InverseInclude(m) =>State::Include(m.clone()),
+            State::InverseExclude(m) => State::Exclude(m.clone()),
+            State::Include(m) => State::InverseInclude(m.clone()),
+            State::Exclude(m) => State::Exclude(m.clone()),
         }
     }
 
     pub fn accepting(&self) -> bool {
         match self {
-            Terminal::InverseInclude(_) => false,
-            Terminal::InverseExclude(_) => false,
-            Terminal::Include(_) => true,
-            Terminal::Exclude(_) => true,
+            State::InverseInclude(_) => false,
+            State::InverseExclude(_) => false,
+            State::Include(_) => true,
+            State::Exclude(_) => true,
         }
     }
 }
 
-impl<M> std::fmt::Debug for Terminal<M> where M: std::fmt::Debug {
+impl<M> std::fmt::Debug for State<M> where M: std::fmt::Debug {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Terminal::InverseInclude(m) => f.write_str(&format!("In: {m:?}")),
-            Terminal::InverseExclude(m) => f.write_str(&format!("Ex: {m:?}")),
+            State::InverseInclude(m) => f.write_str(&format!("In: {m:?}")),
+            State::InverseExclude(m) => f.write_str(&format!("Ex: {m:?}")),
             Self::Include(m) => f.write_str(&format!("((In: {m:?}))")),
             Self::Exclude(m) => f.write_str(&format!("((Ex: {m:?}))")),
         }

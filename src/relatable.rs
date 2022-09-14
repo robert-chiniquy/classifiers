@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::ops::Add;
 
 use super::*;
 
@@ -33,7 +33,7 @@ where
         };
         // add a self-loop with a NotTokenSet of nothing
         dfa.add_transition(&1, &Element::NotTokenSet(BTreeSet::new()), &1);
-        dfa.add_state(&entry, Terminal::Include(m.clone()));
+        dfa.add_state(&entry, State::Include(m.clone()));
         dfa
     }
 
@@ -47,7 +47,7 @@ where
             transitions: Default::default(),
             states: Default::default(),
         };
-        dfa.add_state(&entry, Terminal::InverseInclude(m.clone()));
+        dfa.add_state(&entry, State::InverseInclude(m.clone()));
         dfa
     }
 
@@ -62,7 +62,7 @@ where
         dfa.add_transition(&vortex, &Element::universal(), &vortex);
         dfa.add_state(
             &CompoundId::from([vortex]),
-            Terminal::InverseInclude(m.clone()),
+            State::InverseInclude(m.clone()),
         );
 
         // Find the negative space of all existing edges from each source node
