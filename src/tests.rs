@@ -65,7 +65,7 @@ fn test_negate1() {
     d.simplify();
     d.graphviz_file("negation_negation.dot", "!!A*");
     let t = Element::token;
-    assert!(d.includes_path(&vec![t('A')]));
+    assert!(d.includes_path(&[t('A')]));
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn test_negate4() {
     let d = c.compile(&None);
 
     let t = Element::token;
-    assert!(!d.includes_path(&vec![t('A'), t('A')]));
+    assert!(!d.includes_path(&[t('A'), t('A')]));
 }
 
 #[test]
