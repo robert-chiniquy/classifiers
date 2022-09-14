@@ -57,7 +57,7 @@ where
     pub(super) symbols: BTreeSet<char>,
     // for a given element and source, there is only one outbound edge to a target
     // the Vec is here to collect NodeIds during construction?
-    pub(super) transitions: BTreeMap<Element, BTreeMap<CompoundId, Vec<CompoundId>>>,
+    pub(super) transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>>,
     // Any compound / product node may have several associated accepting states
     // propagated from the source graphs
     // example: if you have the same DFA with the same M, you have 2 copies,
@@ -361,40 +361,8 @@ where
     }
 
     fn build_dfa(&self) -> Self {
-        // let mut dfa: Nfa<NfaNode<()>, NfaEdge<Element>> = Default::default();
-        // let mut node_id_map: HashMap<CompoundId, NodeId> = Default::default();
-
-        // for id in self.ids() {
-        //     let states = self.states.get(&id).unwrap().clone();
-        //     let dfa_node_id = dfa.add_node(NfaNode {
-        //         state: states,
-        //     });
-        //     node_id_map.insert(id, dfa_node_id);
-        // }
-
-        // println!(
-        //     "symbols: {:?}\nnode id map {node_id_map:?}\ntransitions {:?}\nentry {:?}",
-        //     self.symbols, self.transitions, self.entry
-        // );
-
-        // // add edges after nodes exist
-        // for (c, transitions) in self.transitions.clone() {
-        //     for (from, tos) in transitions {
-        //         for to in tos {
-        //             dfa.add_edge(
-        //                 NfaEdge {
-        //                     criteria: c.clone(),
-        //                 },
-        //                 *node_id_map.get(&from).unwrap(),
-        //                 *node_id_map.get(&to).unwrap(),
-        //             );
-        //         }
-        //     }
-        // }
-
         let mut dfa = self.clone();
         dfa.simplify();
-
         dfa
     }
 
@@ -428,10 +396,12 @@ where
                 .entry(element.clone())
                 .and_modify(|t| {
                     t.entry(from.clone())
-                        .and_modify(|_from| _from.push(to.clone()))
-                        .or_insert_with(|| vec![to.clone()]);
+                        .and_modify(|_from| {
+                            _from.insert(to.clone());
+                        })
+                        .or_insert_with(|| BTreeSet::from([to.clone()]));
                 })
-                .or_insert_with(|| BTreeMap::from([(from.clone(), vec![to.clone()])]));
+                .or_insert_with(|| BTreeMap::from([(from.clone(), BTreeSet::from([to.clone()]))]));
         }
 
         // println!("after: {:?}", self.transitions);
@@ -446,14 +416,14 @@ where
 
     /// Consume self, return a new self
     pub(crate) fn offset_self(&mut self, offset: u32) {
-        let mut transitions: BTreeMap<Element, BTreeMap<CompoundId, Vec<CompoundId>>> =
+        let mut transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>> =
             Default::default();
 
         for (element, v) in &self.transitions {
             transitions.insert(element.clone(), Default::default());
             for (from, to) in v {
                 let from: CompoundId = from.iter().map(|id| *id + offset).collect();
-                let to: Vec<CompoundId> = to
+                let to: BTreeSet<CompoundId> = to
                     .iter()
                     .map(|vec| vec.iter().map(|id| *id + offset).collect())
                     .collect();
@@ -498,7 +468,7 @@ where
 
     pub(super) fn get_edges(&self) -> EdgeIndex {
         // Build a convenient map of edges indexed differently
-        let mut map: BTreeMap<CompoundId, BTreeMap<Element, Vec<CompoundId>>> = Default::default();
+        let mut map: BTreeMap<CompoundId, BTreeMap<Element, BTreeSet<CompoundId>>> = Default::default();
         for (element, edges) in &self.transitions {
             for (from, to) in edges {
                 map.entry(from.clone())
@@ -587,7 +557,7 @@ where
     }
 }
 
-pub(super) struct EdgeIndex(pub(crate) BTreeMap<CompoundId, BTreeMap<Element, Vec<CompoundId>>>);
+pub(super) struct EdgeIndex(pub(crate) BTreeMap<CompoundId, BTreeMap<Element, BTreeSet<CompoundId>>>);
 
 impl EdgeIndex {
     /// Return all CompoundIds which are in an accepting path

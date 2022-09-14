@@ -35,8 +35,6 @@ fn test_basic_classifier() {
 }
 
 
-
-
 impl<R> Classifier<R>
 where
     R: Relatable,
@@ -46,8 +44,8 @@ where
     {
         // 1. compile
         // 2. relate NFAs (product of NFAs, search terminal states)
-        let mut s: R = Classifier::compile(self, &None);
-        let mut o = Classifier::compile(other, &None);
+        let s: R = Classifier::compile(self, &None);
+        let o = Classifier::compile(other, &None);
 
         let (relation, _work) = s.relation(&o);
         relation
