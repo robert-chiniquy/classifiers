@@ -4,6 +4,85 @@ use std::vec;
 use super::*;
 
 #[test]
+fn test_negate() {
+    assert!(*TEST_SETUP);
+    // the set of P
+    // - accepts P
+    // - rejects not P
+    let cp = Classifier::<Dfa>::Literal("P".to_string(), None);
+    let _dp = cp.compile(&None);
+
+    // assert!(dp.accepts_string("P"));
+    todo!()
+}
+#[test]
+fn test_negate2() {
+    setup();
+    // // the set of all things excluding P
+    // // - accepts not P
+    // // - rejects P
+    let c = Classifier::not(Classifier::Literal::<Dfa>("P".to_string(), None));
+    let _d = c.compile(&None);
+    // assert!(!d.accepts_string("P"));
+    todo!()
+}
+
+#[test]
+fn test_simpler_intersection() {
+    let a = Classifier::<Dfa>::Literal("*b".to_string(), None);
+    let b = Classifier::Literal("*a".to_string(), None);
+    let c = Classifier::Any(BTreeSet::from_iter([a, b]));
+    let _d = c.compile(&None);
+
+    // todo!()
+}
+
+#[test]
+fn test_intersection() {
+    setup();
+
+    let astar = Classifier::<Dfa>::Literal("B*".to_string(), None);
+    let stara = Classifier::Literal("*A".to_string(), None);
+    let i = Classifier::And(BTreeSet::from_iter([astar, stara]));
+
+    let d = i.compile(&None);
+    assert!(!d.transitions.is_empty());
+    assert!(!d.states.is_empty());
+}
+
+#[test]
+fn test_negate1() {
+    test_setup();
+    let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
+        Classifier::<Dfa>::Literal("A*".to_string(), None),
+    ])));
+
+    let mut d = c.compile(&None);
+    d.simplify();
+    d.graphviz_file("negation.dot", "!A*");
+
+    d.negate(&None);
+    d.simplify();
+    d.graphviz_file("negation_negation.dot", "!!A*");
+    let t = Element::token;
+    assert!(d.includes_path(&vec![t('A')]));
+}
+
+#[test]
+fn test_negate4() {
+    test_setup();
+    let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
+        Classifier::<Dfa>::Literal("A*".to_string(), None),
+        Classifier::Literal("*A".to_string(), None),
+    ])));
+
+    let d = c.compile(&None);
+
+    let t = Element::token;
+    assert!(!d.includes_path(&vec![t('A'), t('A')]));
+}
+
+#[test]
 fn test_intersection_of_heterogenous_states() {
     // #![allow(unused)]
     // let everything_but_tacos = Classifier::And(BTreeSet::from_iter([
@@ -100,85 +179,6 @@ fn test_rejection() {
 
     // assert that u has 3 edges
     // assert_eq!(u.edges.len(), 3);
-}
-
-#[test]
-fn test_negate() {
-    assert!(*TEST_SETUP);
-    // the set of P
-    // - accepts P
-    // - rejects not P
-    let cp = Classifier::<Dfa>::Literal("P".to_string(), None);
-    let _dp = cp.compile(&None);
-
-    // assert!(dp.accepts_string("P"));
-    todo!()
-}
-#[test]
-fn test_negate2() {
-    setup();
-    // // the set of all things excluding P
-    // // - accepts not P
-    // // - rejects P
-    let c = Classifier::not(Classifier::Literal::<Dfa>("P".to_string(), None));
-    let _d = c.compile(&None);
-    // assert!(!d.accepts_string("P"));
-    todo!()
-}
-
-#[test]
-fn test_simpler_intersection() {
-    let a = Classifier::<Dfa>::Literal("*b".to_string(), None);
-    let b = Classifier::Literal("*a".to_string(), None);
-    let c = Classifier::Any(BTreeSet::from_iter([a, b]));
-    let _d = c.compile(&None);
-
-    // todo!()
-}
-
-#[test]
-fn test_intersection() {
-    setup();
-
-    let astar = Classifier::<Dfa>::Literal("B*".to_string(), None);
-    let stara = Classifier::Literal("*A".to_string(), None);
-    let i = Classifier::And(BTreeSet::from_iter([astar, stara]));
-
-    let d = i.compile(&None);
-    assert!(!d.transitions.is_empty());
-    assert!(!d.states.is_empty());
-}
-
-#[test]
-fn test_negate1() {
-    test_setup();
-    let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
-        Classifier::<Dfa>::Literal("A*".to_string(), None),
-    ])));
-
-    let mut d = c.compile(&None);
-    d.simplify();
-    d.graphviz_file("negation.dot", "!A*");
-
-    d.negate(&None);
-    d.simplify();
-    d.graphviz_file("negation_negation.dot", "!!A*");
-    let t = Element::token;
-    assert!(d.includes_path(&vec![t('A')]));
-}
-
-#[test]
-fn test_negate4() {
-    test_setup();
-    let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
-        Classifier::<Dfa>::Literal("A*".to_string(), None),
-        Classifier::Literal("*A".to_string(), None),
-    ])));
-
-    let d = c.compile(&None);
-
-    let t = Element::token;
-    assert!(!d.includes_path(&vec![t('A'), t('A')]));
 }
 
 #[allow(dead_code)]
