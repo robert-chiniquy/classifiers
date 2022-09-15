@@ -558,8 +558,10 @@ where
             self.transitions.remove(&e);
         }
 
+        let flat_ids = self.ids().into_iter().flatten().collect::<BTreeSet<NodeId>>();
+
         // removing states may invalidate future operations on this dfa
-        // self.states.retain(|k, _v| alive.contains(k));
+        self.states.retain(|k, _v| alive.contains(k) || (k & &flat_ids).len() > 0);
     }
 
     /// Removes and simplifies unnecessary nodes and edges
