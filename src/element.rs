@@ -169,17 +169,30 @@ impl std::fmt::Display for Element {
             "{}",
             match self {
                 Element::NotTokenSet(v) => {
-                    if v.len() == 1 {
-                        format!("!{}", v.iter().next().unwrap())
-                    } else {
-                        format!("!`{v:?}`")
+                    match v.len() {
+                        0 => {
+                            format!("*")
+                        }
+                        1 => {
+                            format!("!{}", v.iter().next().unwrap())
+                        }
+                        _ => {
+                            format!("!`{v:?}`")
+                        }
                     }
+
                 }
                 Element::TokenSet(v) => {
-                    if v.len() == 1 {
-                        format!("{}", v.iter().next().unwrap())
-                    } else {
-                        format!("`{v:?}`")
+                    match v.len() {
+                        0 => {
+                            format!("Ø")
+                        }
+                        1 => {
+                            format!("{}", v.iter().next().unwrap())
+                        }
+                        _ => {
+                            format!("`{v:?}`")
+                        }
                     }
                 }
             }

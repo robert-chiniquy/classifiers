@@ -38,7 +38,7 @@ where
             // TODO: prove out negation for exclusion rather than just as complementation
             // (Complementation can be expressed with purely Includes,
             // and remains as a possible semantics for Not)
-            Classifier::Not(c) => Classifier::compile(c, m).negate(),
+            Classifier::Not(c) => Classifier::compile(c, m).complement(m),
             Classifier::Or(v) => {
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {

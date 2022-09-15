@@ -88,14 +88,18 @@ where
         let mut dfa = self.clone();
         dfa.simplify();
 
-        let vortex = self.ids().iter().flatten().max().unwrap_or(&0) + 1;
-        dfa.add_transition_with_state(&vortex, &Element::universal(), &vortex, &State::InverseInclude(m.clone()));
+        let vortex_id = self.ids().iter().flatten().max().unwrap_or(&0) + 1;
+        dfa.add_transition_with_state(&vortex_id, &Element::universal(), &vortex_id, &State::InverseInclude(m.clone()));
+        let vortex = &UnionedId::from([vortex_id]);
         
         // Find the negative space of all existing edges from each source node
+        let mut no_edges = self.ids();
         for (source, edges) in self.get_edges().0 {
+            no_edges.remove(&source);
+
             if edges.is_empty() {
                 #[allow(deprecated)]
-                dfa.add_transition2(&source, &Element::universal(), &UnionedId::from([vortex]));
+                dfa.add_transition2(&source, &Element::universal(), vortex);
                 continue;
             }
             let sum: Element = edges.iter().map(|(element, _)| element).cloned().sum();
@@ -107,14 +111,18 @@ where
                 Element::TokenSet(s) => {
                     if !s.is_empty() {
                         #[allow(deprecated)]
-                        dfa.add_transition2(&source, &d, &UnionedId::from([vortex]));
+                        dfa.add_transition2(&source, &d, vortex);
                     }
                 }
                 Element::NotTokenSet(_) => {
                     #[allow(deprecated)]
-                    dfa.add_transition2(&source, &d, &UnionedId::from([vortex]));
+                    dfa.add_transition2(&source, &d, vortex);
                 }
             }
+        }
+
+        for id in no_edges {
+            dfa.add_transition2(&id, &Element::universal(), vortex);
         }
 
         dfa.states = dfa

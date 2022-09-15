@@ -101,13 +101,17 @@ fn test_literal() {
 }
 
 #[test]
-fn test_complement() {
+fn test_complement_simple() {
     test_setup();
     // the set of all things excluding P
     // - accepts not P
     // - rejects P
     let c: Classifier = Classifier::Literal("P".to_string(), None);
-    let d: Dfa = c.compile(&None).complement(&None);
+    let mut d: Dfa = c.compile(&None);
+    d.graphviz_file("complement1.dot", "complement1.dot");
+    d = d.complement(&None);
+    d.simplify();
+    d.graphviz_file("complement2.dot", "complement2.dot");
     assert!(!d.includes_string("P"));
     assert!(d.includes_string("Pffffft"));
 }
@@ -196,23 +200,23 @@ fn test_complement1() {
     assert!(!d.includes_string("A"));
 }
 
-#[test]
-fn test_negate() {
-    test_setup();
-    let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
-        Classifier::<Dfa>::Literal("A*".to_string(), None),
-        Classifier::Literal("*A".to_string(), None),
-    ])));
+// #[test]
+// fn test_negate() {
+//     test_setup();
+//     let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
+//         Classifier::<Dfa>::Literal("A*".to_string(), None),
+//         Classifier::Literal("*A".to_string(), None),
+//     ])));
 
-    let mut d = c.compile(&None);
-    d.simplify();
-    d.graphviz_file("negate4.dot", "negate4.dot");
+//     let mut d = c.compile(&None);
+//     d.simplify();
+//     d.graphviz_file("negate4.dot", "negate4.dot");
 
-    assert!(!d.includes_string("A"));
-    assert!(!d.includes_string("AA"));
-    assert!(!d.excludes_string("A"));
-    assert!(d.excludes_string("AA"));
-}
+//     assert!(!d.includes_string("A"));
+//     assert!(!d.includes_string("AA"));
+//     assert!(!d.excludes_string("A"));
+//     assert!(d.excludes_string("AA"));
+// }
 
 #[test]
 fn test_intersection_of_heterogenous_states() {
