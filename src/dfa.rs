@@ -512,11 +512,12 @@ where
 
                 let mut states = Default::default();
                 for id in &unioned_transitions {
-                    let s = self.states.get(&CompoundId::from([*id]));
-                    if s.is_none() {
-                        panic!("missing state: {:?}\n{:?}", id, self.states);
-                    }
-                    states = &states | s.unwrap();
+                    let s = self
+                        .states
+                        .get(&CompoundId::from([*id]))
+                        .unwrap_or_else(|| panic!("missing state: {:?}\n{:?}", id, self.states));
+
+                    states = &states | s;
                 }
                 self.add_states(&unioned_transitions, states);
 

@@ -37,7 +37,8 @@ where
             Classifier::Universal => R::universal(m),
             Classifier::Literal(l, m) => R::from_language(l, m),
             // TODO: prove out negation for exclusion rather than just as complementation
-            // (Complementation can be expressed with purely Includes)
+            // (Complementation can be expressed with purely Includes,
+            // and remains as a possible semantics for Not)
             Classifier::Not(c) => Classifier::compile(c, m).negate(),
             Classifier::Any(v) => {
                 let mut items = v.iter();
