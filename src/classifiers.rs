@@ -73,6 +73,8 @@ where
         relation
     }
 
+    // TODO: simplify()
+
     #[tracing::instrument(skip_all)]
     pub fn not(c: Self) -> Self {
         Classifier::Not(Box::new(c))
