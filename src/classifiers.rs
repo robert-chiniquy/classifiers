@@ -25,8 +25,11 @@ pub enum Classifier<R = Dfa>
 where
     R: Relatable,
 {
+    /// Includes all things in the domain
     Universal,
+    /// Includes a single thing in the domain
     Literal(R::Language, Option<R::Metadata>),
+    /// Explicitly does not include anything included by a classifier
     Not(Box<Classifier<R>>),
     /// Union
     // TODO: rename to Or() ?
@@ -82,6 +85,8 @@ where
         match self {
             Classifier::Universal => R::universal(m),
             Classifier::Literal(l, m) => R::from_language(l, m),
+            // TODO: prove out negation for exclusion rather than just as complementation
+            // (Complementation can be expressed with purely Includes)
             Classifier::Not(c) => Classifier::compile(c, m).negate(),
             Classifier::Any(v) => {
                 let mut items = v.iter();

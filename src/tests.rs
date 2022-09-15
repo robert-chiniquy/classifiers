@@ -21,6 +21,7 @@ fn test_complement() {
     let c: Classifier = Classifier::Literal("P".to_string(), None);
     let d: Dfa = c.compile(&None).complement(&None);
     assert!(!d.includes_string("P"));
+    assert!(d.includes_string("Pffffft"));
 }
 
 #[test]
@@ -69,27 +70,27 @@ fn test_intersection() {
 }
 
 #[test]
-fn test_negate1() {
+fn test_complement1() {
     test_setup();
 
     let c = Classifier::<Dfa>::Literal("A*".to_string(), None);
     let mut d = c.compile(&None);
     d.simplify();
-    d.graphviz_file("negation1.dot", "A*");
+    d.graphviz_file("complement1.dot", "A*");
 
     d = d.complement(&None);
     d.simplify();
-    d.graphviz_file("negation2.dot", "!A*");
+    d.graphviz_file("complement2.dot", "!A*");
     assert!(d.includes_string("A"));
 
     d = d.complement(&None);
     d.simplify();
-    d.graphviz_file("negation3.dot", "!!A*");
+    d.graphviz_file("complement3.dot", "!!A*");
     assert!(!d.includes_string("A"));
 }
 
 #[test]
-fn test_negate4() {
+fn test_negate() {
     test_setup();
     let c = Classifier::not(Classifier::And(BTreeSet::from_iter([
         Classifier::<Dfa>::Literal("A*".to_string(), None),
@@ -102,6 +103,8 @@ fn test_negate4() {
 
     assert!(!d.includes_string("A"));
     assert!(!d.includes_string("AA"));
+    assert!(!d.excludes_string("A"));
+    assert!(d.excludes_string("AA"));
 }
 
 #[test]
