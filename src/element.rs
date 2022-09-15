@@ -46,9 +46,6 @@ impl ElementalLanguage<Element> for Element {
             (TokenSet(x), NotTokenSet(y)) => {
                 // remove from x any value which is not in y
                 TokenSet(x & y)
-                // let mut x = x.clone();
-                // x.retain(|c| y.contains(c));
-                // TokenSet(x).simplify()
             }
             (NotTokenSet(x), TokenSet(y)) => {
                 // !a!b abc
@@ -67,9 +64,6 @@ impl ElementalLanguage<Element> for Element {
 
                 //  !a - !c = c (b,c,d... - a,b,d.. = c)
                 TokenSet(y - x)
-                // let mut x = x.clone();
-                // x.retain(|c| !y.contains(c));
-                // NotTokenSet(x).simplify()
             }
         }
     }

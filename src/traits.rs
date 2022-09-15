@@ -42,7 +42,6 @@ where
     fn universal() -> Self;
 }
 
-/// E: Accepts<L> implies a C: Into<E> and L: IntoIterator<Item = C>
 pub trait Accepts<E> {
     fn accepts(&self, l: &E) -> bool;
 }

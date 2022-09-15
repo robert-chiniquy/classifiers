@@ -186,7 +186,7 @@ where
             prior = current;
         }
 
-        println!("states: {:?}", builder.states);
+        // println!("states: {:?}", builder.states);
         builder.add_state(&UnionedId::from([prior]), State::Include(m.clone()));
 
         // convert the NFA to a DFA
@@ -733,6 +733,7 @@ where
     }
 
     /// Return true if there are no overlapping edges out of a given node
+    ///  and a state for every id
     #[tracing::instrument(skip(self))]
     pub fn is_consistent(&self) -> bool {
         for (s, edges) in self.get_edges().0 {
@@ -749,7 +750,6 @@ where
             }
         }
 
-        // TODO: assert also that every node id in a transition is also represented in self.states
         for id in self.ids() {
             if self.states.get(&id).is_none() {
                 print!("missing state for id: {id:?} {self:#?}");

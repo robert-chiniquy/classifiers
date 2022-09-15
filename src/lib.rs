@@ -19,22 +19,6 @@ pub use utilities::*;
 
 use std::collections::BTreeSet;
 
-// #[derive(Debug)]
-// pub enum GeneralError {
-//     Error(String),
-// }
-
-// impl From<String> for GeneralError {
-//     fn from(s: String) -> Self {
-//         GeneralError::Error(s)
-//     }
-// }
-
-// impl std::fmt::Display for GeneralError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.write_str(&format!("{:?}", self))
-//     }
-// }
 
 mod utilities {
     #![allow(dead_code)]
