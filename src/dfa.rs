@@ -79,6 +79,15 @@ fn test_from_language_simple() {
     assert!(fstarfstar.is_consistent());
     assert_eq!(accepting_states.len(), 1, "too many states: {accepting_states:?}");
 
+
+
+    let mut abcdefg = Dfa::<()>::from_language("a*abcdefg&&".to_string().chars().collect(), &None);
+    abcdefg.simplify();
+    abcdefg.graphviz_file("abcdefg.dot", "a*abcdefg&&");
+
+    let accepting_states = abcdefg.accepting_states();
+    assert!(abcdefg.is_consistent());
+    assert_eq!(accepting_states.len(), 1, "too many states: {accepting_states:?}");
     // assert!(!astar.includes_path(&[Element::token('a')]));
     // assert!(astar.includes_path(&[Element::token('a'), Element::token('a')]));
 }
@@ -121,7 +130,7 @@ where
         // construct an NFA (with or without epsilons is the same)
         for (i, c) in l.iter().enumerate() {
             let current = prior + 1;
-            let s = if i == l.len() {
+            let s = if i == l.len() - 1 {
                 State::Include(m.clone())
             } else {
                 State::InverseInclude(m.clone())
@@ -151,7 +160,7 @@ where
 
                     // builder.add_state(&source, State::InverseInclude(m.clone()));
                     // builder.add_state(&target, s);
-                    builder.add_state(&CompoundId::from([current]), State::Include(m.clone()));
+                    builder.add_state(&CompoundId::from([current]), s.clone());
                     for c in &positives {
                         builder.add_transition2_with_states(
                             &source,
@@ -180,7 +189,8 @@ where
             prior = current;
         }
 
-        // builder.add_state(&CompoundId::from([prior]), State::Include(m.clone()));
+        println!("states: {:?}", builder.states);
+        builder.add_state(&CompoundId::from([prior]), State::Include(m.clone()));
         // convert the NFA to a DFA
         builder.powerset_construction(stack);
         builder
@@ -296,6 +306,9 @@ where
     /// Sets an entry as the product of entries
     #[tracing::instrument(skip_all)]
     pub(crate) fn construct_product(a: &Self, b: &mut Self) -> Self {
+        debug_assert!(a.is_consistent(), "{a:?}");
+        debug_assert!(b.is_consistent(), "{b:?}");
+
         let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
 
         let mut elements: BTreeSet<Element> = symbols.iter().map(|c| c.into()).collect();
@@ -315,7 +328,7 @@ where
         
         let mut transitions = a.transitions.clone();
         transitions.extend(b.transitions.clone().into_iter());
-
+        println!("a states: {:?}\nb states: {:?}\nboth: {:?}", a.states, b.states, accepting_states.clone());
         let mut product = Self {
             symbols,
             elements,
@@ -545,7 +558,8 @@ where
             self.transitions.remove(&e);
         }
 
-        self.states.retain(|k, _v| alive.contains(k));
+        // removing states may invalidate future operations on this dfa
+        // self.states.retain(|k, _v| alive.contains(k));
     }
 
     /// Removes and simplifies unnecessary nodes and edges
@@ -685,7 +699,6 @@ where
     }
 
     /// Return true if there are no overlapping edges out of a given node
-    #[cfg(test)]
     #[tracing::instrument(skip(self))]
     pub fn is_consistent(&self) -> bool {
         for (s, edges) in self.get_edges().0 {
