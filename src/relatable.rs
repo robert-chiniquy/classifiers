@@ -3,36 +3,36 @@ use super::*;
 #[test]
 fn test_relation() {
     let mut inputs = [
-        ("*", "", Relation::Disjoint),
-        ("*b", "*", Relation::Subset),
-        ("*", "*", Relation::Equality),
-        ("f*", "*", Relation::Subset),
-        ("a*", "a", Relation::Disjoint),
-        ("a", "a*", Relation::Disjoint),
-        ("**", "*?*", Relation::Superset),
-        ("**", "*f", Relation::Superset), // nb
-        ("aab", "a?", Relation::Disjoint),
-        ("?", "*", Relation::Subset),
-        ("??", "*", Relation::Subset),
-        ("*", "f*", Relation::Superset),
-        ("**", "*f*", Relation::Superset),
-        ("a", "*", Relation::Subset),
-        ("*", "a", Relation::Superset),
-        ("a*", "*a", Relation::Intersection),
-        ("a", "a", Relation::Equality),
-        ("aa", "a", Relation::Disjoint),
-        ("a", "aa", Relation::Disjoint),
-        ("a*b*z", "a*c*z", Relation::Intersection),
-        ("a", "a*b", Relation::Disjoint),
-        ("a*b", "a:b", Relation::Disjoint),
-        ("*f", "f*f", Relation::Superset),
-        ("f*f", "*f", Relation::Subset),
-        ("*f*", "*f*", Relation::Equality),
-        ("*f*", "f*f*", Relation::Superset),
-        ("f*f*", "*f*", Relation::Subset),
-        ("asdf*f**", "*f*", Relation::Subset),
-        ("*?*", "***", Relation::Equality),
-        ("asdf*f*", "*&f*", Relation::Intersection), // asdfafa
+        // ("*", "", Relation::Disjoint),
+        // ("*b", "*", Relation::Subset),
+        // ("*", "*", Relation::Equality),
+        // ("f*", "*", Relation::Subset),
+        // ("a*", "a", Relation::Disjoint),
+        // ("a", "a*", Relation::Disjoint),
+        // ("**", "*?*", Relation::Superset),
+        // ("**", "*f", Relation::Superset), // nb
+        // ("aab", "a?", Relation::Disjoint),
+        // ("?", "*", Relation::Subset),
+        // ("??", "*", Relation::Subset),
+        // ("*", "f*", Relation::Superset),
+        // ("**", "*f*", Relation::Superset),
+        // ("a", "*", Relation::Subset),
+        // ("*", "a", Relation::Superset),
+        // ("a*", "*a", Relation::Intersection),
+        // ("a", "a", Relation::Equality),
+        // ("aa", "a", Relation::Disjoint),
+        // ("a", "aa", Relation::Disjoint),
+        // ("a*b*z", "a*c*z", Relation::Intersection),
+        // ("a", "a*b", Relation::Disjoint),
+        // ("a*b", "a:b", Relation::Disjoint),
+        // ("*f", "f*f", Relation::Superset),
+        // ("f*f", "*f", Relation::Subset),
+        // ("*f*", "*f*", Relation::Equality),
+        // ("*f*", "f*f*", Relation::Superset),
+        // ("f*f*", "*f*", Relation::Subset),
+        // ("asdf*f**", "*f*", Relation::Subset),
+        // ("*?*", "***", Relation::Equality),
+        ("f*f*", "*&f*", Relation::Intersection), // asdfafa
     ];
 
     inputs.reverse();
@@ -43,8 +43,8 @@ fn test_relation() {
         let mut da = Classifier::<Dfa>::Literal(a.to_string(), None).compile(&None);
         let mut db = Classifier::<Dfa>::Literal(b.to_string(), None).compile(&None);
 
-        // da.simplify();
-        // db.simplify();
+        da.simplify();
+        db.simplify();
 
         println!("\n\n🐥🐥🐥🐥🐥🐥🐥 {a} {b}\n\n");
         assert!(da.is_consistent(), "failed on: {a}");

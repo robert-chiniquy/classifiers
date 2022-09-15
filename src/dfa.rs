@@ -93,6 +93,24 @@ fn test_product() {
 
 #[test]
 fn test_from_language_simple() {
+    let mut star_amp = Dfa::<()>::from_language("*&f".to_string().chars().collect(), &None);
+    star_amp.simplify();
+    star_amp.graphviz_file("star_amp.dot", "*&f");
+
+    let accepting_states = star_amp.accepting_states();
+    assert!(star_amp.is_consistent());
+    assert_eq!(
+        accepting_states.len(),
+        1,
+        "too many states: {accepting_states:?}"
+    );
+    assert!(star_amp.includes_path(&[
+        Element::token('&'),
+        Element::token('&'),
+        Element::token('f'),
+        // Element::token('&')
+    ]));
+
     let mut starb = Dfa::<()>::from_language("*B".to_string().chars().collect(), &None);
     starb.simplify();
     starb.graphviz_file("starB.dot", "*B");
@@ -126,6 +144,21 @@ fn test_from_language_simple() {
     );
     assert!(!astar.includes_path(&[Element::token('a')]));
     assert!(astar.includes_path(&[Element::token('a'), Element::token('a')]));
+
+    let mut fstarfstar = Dfa::<()>::from_language("f*f*".to_string().chars().collect(), &None);
+    fstarfstar.simplify();
+    fstarfstar.graphviz_file("fstarfstar.dot", "f*f*");
+
+    let accepting_states = fstarfstar.accepting_states();
+    assert!(fstarfstar.is_consistent());
+    assert_eq!(
+        accepting_states.len(),
+        1,
+        "too many states: {accepting_states:?}"
+    );
+
+    // assert!(!astar.includes_path(&[Element::token('a')]));
+    // assert!(astar.includes_path(&[Element::token('a'), Element::token('a')]));
 }
 
 impl<M> Dfa<M>
@@ -143,9 +176,10 @@ where
 
         builder.entry = CompoundId::from([prior]);
 
-        let positive_star = Element::TokenSet(&symbols - &BTreeSet::from([':']));
+        let positives = &symbols - &BTreeSet::from([':']);
         let negative_star = Element::NotTokenSet(&symbols | &BTreeSet::from([':']));
 
+        // println!("positive_star: {positive_star:?}, negative_star: {negative_star:?}");
         let mut stack: Vec<CompoundId> = Default::default();
         // construct an NFA (with or without epsilons is the same)
         for (i, c) in l.iter().enumerate() {
@@ -158,7 +192,10 @@ where
             match c {
                 '?' => {
                     // transition via all symbols from prior to current
-                    builder.add_transition(&prior, &positive_star, &current);
+                    for c in &positives {
+                        builder.add_transition(&prior, &Element::token(c.clone()), &current);
+                    }
+                    
                     builder.add_transition(&prior, &negative_star, &current);
                     builder.add_state(&CompoundId::from([prior]), s);
                 }
@@ -173,8 +210,13 @@ where
                     builder.add_state(&source, State::InverseInclude(m.clone()));
                     builder.add_state(&target, s);
 
-                    builder.add_transitions(&source, &positive_star, &target);
+                    for c in &positives {
+                        builder.add_transitions(&source, &Element::token(c.clone()), &target);
+                    }
+                    // builder.add_transitions(&source, &positive_star, &target);
+                    println!("yo1  transitions ({i}, {c}) : {:?}... tried to add: {source:?} {positives:?} {target:?}", builder.transitions);
                     builder.add_transitions(&source, &negative_star, &target);
+                    println!("yo2  transitions ({i}, {c}) : {:?}", builder.transitions);
                 }
                 c => {
                     // transition from prior to current via c
@@ -182,7 +224,7 @@ where
                     builder.add_state(&CompoundId::from([prior]), s);
                 }
             }
-
+            println!("transitions ({i}, {c}) : {:?}", builder.transitions);
             prior = current;
         }
 
@@ -490,16 +532,17 @@ where
 
                 let mut states = Default::default();
                 for id in &unioned_transitions {
-                    println!("id is: {id}");
-                    states = &states | self.states.get(&CompoundId::from([*id])).unwrap();
+                    let s = self.states.get(&CompoundId::from([*id]));
+                    if s.is_none() {
+                        panic!("missing state: {:?}\n{:?}", id, self.states);
+                    }
+                    states = &states | s.unwrap();
                 }
-                // self.add_states(&unioned_transitions, unioned_transitions.iter().flat_map(|t| self.accepting_states.get(&CompoundId::from([*t])).unwrap()).collect::<BTreeSet<_>>());
                 self.add_states(&unioned_transitions, states);
 
                 stack.push(unioned_transitions);
             }
         }
-        // println!("transitions: {:#?}", self.transitions);
     }
 
     pub(super) fn ids(&self) -> HashSet<CompoundId> {
@@ -542,22 +585,29 @@ where
 
     pub(super) fn add_transitions(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
         let mut no_e = true;
-        // println!("before: {:?}", self.transitions);
+        println!("before: {:?}", self.transitions);
         for element in &self.elements {
             if !e.accepts(element) {
                 continue;
             }
             no_e = false;
-            self.transitions
-                .entry(element.clone())
-                .or_default()
-                .entry(from.clone())
-                .or_default()
-                .insert(to.clone());
+            
+            if self.transitions.get(&element.clone()).is_none() {
+                self.transitions.insert(element.clone(), Default::default());
+            }
+
+            let e = self.transitions.get_mut(&element.clone()).unwrap();
+            if e.get(&from.clone()).is_none() {
+                e.insert(from.clone(), Default::default());
+            }
+
+            e.get_mut(&from).unwrap().insert(to.clone());
+            // ee.insert(to.clone());
         }
         if no_e {
             println!("did not add a transition for {from:?} -{e:?}-> {to:?}\n\n{self:?}")
         }
+        println!("after: {:?}", self.transitions);
     }
 
     /// This function assumes a CompoundId of only {from} and {to} respectively!
