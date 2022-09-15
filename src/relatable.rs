@@ -1,13 +1,86 @@
 use super::*;
 
+#[test]
+fn test_relation() {
+    let mut inputs = [
+        ("*b", "*", Relation::Subset),
+        ("*", "*", Relation::Equality),
+        ("f*", "*", Relation::Subset),
+        ("a*", "a", Relation::Disjoint),
+        ("a", "a*", Relation::Disjoint),
+        ("**", "*?*", Relation::Superset),
+        ("**", "*f", Relation::Superset), // nb
+        ("*?*", "***", Relation::Subset),
+        ("aab", "a?", Relation::Disjoint),
+        ("?", "*", Relation::Subset),
+        ("??", "*", Relation::Subset),
+        ("*", "", Relation::Disjoint),
+        ("*", "f*", Relation::Superset),
+        ("**", "*f*", Relation::Superset),
+        ("a", "*", Relation::Subset),
+        ("*", "a", Relation::Superset),
+        ("a*", "*a", Relation::Intersection),
+        ("a", "a", Relation::Equality),
+        ("aa", "a", Relation::Disjoint),
+        ("a", "aa", Relation::Disjoint),
+        ("a*b*z", "a*c*z", Relation::Intersection),
+        ("a", "a*b", Relation::Disjoint),
+        ("a*b", "a:b", Relation::Disjoint),
+        ("*f", "f*f", Relation::Superset),
+        ("f*f", "*f", Relation::Subset),
+        ("*f*", "*f*", Relation::Equality),
+        ("*f*", "f*f*", Relation::Superset),
+        ("f*f*", "*f*", Relation::Subset),
+        ("asdf*f*", "*&f*", Relation::Subset),
+        ("asdf*f**", "*f*", Relation::Subset),
+    ];
+
+    inputs.reverse();
+
+    let mut fails = 0;
+    let mut results: Vec<_> = Default::default();
+    for (a, b, outcome) in inputs {
+        let mut da = Classifier::<Dfa>::Literal(a.to_string(), None).compile(&None);
+        let mut db = Classifier::<Dfa>::Literal(b.to_string(), None).compile(&None);
+
+        // da.simplify();
+        // db.simplify();
+
+        println!("\n\n🐥🐥🐥🐥🐥🐥🐥 {a} {b}\n\n");
+        assert!(da.is_consistent(), "failed on: {a}");
+        assert!(db.is_consistent(), "failed on: {b}");
+
+        let (dr, dp, l, r) = da.relation(&db);
+        results.push((da, db, a, b, outcome, dr, dp, l, r));
+    }
+
+    for (da, db, a, b, outcome, dr, dp, l, r) in results {
+        if dr != outcome {
+            println!(
+                "🌵🌵🌵🌵🌵🌵 {a} v. {b} {outcome} != {dr}\nl:{l:?}\nr:{r:?}\nda: {da:?}\ndb: {db:?}"
+            );
+            fails += 1;
+            dp.graphviz_file(
+                &format!(
+                    "product-{}_{}.dot",
+                    a.replace('*', "_"),
+                    b.replace('*', "_")
+                ),
+                &format!("{a} v. {b} {outcome} != {dr}"),
+            );
+            da.graphviz_file(&format!("single-{}.dot", a.replace('*', "_")), a);
+            db.graphviz_file(&format!("single-{}.dot", b.replace('*', "_")), b);
+        }
+    }
+    assert_eq!(fails, 0);
+}
+
 impl<M> Relatable for Dfa<M>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
     type Language = String;
-
     type Element = Element;
-
     type Metadata = M;
 
     fn from_language(l: &Self::Language, m: &Option<Self::Metadata>) -> Self {
@@ -15,10 +88,41 @@ where
         dfa
     }
 
-    fn relation(&self, other: &Self) -> (Relation, Self) {
-        let _product = Dfa::product(self, other);
+    fn relation(
+        &self,
+        other: &Self,
+    ) -> (Relation, Self, BTreeSet<CompoundId>, BTreeSet<CompoundId>) {
+        let mut left_ids: BTreeSet<_> = Default::default();
+        let mut right_ids: BTreeSet<_> = Default::default();
 
-        todo!()
+        let by_product = Dfa::painting_product(self, other, &mut |id, l, r| {
+            if !l.is_empty() {
+                left_ids.insert(id.clone());
+            }
+            if !r.is_empty() {
+                right_ids.insert(id.clone());
+            }
+            // TODO: if we want by_product to be useful, make that happen here
+            &l | &r
+            // Default::default()
+        });
+
+        (
+            if left_ids == right_ids {
+                Relation::Equality
+            } else if left_ids.is_disjoint(&right_ids) {
+                Relation::Disjoint
+            } else if left_ids.is_superset(&right_ids) {
+                Relation::Superset
+            } else if left_ids.is_subset(&right_ids) {
+                Relation::Subset
+            } else {
+                Relation::Intersection
+            },
+            by_product,
+            left_ids,
+            right_ids,
+        )
     }
 
     fn universal(m: &Option<Self::Metadata>) -> Self {

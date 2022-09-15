@@ -13,7 +13,10 @@ pub trait Relatable: std::fmt::Debug + Clone + PartialOrd + Ord {
     // TODO(soon): Determine how to re-use the data computed in relation()
     /// Produces a Relation describing self v other
     /// as well as a re-usable Relatable capturing the relationship
-    fn relation(&self, other: &Self) -> (Relation, Self);
+    fn relation(
+        &self,
+        other: &Self,
+    ) -> (Relation, Self, BTreeSet<CompoundId>, BTreeSet<CompoundId>);
 
     fn union(&self, other: &Self) -> Self;
     fn intersection(&self, other: &Self) -> Self;

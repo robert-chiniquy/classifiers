@@ -42,10 +42,10 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            State::InverseInclude(m) => f.write_str(&format!("in: {m:?}")),
-            State::InverseExclude(m) => f.write_str(&format!("ex: {m:?}")),
-            Self::Include(m) => f.write_str(&format!("(In: {m:?})")),
-            Self::Exclude(m) => f.write_str(&format!("(Ex: {m:?})")),
+            State::InverseInclude(m) => f.write_str(&format!("vin: {m:?}")),
+            State::InverseExclude(m) => f.write_str(&format!("vex: {m:?}")),
+            Self::Include(m) => f.write_str(&format!("In: {m:?}")),
+            Self::Exclude(m) => f.write_str(&format!("Ex: {m:?}")),
         }
     }
 }

@@ -98,7 +98,34 @@ fn test_from_language_simple() {
     starb.graphviz_file("starB.dot", "*B");
 
     assert!(starb.is_consistent());
+    let accepting_states = starb.accepting_states();
+    assert_eq!(
+        accepting_states.len(),
+        1,
+        "too many states: {accepting_states:?}"
+    );
+    starb.graphviz_file("bbb-starb.dot", "starb");
+    assert!(!starb.includes_path(&[Element::token('B')]));
+    assert!(
+        starb.includes_path(&[Element::token('B'), Element::token('B')]),
+        "bad starb :( {starb:#?}"
+    );
+
     // starb.simplify();
+
+    let mut astar = Dfa::<()>::from_language("a*".to_string().chars().collect(), &None);
+    astar.simplify();
+    astar.graphviz_file("astar.dot", "a*");
+
+    let accepting_states = astar.accepting_states();
+    assert!(astar.is_consistent());
+    assert_eq!(
+        accepting_states.len(),
+        1,
+        "too many states: {accepting_states:?}"
+    );
+    assert!(!astar.includes_path(&[Element::token('a')]));
+    assert!(astar.includes_path(&[Element::token('a'), Element::token('a')]));
 }
 
 impl<M> Dfa<M>
@@ -121,20 +148,30 @@ where
 
         let mut stack: Vec<CompoundId> = Default::default();
         // construct an NFA (with or without epsilons is the same)
-        for c in &l {
+        for (i, c) in l.iter().enumerate() {
             let current = prior + 1;
-
+            let s = if i == l.len() {
+                State::Include(m.clone())
+            } else {
+                State::InverseInclude(m.clone())
+            };
             match c {
                 '?' => {
                     // transition via all symbols from prior to current
                     builder.add_transition(&prior, &positive_star, &current);
                     builder.add_transition(&prior, &negative_star, &current);
+                    builder.add_state(&CompoundId::from([prior]), s);
                 }
                 '*' => {
                     // self loop/advance
                     let source = CompoundId::from([prior]);
                     let target = CompoundId::from([prior, current]);
+
+                    // unioned id goes on the stack to expand...
                     stack.push(target.clone());
+
+                    builder.add_state(&source, State::InverseInclude(m.clone()));
+                    builder.add_state(&target, s);
 
                     builder.add_transitions(&source, &positive_star, &target);
                     builder.add_transitions(&source, &negative_star, &target);
@@ -142,20 +179,26 @@ where
                 c => {
                     // transition from prior to current via c
                     builder.add_transition(&prior, &c.into(), &current);
+                    builder.add_state(&CompoundId::from([prior]), s);
                 }
             }
+
             prior = current;
         }
 
-        for i in 0..prior {
-            builder.add_state(&CompoundId::from([i]), State::InverseInclude(m.clone()));
-        }
         builder.add_state(&CompoundId::from([prior]), State::Include(m.clone()));
         // convert the NFA to a DFA
         builder.powerset_construction(stack);
         builder
     }
 
+    pub fn accepting_states(&self) -> BTreeMap<CompoundId, BTreeSet<State<M>>> {
+        self.states
+            .clone()
+            .into_iter()
+            .filter(|(_id, states)| states.iter().any(|s| s.accepting()))
+            .collect::<BTreeMap<_, _>>()
+    }
     /// Calling this method requires setting accepting states externally
     pub fn new(symbols: BTreeSet<char>) -> Self {
         let mut elements: BTreeSet<Element> = symbols.iter().map(|s| s.into()).collect();
@@ -248,6 +291,7 @@ where
     }
 
     // TODO: why make b mutable?
+    /// Sets an entry as the product of entries
     pub(crate) fn construct_product(a: &Self, b: &mut Self) -> Self {
         let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
 
@@ -259,7 +303,7 @@ where
         b.write_into_language(&elements);
         // let a = a.rewrite_with_symbols(symbols);
 
-        let offset = a.ids().iter().flatten().max().unwrap_or(&1) + 1;
+        let offset = a.ids().iter().flatten().max().unwrap_or(&1) + 10;
         b.offset_self(offset);
 
         // Combining the accepting states requires that any offset must already have occurred
@@ -321,8 +365,7 @@ where
     }
 
     pub fn intersect(a: &Self, b: &Self) -> Self {
-        let mut b = b.clone();
-        Self::painting_product(a, &mut b, &mut |a_states, b_states| {
+        Self::painting_product(a, b, &mut |_, a_states, b_states| {
             // the intersection requires that accepting states only be propagated
             // when the states are accepting on both sides
             if a_states.is_empty() || b_states.is_empty() {
@@ -336,11 +379,16 @@ where
     /// Receives a closure which can optionally paint all states, paint only intersecting states, or whatever
     pub(super) fn painting_product(
         a: &Self,
-        b: &mut Self,
-        painter: &mut impl Fn(BTreeSet<State<M>>, BTreeSet<State<M>>) -> BTreeSet<State<M>>,
+        b: &Self,
+        painter: &mut impl FnMut(
+            &CompoundId,
+            BTreeSet<State<M>>,
+            BTreeSet<State<M>>,
+        ) -> BTreeSet<State<M>>,
     ) -> Self {
-        let mut product = Self::construct_product(a, b);
-
+        let mut b = b.clone();
+        let mut product = Self::construct_product(a, &mut b);
+        product.simplify();
         product.states = Default::default();
 
         let accepting_left = a
@@ -375,16 +423,16 @@ where
             .filter(|(_, v)| !v.is_empty())
             .collect::<BTreeMap<CompoundId, BTreeSet<State<M>>>>();
 
-        println!("a accepts:\n{:?}\nal: {:?}", a.states, accepting_left);
-        println!("b accepts:\n{:?}\nar: {:?}", b.states, accepting_right);
+        // println!("a accepts:\n{:?}\nal: {:?}", a.states, accepting_left);
+        // println!("b accepts:\n{:?}\nar: {:?}", b.states, accepting_right);
 
         for id in &product.ids() {
             let mut left: BTreeSet<State<M>> = Default::default();
             let mut right: BTreeSet<State<M>> = Default::default();
 
-            if let Some(states) = accepting_left.get(&id) {
+            if let Some(states) = accepting_left.get(id) {
                 left.extend(states.iter().filter(|s| s.accepting()).cloned());
-            } else if let Some(states) = accepting_right.get(&id) {
+            } else if let Some(states) = accepting_right.get(id) {
                 right.extend(states.iter().filter(|s| s.accepting()).cloned());
             }
 
@@ -396,19 +444,15 @@ where
                     right.extend(states.iter().filter(|s| s.accepting()).cloned());
                 }
             }
-            let all_states = painter(left, right);
+            let all_states = painter(id, left, right);
             if all_states.is_empty() {
                 continue;
             }
             product.add_states(id, all_states);
         }
 
-        println!("intersecting states: {:?}", product.states);
+        // println!("intersecting states: {:?}", product.states);
         product
-    }
-
-    pub fn find_compound_ids(&self) -> Vec<CompoundId> {
-        self.ids().iter().filter(|v| v.len() > 1).cloned().collect()
     }
 
     pub fn build(&mut self) -> Self {
@@ -421,11 +465,6 @@ where
     /// and rationalize transitions into a DFA
     /// see eg https://en.wikipedia.org/wiki/Powerset_construction
     fn powerset_construction(&mut self, mut stack: Vec<CompoundId>) {
-        // println!(
-        //     "🌮🌮🌮 the stack: {stack:?}\n🌮🌮🌮 transitions: {:?}\n\n",
-        //     self.transitions
-        // );
-
         let mut visited: HashSet<CompoundId> = Default::default();
 
         while let Some(compound_state) = stack.pop() {
@@ -451,6 +490,7 @@ where
 
                 let mut states = Default::default();
                 for id in &unioned_transitions {
+                    println!("id is: {id}");
                     states = &states | self.states.get(&CompoundId::from([*id])).unwrap();
                 }
                 // self.add_states(&unioned_transitions, unioned_transitions.iter().flat_map(|t| self.accepting_states.get(&CompoundId::from([*t])).unwrap()).collect::<BTreeSet<_>>());
@@ -515,10 +555,9 @@ where
                 .or_default()
                 .insert(to.clone());
         }
-        debug_assert!(
-            !no_e,
-            "did not add a transition for {from:?} -{e:?}-> {to:?}\n\n{self:?}"
-        );
+        if no_e {
+            println!("did not add a transition for {from:?} -{e:?}-> {to:?}\n\n{self:?}")
+        }
     }
 
     /// This function assumes a CompoundId of only {from} and {to} respectively!
@@ -595,6 +634,7 @@ where
 
     pub(crate) fn simplify(&mut self) {
         // TODO: simplify should re-map all ids to be non-compound (len 1)
+        // TODO: simplify can remove any empty TokenSet edge
         self.shake();
 
         let by_edge = self.get_edges().0;
@@ -645,7 +685,7 @@ where
 
     /// Return true if there are no overlapping edges out of a given node
     #[cfg(test)]
-    fn is_consistent(&self) -> bool {
+    pub fn is_consistent(&self) -> bool {
         for (s, edges) in self.get_edges().0 {
             for (i1, (e1, _)) in edges.clone().iter().enumerate() {
                 for (i2, (e2, _)) in edges.clone().iter().enumerate() {
@@ -657,6 +697,14 @@ where
                         return false;
                     }
                 }
+            }
+        }
+
+        // TODO: assert also that every node id in a transition is also represented in self.states
+        for id in self.ids() {
+            if self.states.get(&id).is_none() {
+                print!("missing state for id: {id:?} {self:#?}");
+                return false;
             }
         }
         true

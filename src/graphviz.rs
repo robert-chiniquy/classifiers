@@ -14,14 +14,14 @@ where
 
     #[tracing::instrument(skip_all)]
     pub fn graphviz(&self) -> String {
-        let mut ret = "".to_string();
+        let mut ret = format!("root = {};\n", nodename(&self.entry));
         for (element, edges) in &self.transitions {
             for (source, targets) in edges {
                 // ?
                 for target in targets {
                     ret = format!(
                         r#"{ret}
-                  {} -> {} [label="{}" fontsize="20pt"];"#,
+    {} -> {} [label="{}" fontsize="20pt"];"#,
                         nodename(source),
                         nodename(target),
                         element
@@ -37,7 +37,7 @@ where
             };
             ret = format!(
                 r#"{ret}
-  {} [label="{}", shape="{}"]"#,
+    {} [label="{}", shape="{}"]"#,
                 nodename(id),
                 nodelabel,
                 match self

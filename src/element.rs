@@ -58,7 +58,6 @@ impl From<&char> for Element {
     }
 }
 
-
 #[test]
 fn test_accepts() {
     let a = Element::not_tokens(&['a', ':']);
@@ -79,7 +78,7 @@ impl Accepts<Element> for Element {
             }
             (NotTokenSet(x), TokenSet(y)) => x.is_disjoint(y),
             (NotTokenSet(x), NotTokenSet(y)) => x.is_subset(y),
-            _ => false
+            _ => false,
         }
     }
 }
@@ -125,19 +124,21 @@ impl std::fmt::Display for Element {
     }
 }
 
-
 impl std::iter::Sum for Element {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Element::TokenSet(Default::default()), |acc, cur| Element::add(acc, cur.clone()))
+        iter.fold(Element::TokenSet(Default::default()), |acc, cur| {
+            Element::add(acc, cur)
+        })
     }
 }
 
 impl<'a> std::iter::Sum<&'a Element> for Element {
     fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
-        iter.fold(Element::TokenSet(Default::default()), |acc, cur| Element::add(acc, cur.clone()))
+        iter.fold(Element::TokenSet(Default::default()), |acc, cur| {
+            Element::add(acc, cur.clone())
+        })
     }
 }
-
 
 #[test]
 fn test_sum() {
@@ -156,7 +157,6 @@ fn test_sum() {
 
     let e: Element = vec![nt('a'), nt('a')].iter().sum();
     assert_eq!(e, Element::not_tokens(&['a']));
-
 
     let e: Element = vec![nt('a'), nts(&['a', 'b'])].iter().sum();
     assert_eq!(e, Element::not_tokens(&['a']));
