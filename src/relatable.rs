@@ -136,7 +136,7 @@ where
 
     #[tracing::instrument(skip_all)]
     fn union(&self, other: &Self) -> Self {
-        let mut p = Dfa::construct_product(self, &mut other.clone());
+        let mut p = Dfa::product(self, &mut other.clone());
         p.simplify();
         p
     }

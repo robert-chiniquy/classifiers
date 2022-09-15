@@ -304,7 +304,7 @@ where
     // FIXME: why make b mutable?
     /// Sets an entry as the product of entries
     #[tracing::instrument(skip_all)]
-    pub(crate) fn construct_product(a: &Self, b: &mut Self) -> Self {
+    pub(crate) fn product(a: &Self, b: &mut Self) -> Self {
         debug_assert!(a.is_consistent(), "{a:?}");
         debug_assert!(b.is_consistent(), "{b:?}");
 
@@ -404,7 +404,7 @@ where
         ) -> BTreeSet<State<M>>,
     ) -> Self {
         let mut b = b.clone();
-        let mut product = Self::construct_product(a, &mut b);
+        let mut product = Self::product(a, &mut b);
         product.simplify();
         product.states = Default::default();
 
