@@ -341,5 +341,4 @@ fn test_from_language_simple() {
     abcdefg.simplify();
     abcdefg.graphviz_file("abcdefg.dot", "a*abcdefg&&");
     assert!(abcdefg.is_consistent());
-
 }

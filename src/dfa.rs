@@ -266,31 +266,31 @@ where
 
         let mut transitions = a.transitions.clone();
         for (e, targets) in &b.transitions {
-            let thing = transitions.entry(e.clone()).or_default();
+            let t_targets = transitions.entry(e.clone()).or_default();
 
-            for (k, v) in targets {
-                thing.entry(k.clone()).or_default().extend(v.clone());
+            for (id, toos) in targets {
+                t_targets.entry(id.clone()).or_default().extend(toos.clone());
             }
         }
 
-        println!(
-            "a states: {:?}\nb states: {:?}\nboth: {:?}",
-            a.states,
-            b.states,
-            accepting_states.clone()
-        );
-        println!(
-            "a transitions: {:?}\nb transitions: {:?}\nboth: {:?}",
-            a.transitions,
-            b.transitions,
-            transitions.clone()
-        );
-        println!(
-            "a entry: {:?}\nb entry: {:?}\nboth: {:?}",
-            a.entry,
-            b.entry,
-            (&a.entry | &b.entry).clone()
-        );
+        // println!(
+        //     "a states: {:?}\nb states: {:?}\nboth: {:?}",
+        //     a.states,
+        //     b.states,
+        //     accepting_states.clone()
+        // );
+        // println!(
+        //     "a transitions: {:?}\nb transitions: {:?}\nboth: {:?}",
+        //     a.transitions,
+        //     b.transitions,
+        //     transitions.clone()
+        // );
+        // println!(
+        //     "a entry: {:?}\nb entry: {:?}\nboth: {:?}",
+        //     a.entry,
+        //     b.entry,
+        //     (&a.entry | &b.entry).clone()
+        // );
 
         let mut product = Self {
             symbols,
@@ -312,13 +312,16 @@ where
                     a_t.iter().for_each(|(a_from, a_toos)| {
                         b_t.iter().for_each(|(b_from, b_toos)| {
 
-                            let compound_id = a_from | b_from;
-                            stack.push(compound_id.clone());
+                            let uid = a_from | b_from;
+                            stack.push(uid.clone());
+
+                            let u_to = (a_toos | b_toos).into_iter().flatten().collect();
+
+                            let mut u_states: BTreeSet<State<M>> = Default::default();
+                            u_states.extend(a_toos.into_iter().map(|t| a.states.get(t).unwrap().clone()).flatten());
+                            u_states.extend(b_toos.into_iter().map(|t| b.states.get(t).unwrap().clone()).flatten());
                             
-                            let states = a.states.get(a_from).unwrap() | b.states.get(b_from).unwrap();
-                            let to = (a_toos | b_toos).into_iter().flatten().collect();
-                            
-                            product.add_transition2_with_states(&compound_id, &e.clone(), &to, &states);
+                            product.add_transition2_with_states(&uid, &e.clone(), &u_to, &u_states);
                         });
                     });
                 }
@@ -446,43 +449,45 @@ where
     /// 2,3,4 | 2,3 | 2,3   | 2,3  |
     #[tracing::instrument(skip(self))]
     fn powerset_construction(&mut self, mut stack: Vec<UnionedId>) {
-        // println!("🌮🌮🌮🌮🌮\nstack: {stack:?}\nt: {:?}", self.transitions);
+        // println!("🌮🌮🌮🌮🌮\nstack: {stack:?}\nt: {:?}\ns:{:?}", self.transitions, self.states);
         let mut visited: HashSet<UnionedId> = Default::default();
-        while let Some(compound_state) = stack.pop() {
-            if visited.contains(&compound_state) {
+
+        while let Some(uid) = stack.pop() {
+            if visited.contains(&uid) {
                 continue;
             }
-            visited.insert(compound_state.clone());
+            visited.insert(uid.clone());
 
             for (element, transitions) in self.transitions.clone() {
-                let mut unioned_transitions: UnionedId = Default::default();
-                for c in compound_state.clone() {
+                let mut u_transitions: UnionedId = Default::default();
+
+                for c in uid.clone() {
                     if let Some(toos) = transitions.get(&BTreeSet::from([c])) {
-                        unioned_transitions.extend(toos.iter().flatten());
+                        u_transitions.extend(toos.iter().flatten());
                     }
                 }
 
-                if unioned_transitions.is_empty() {
+                if u_transitions.is_empty() {
                     continue;
                 }
-                let mut states = Default::default();
-                for id in &unioned_transitions {
+
+                let mut u_states = Default::default();
+
+                for id in &u_transitions {
                     let s = self
                         .states
                         .get(&UnionedId::from([*id]))
                         .unwrap_or_else(|| panic!("missing state: {:?}\n{:?}", id, self.states));
 
-                    states = &states | s;
+                    u_states = &u_states | s;
                 }
-                self.add_transition2_with_states(
-                    &compound_state,
-                    &element,
-                    &unioned_transitions.clone(),
-                    &states,
-                );
-                stack.push(unioned_transitions);
+                // println!("state for {uid:?} -> {u_transitions:?}: {u_states:?}");
+                
+                stack.push(u_transitions.clone());
+                self.add_transition2_with_states(&uid, &element, &u_transitions, &u_states);
             }
         }
+        // println!("🌮🌮🌮🌮🌮\npost poweset\nt: {:?}\ns:{:?}", self.transitions, self.states);
     }
 
     /// Returns a map of node ids to their associated accepting states
