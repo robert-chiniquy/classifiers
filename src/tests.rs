@@ -2,27 +2,25 @@
 use super::*;
 
 #[test]
-fn test_negate() {
+fn test_literal() {
     test_setup();
     // the set of P
     // - accepts P
     // - rejects not P
-    let cp = Classifier::<Dfa>::Literal("P".to_string(), None);
-    let _dp = cp.compile(&None);
-
-    // assert!(dp.accepts_string("P"));
-    todo!()
+    let cp = Classifier::Literal("P".to_string(), None);
+    let dp: Dfa = cp.compile(&None);
+    assert!(dp.includes_string("P"));
 }
+
 #[test]
-fn test_negate2() {
+fn test_complement() {
     test_setup();
-    // // the set of all things excluding P
-    // // - accepts not P
-    // // - rejects P
-    let c = Classifier::not(Classifier::Literal::<Dfa>("P".to_string(), None));
-    let _d = c.compile(&None);
-    // assert!(!d.accepts_string("P"));
-    todo!()
+    // the set of all things excluding P
+    // - accepts not P
+    // - rejects P
+    let c: Classifier = Classifier::Literal("P".to_string(), None);
+    let d: Dfa = c.compile(&None).complement(&None);
+    assert!(!d.includes_string("P"));
 }
 
 #[test]
@@ -57,12 +55,12 @@ fn test_negate1() {
     d.simplify();
     d.graphviz_file("negation1.dot", "A*");
 
-    d = d.negate(&None);
+    d = d.complement(&None);
     d.simplify();
     d.graphviz_file("negation2.dot", "!A*");
     // assert!(d.includes_path(&['A'.into()]));
 
-    d = d.negate(&None);
+    d = d.complement(&None);
     d.simplify();
     d.graphviz_file("negation3.dot", "!!A*");
     assert!(!d.includes_path(&['A'.into()]));

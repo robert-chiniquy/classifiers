@@ -156,11 +156,10 @@ where
         dfa
     }
 
-    // TODO: rename to complement()
-    /// Return a "completed DFA": a DFA with a complement of all states
+    /// Return a "completed DFA" with a complement of all states
     /// and universally accepting self-loop edges out of any non-universally-accepting state
     #[tracing::instrument(skip(self))]
-    fn negate(&self, m: &Option<Self::Metadata>) -> Self {
+    fn complement(&self, m: &Option<Self::Metadata>) -> Self {
         // Start with all IDs and remove any found to have an outbound edge
         let mut dfa = self.clone();
         dfa.simplify();

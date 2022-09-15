@@ -51,12 +51,15 @@ fn test_from_language_simple() {
     star_amp.graphviz_file("star_amp.dot", "*&f");
 
     let accepting_states = star_amp.accepting_states();
+
     assert!(star_amp.is_consistent());
+
     assert_eq!(
         accepting_states.len(),
         1,
         "too many states: {accepting_states:?}"
     );
+
     assert!(star_amp.includes_path(&[
         Element::token('&'),
         Element::token('&'),
@@ -201,6 +204,14 @@ where
         // convert the NFA to a DFA
         builder.powerset_construction(stack);
         builder
+    }
+
+    pub fn includes_string(&self, path: &str) -> bool {
+        self.includes_path(&path.chars().map(|c| c.into()).collect::<Vec<Element>>())
+    }
+
+    pub fn excludes_string(&self, path: &str) -> bool {
+        self.excludes_path(&path.chars().map(|c| c.into()).collect::<Vec<Element>>())
     }
 
     // TODO: Should return M

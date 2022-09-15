@@ -19,7 +19,7 @@ pub trait Relatable: std::fmt::Debug + Clone + PartialOrd + Ord {
 
     fn union(&self, other: &Self) -> Self;
     fn intersection(&self, other: &Self) -> Self;
-    fn negate(&self, m: &Option<Self::Metadata>) -> Self;
+    fn complement(&self, m: &Option<Self::Metadata>) -> Self;
 
     fn universal(m: &Option<Self::Metadata>) -> Self;
     fn none(m: &Option<Self::Metadata>) -> Self;

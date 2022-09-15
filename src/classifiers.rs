@@ -21,7 +21,7 @@ pub enum Relation {
 }
 
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub enum Classifier<R>
+pub enum Classifier<R = Dfa>
 where
     R: Relatable,
 {
@@ -68,7 +68,7 @@ where
         match self {
             Classifier::Universal => R::universal(m),
             Classifier::Literal(l, m) => R::from_language(l, m),
-            Classifier::Not(c) => Classifier::compile(c, m).negate(m),
+            Classifier::Not(c) => Classifier::compile(c, m).complement(m),
             Classifier::Any(v) => {
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {
