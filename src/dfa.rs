@@ -21,37 +21,6 @@ use super::*;
 
 type NodeId = u32;
 pub type CompoundId = BTreeSet<NodeId>;
-// #[derive(Default, PartialOrd, Ord, PartialEq, Eq, Clone, std::hash::Hash)]
-// pub struct CompoundId(BTreeSet<NodeId>);
-
-// impl std::fmt::Debug for CompoundId {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         let s =  self.0.iter().map(|i| i.to_string()).collect::<Vec<_>>().join("_");
-//         f.write_str(&s)
-//     }
-// }
-
-// impl CompoundId {
-//     pub fn id(&self) -> &BTreeSet<NodeId> {
-//         &self.0
-//     }
-
-//     pub fn id_mut(&mut self) -> &mut BTreeSet<NodeId> {
-//         &mut self.0
-//     }
-
-//     pub fn from<const N: usize>(a: [NodeId; N]) -> Self {
-//         Self(BTreeSet::from(a))
-//     }
-
-//     pub fn iter(&self) -> std::collections::btree_set::Iter<'static, NodeId> {
-//         self.0.iter()
-//     }
-
-//     pub fn iter_mut(&mut self) -> std::collections::btree_set::Iter<'static, NodeId> {
-//         self.0.iter()
-//     }
-// }
 
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
 pub struct Dfa<M = ()>
@@ -61,8 +30,9 @@ where
     pub(super) entry: CompoundId,
     pub(super) elements: BTreeSet<Element>,
     pub(super) symbols: BTreeSet<char>,
+    // FIXME:
     // for a given element and source, there is only one outbound edge to a target
-    // the Vec is here to collect NodeIds during construction?
+    // the BTreeSet is here to collect NodeIds during construction
     pub(super) transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>>,
     // Any compound / product node may have several associated accepting states
     // propagated from the source graphs
@@ -80,7 +50,7 @@ fn test_product() {
     // let _ = DfaBuilder::product(&a, &b);
 
     let a = Dfa::<()>::from_language("a*".to_string().chars().collect(), &None);
-    let mut b = Dfa::from_language("*a".to_string().chars().collect(), &None);
+    let b = Dfa::from_language("*a".to_string().chars().collect(), &None);
 
     let mut i = Dfa::intersect(&a, &b);
     let _dfa = i.build();
@@ -193,9 +163,9 @@ where
                 '?' => {
                     // transition via all symbols from prior to current
                     for c in &positives {
-                        builder.add_transition(&prior, &Element::token(c.clone()), &current);
+                        builder.add_transition(&prior, &Element::token(*c), &current);
                     }
-                    
+
                     builder.add_transition(&prior, &negative_star, &current);
                     builder.add_state(&CompoundId::from([prior]), s);
                 }
@@ -211,7 +181,7 @@ where
                     builder.add_state(&target, s);
 
                     for c in &positives {
-                        builder.add_transitions(&source, &Element::token(c.clone()), &target);
+                        builder.add_transitions(&source, &Element::token(*c), &target);
                     }
                     // builder.add_transitions(&source, &positive_star, &target);
                     println!("yo1  transitions ({i}, {c}) : {:?}... tried to add: {source:?} {positives:?} {target:?}", builder.transitions);
@@ -224,7 +194,7 @@ where
                     builder.add_state(&CompoundId::from([prior]), s);
                 }
             }
-            println!("transitions ({i}, {c}) : {:?}", builder.transitions);
+            // println!("transitions ({i}, {c}) : {:?}", builder.transitions);
             prior = current;
         }
 
@@ -241,6 +211,7 @@ where
             .filter(|(_id, states)| states.iter().any(|s| s.accepting()))
             .collect::<BTreeMap<_, _>>()
     }
+
     /// Calling this method requires setting accepting states externally
     pub fn new(symbols: BTreeSet<char>) -> Self {
         let mut elements: BTreeSet<Element> = symbols.iter().map(|s| s.into()).collect();
@@ -300,14 +271,6 @@ where
 
     // }
 
-    pub(crate) fn product(a: &Self, b: &Self) -> Self {
-        let mut b = b.clone();
-        let product = Dfa::construct_product(a, &mut b);
-        let d = product.build_dfa();
-        d.graphviz_file("product-dfa.dot", "dfa");
-        d
-    }
-
     fn write_into_language(&mut self, language: &BTreeSet<Element>) {
         // !a!:, !b!:, -> !a!b!:
         let mut new_transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>> =
@@ -325,14 +288,14 @@ where
                 }
             }
         }
-        println!(
-            "transitions for {language:?}:\n{:?}\n{:?}",
-            self.transitions, new_transitions
-        );
+        // println!(
+        //     "transitions for {language:?}:\n{:?}\n{:?}",
+        //     self.transitions, new_transitions
+        // );
         self.transitions = new_transitions;
     }
 
-    // TODO: why make b mutable?
+    // FIXME: why make b mutable?
     /// Sets an entry as the product of entries
     pub(crate) fn construct_product(a: &Self, b: &mut Self) -> Self {
         let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
@@ -497,6 +460,8 @@ where
         product
     }
 
+    // needed?
+    #[deprecated]
     pub fn build(&mut self) -> Self {
         let d = self.build_dfa();
         d.graphviz_file("dfa.dot", "dfa");
@@ -559,6 +524,8 @@ where
         ids
     }
 
+    // needed?
+    #[deprecated]
     fn build_dfa(&self) -> Self {
         let mut dfa = self.clone();
         dfa.simplify();
@@ -591,7 +558,7 @@ where
                 continue;
             }
             no_e = false;
-            
+
             if self.transitions.get(&element.clone()).is_none() {
                 self.transitions.insert(element.clone(), Default::default());
             }
@@ -601,7 +568,7 @@ where
                 e.insert(from.clone(), Default::default());
             }
 
-            e.get_mut(&from).unwrap().insert(to.clone());
+            e.get_mut(from).unwrap().insert(to.clone());
             // ee.insert(to.clone());
         }
         if no_e {
@@ -814,3 +781,35 @@ impl EdgeIndex {
         is_alive
     }
 }
+
+// #[derive(Default, PartialOrd, Ord, PartialEq, Eq, Clone, std::hash::Hash)]
+// pub struct CompoundId(BTreeSet<NodeId>);
+
+// impl std::fmt::Debug for CompoundId {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         let s =  self.0.iter().map(|i| i.to_string()).collect::<Vec<_>>().join("_");
+//         f.write_str(&s)
+//     }
+// }
+
+// impl CompoundId {
+//     pub fn id(&self) -> &BTreeSet<NodeId> {
+//         &self.0
+//     }
+
+//     pub fn id_mut(&mut self) -> &mut BTreeSet<NodeId> {
+//         &mut self.0
+//     }
+
+//     pub fn from<const N: usize>(a: [NodeId; N]) -> Self {
+//         Self(BTreeSet::from(a))
+//     }
+
+//     pub fn iter(&self) -> std::collections::btree_set::Iter<'static, NodeId> {
+//         self.0.iter()
+//     }
+
+//     pub fn iter_mut(&mut self) -> std::collections::btree_set::Iter<'static, NodeId> {
+//         self.0.iter()
+//     }
+// }

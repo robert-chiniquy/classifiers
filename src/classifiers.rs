@@ -20,13 +20,6 @@ pub enum Relation {
     Equality,
 }
 
-// hack
-impl std::fmt::Display for Relation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("{:?}", self))
-    }
-}
-
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum Classifier<R>
 where
@@ -98,5 +91,12 @@ where
                 }
             }
         }
+    }
+}
+
+// hack
+impl std::fmt::Display for Relation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("{:?}", self))
     }
 }

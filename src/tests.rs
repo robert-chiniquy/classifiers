@@ -1,10 +1,9 @@
-// #![cfg(test)]
-
+#[cfg(test)]
 use super::*;
 
 #[test]
 fn test_negate() {
-    assert!(*TEST_SETUP);
+    test_setup();
     // the set of P
     // - accepts P
     // - rejects not P
@@ -16,7 +15,7 @@ fn test_negate() {
 }
 #[test]
 fn test_negate2() {
-    setup();
+    test_setup();
     // // the set of all things excluding P
     // // - accepts not P
     // // - rejects P
@@ -38,7 +37,7 @@ fn test_simpler_intersection() {
 
 #[test]
 fn test_intersection() {
-    setup();
+    test_setup();
 
     let astar = Classifier::<Dfa>::Literal("B*".to_string(), None);
     let stara = Classifier::Literal("*A".to_string(), None);
@@ -184,23 +183,67 @@ fn test_rejection() {
     // assert_eq!(u.edges.len(), 3);
 }
 
-#[allow(dead_code)]
-pub fn test_setup() {
-    assert!(*TEST_SETUP);
+#[test]
+fn test_arithmetic() {
+    // use Element::*;
+    let nt = Element::not_token;
+    let nts = Element::not_tokens;
+    let ts = Element::tokens;
+    let t = Element::token;
+
+    // !c - a - b = !a!b!c
+    let r = Element::difference(&nt('c'), &t('a'));
+    let r: Element = Element::difference(&r, &t('b'));
+    assert_eq!(r, Element::not_tokens(&['a', 'b', 'c']));
+
+    // * - a - b = !a!b
+    let mut r = Element::universal();
+    r = Element::difference(&r, &t('a'));
+    r = Element::difference(&r, &t('b'));
+    assert_eq!(r, nts(&['a', 'b']));
+
+    // ? - a - b = !a!b
+    let r = Element::difference(&Element::universal(), &t('a'));
+    let r = Element::difference(&r, &t('b'));
+    assert_eq!(r, nts(&['a', 'b']));
+
+    // ab - a -b = None
+    let r = Element::difference(&ts(&['a', 'b']), &t('a'));
+    assert_eq!(ts(&[]), Element::difference(&r, &t('b')));
+
+    // !a - !c = c
+    assert_eq!(Element::difference(&nt('a'), &nt('c')), t('c'));
 }
 
-static TEST_SETUP: once_cell::sync::Lazy<bool> = once_cell::sync::Lazy::new(|| {
-    setup();
-    true
-});
+#[test]
+fn test_sum() {
+    let t = Element::token;
+    let nt = Element::not_token;
+    let nts = Element::not_tokens;
 
-fn setup() {
-    #[cfg(feature = "trace")]
-    {
-        let subscriber = tracing_subscriber::fmt()
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-            .finish();
+    let e: Element = vec!['a', 'b', 'c'].iter().map(|c| t(*c)).sum();
+    assert_eq!(e, Element::tokens(&['a', 'b', 'c']));
 
-        let _ = tracing::subscriber::set_global_default(subscriber);
-    }
+    let e: Element = vec![].iter().map(|c| t(*c)).sum();
+    assert_eq!(e, Element::tokens(&[]));
+
+    let e: Element = vec![t('a'), nt('a')].iter().sum();
+    assert_eq!(e, Element::not_tokens(&[]));
+
+    let e: Element = vec![nt('a'), nt('a')].iter().sum();
+    assert_eq!(e, Element::not_tokens(&['a']));
+
+    let e: Element = vec![nt('a'), nts(&['a', 'b'])].iter().sum();
+    assert_eq!(e, Element::not_tokens(&['a']));
+
+    let e: Element = vec![nt('a'), nt('b')].iter().sum();
+    assert_eq!(e, Element::not_tokens(&[]));
+}
+
+#[test]
+fn test_accepts() {
+    let a = Element::not_tokens(&['a', ':']);
+    let b = Element::not_tokens(&['a', 'b', ':']);
+    assert!(a.accepts(&b));
+    assert!(!b.accepts(&a));
 }

@@ -28,16 +28,6 @@ impl Element {
     }
 }
 
-impl Complement<Element> for Element {
-    fn complement(&self) -> Option<Self> {
-        use Element::*;
-        match self {
-            TokenSet(n) => Some(NotTokenSet(n.clone())),
-            NotTokenSet(n) => Some(TokenSet(n.clone())),
-        }
-    }
-}
-
 impl ElementalLanguage<Element> for Element {}
 
 impl Universal for Element {
@@ -56,14 +46,6 @@ impl From<&char> for Element {
     fn from(c: &char) -> Self {
         Element::token(*c)
     }
-}
-
-#[test]
-fn test_accepts() {
-    let a = Element::not_tokens(&['a', ':']);
-    let b = Element::not_tokens(&['a', 'b', ':']);
-    assert!(a.accepts(&b));
-    assert!(!b.accepts(&a));
 }
 
 impl Accepts<Element> for Element {
@@ -100,30 +82,6 @@ impl Accepts<char> for Element {
     }
 }
 
-impl std::fmt::Display for Element {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "{}",
-            match self {
-                Element::NotTokenSet(v) => {
-                    if v.len() == 1 {
-                        format!("!{}", v.iter().next().unwrap())
-                    } else {
-                        format!("!`{v:?}`")
-                    }
-                }
-                Element::TokenSet(v) => {
-                    if v.len() == 1 {
-                        format!("{}", v.iter().next().unwrap())
-                    } else {
-                        format!("`{v:?}`")
-                    }
-                }
-            }
-        ))
-    }
-}
-
 impl std::iter::Sum for Element {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Element::TokenSet(Default::default()), |acc, cur| {
@@ -138,31 +96,6 @@ impl<'a> std::iter::Sum<&'a Element> for Element {
             Element::add(acc, cur.clone())
         })
     }
-}
-
-#[test]
-fn test_sum() {
-    let t = Element::token;
-    let nt = Element::not_token;
-    let nts = Element::not_tokens;
-
-    let e: Element = vec!['a', 'b', 'c'].iter().map(|c| t(*c)).sum();
-    assert_eq!(e, Element::tokens(&['a', 'b', 'c']));
-
-    let e: Element = vec![].iter().map(|c| t(*c)).sum();
-    assert_eq!(e, Element::tokens(&[]));
-
-    let e: Element = vec![t('a'), nt('a')].iter().sum();
-    assert_eq!(e, Element::not_tokens(&[]));
-
-    let e: Element = vec![nt('a'), nt('a')].iter().sum();
-    assert_eq!(e, Element::not_tokens(&['a']));
-
-    let e: Element = vec![nt('a'), nts(&['a', 'b'])].iter().sum();
-    assert_eq!(e, Element::not_tokens(&['a']));
-
-    let e: Element = vec![nt('a'), nt('b')].iter().sum();
-    assert_eq!(e, Element::not_tokens(&[]));
 }
 
 impl Add for Element {
@@ -237,34 +170,26 @@ impl Subtraction<Element> for Element {
     }
 }
 
-#[test]
-fn test_arithmetic() {
-    // use Element::*;
-    let nt = Element::not_token;
-    let nts = Element::not_tokens;
-    let ts = Element::tokens;
-    let t = Element::token;
-
-    // !c - a - b = !a!b!c
-    let r = Element::difference(&nt('c'), &t('a'));
-    let r: Element = Element::difference(&r, &t('b'));
-    assert_eq!(r, Element::not_tokens(&['a', 'b', 'c']));
-
-    // * - a - b = !a!b
-    let mut r = Element::universal();
-    r = Element::difference(&r, &t('a'));
-    r = Element::difference(&r, &t('b'));
-    assert_eq!(r, nts(&['a', 'b']));
-
-    // ? - a - b = !a!b
-    let r = Element::difference(&Element::universal(), &t('a'));
-    let r = Element::difference(&r, &t('b'));
-    assert_eq!(r, nts(&['a', 'b']));
-
-    // ab - a -b = None
-    let r = Element::difference(&ts(&['a', 'b']), &t('a'));
-    assert_eq!(ts(&[]), Element::difference(&r, &t('b')));
-
-    // !a - !c = c
-    assert_eq!(Element::difference(&nt('a'), &nt('c')), t('c'));
+impl std::fmt::Display for Element {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "{}",
+            match self {
+                Element::NotTokenSet(v) => {
+                    if v.len() == 1 {
+                        format!("!{}", v.iter().next().unwrap())
+                    } else {
+                        format!("!`{v:?}`")
+                    }
+                }
+                Element::TokenSet(v) => {
+                    if v.len() == 1 {
+                        format!("{}", v.iter().next().unwrap())
+                    } else {
+                        format!("`{v:?}`")
+                    }
+                }
+            }
+        ))
+    }
 }
