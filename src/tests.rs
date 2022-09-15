@@ -129,8 +129,8 @@ fn test_dfa_intersect() {
     let a = Dfa::<()>::from_language("a*".to_string().chars().collect(), &None);
     let b = Dfa::from_language("*a".to_string().chars().collect(), &None);
 
-    let mut i = Dfa::intersect(&a, &b);
-    let dfa = i.build();
+    let mut dfa = Dfa::intersect(&a, &b);
+    dfa.simplify();
 
     assert!(dfa.includes_string("aa"));
     assert!(dfa.includes_string("aaa"));

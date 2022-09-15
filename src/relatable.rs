@@ -61,8 +61,7 @@ where
             states: Default::default(),
         };
         // add a self-loop with a NotTokenSet of nothing
-        dfa.add_transition(&1, &Element::NotTokenSet(BTreeSet::new()), &1);
-        dfa.add_state(&entry, State::Include(m.clone()));
+        dfa.add_transition_with_state(&1, &Element::NotTokenSet(BTreeSet::new()), &1, &State::Include(m.clone()));
         dfa
     }
 
@@ -90,16 +89,13 @@ where
         dfa.simplify();
 
         let vortex = self.ids().iter().flatten().max().unwrap_or(&0) + 1;
-        dfa.add_transition(&vortex, &Element::universal(), &vortex);
-        dfa.add_state(
-            &CompoundId::from([vortex]),
-            State::InverseInclude(m.clone()),
-        );
-
+        dfa.add_transition_with_state(&vortex, &Element::universal(), &vortex, &State::InverseInclude(m.clone()));
+        
         // Find the negative space of all existing edges from each source node
         for (source, edges) in self.get_edges().0 {
             if edges.is_empty() {
-                dfa.add_transitions(&source, &Element::universal(), &CompoundId::from([vortex]));
+                #[allow(deprecated)]
+                dfa.add_transition2(&source, &Element::universal(), &CompoundId::from([vortex]));
                 continue;
             }
             let sum: Element = edges.iter().map(|(element, _)| element).cloned().sum();
@@ -110,11 +106,13 @@ where
             match &d {
                 Element::TokenSet(s) => {
                     if !s.is_empty() {
-                        dfa.add_transitions(&source, &d, &CompoundId::from([vortex]));
+                        #[allow(deprecated)]
+                        dfa.add_transition2(&source, &d, &CompoundId::from([vortex]));
                     }
                 }
                 Element::NotTokenSet(_) => {
-                    dfa.add_transitions(&source, &d, &CompoundId::from([vortex]));
+                    #[allow(deprecated)]
+                    dfa.add_transition2(&source, &d, &CompoundId::from([vortex]));
                 }
             }
         }

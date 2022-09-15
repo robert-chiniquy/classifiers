@@ -36,11 +36,7 @@ fn test_from_language_simple() {
 
     assert!(star_amp.is_consistent());
 
-    assert_eq!(
-        accepting_states.len(),
-        1,
-        "too many states: {accepting_states:?}"
-    );
+    assert_eq!(accepting_states.len(), 1, "too many states: {accepting_states:?}");
 
     assert!(star_amp.includes_path(&[
         Element::token('&'),
@@ -55,11 +51,7 @@ fn test_from_language_simple() {
 
     assert!(starb.is_consistent());
     let accepting_states = starb.accepting_states();
-    assert_eq!(
-        accepting_states.len(),
-        1,
-        "too many states: {accepting_states:?}"
-    );
+    assert_eq!(accepting_states.len(), 1, "too many states: {accepting_states:?}");
     starb.graphviz_file("bbb-starb.dot", "starb");
     assert!(!starb.includes_path(&[Element::token('B')]));
     assert!(
@@ -75,11 +67,7 @@ fn test_from_language_simple() {
 
     let accepting_states = astar.accepting_states();
     assert!(astar.is_consistent());
-    assert_eq!(
-        accepting_states.len(),
-        1,
-        "too many states: {accepting_states:?}"
-    );
+    assert_eq!(accepting_states.len(), 1, "too many states: {accepting_states:?}");
     assert!(!astar.includes_path(&[Element::token('a')]));
     assert!(astar.includes_path(&[Element::token('a'), Element::token('a')]));
 
@@ -89,11 +77,7 @@ fn test_from_language_simple() {
 
     let accepting_states = fstarfstar.accepting_states();
     assert!(fstarfstar.is_consistent());
-    assert_eq!(
-        accepting_states.len(),
-        1,
-        "too many states: {accepting_states:?}"
-    );
+    assert_eq!(accepting_states.len(), 1, "too many states: {accepting_states:?}");
 
     // assert!(!astar.includes_path(&[Element::token('a')]));
     // assert!(astar.includes_path(&[Element::token('a'), Element::token('a')]));
@@ -120,15 +104,14 @@ where
 
     #[tracing::instrument]
     pub(crate) fn from_language(l: Vec<char>, m: &Option<M>) -> Self {
-        let symbols: BTreeSet<_> = l
-            .iter()
-            .map(|c| if *c == '?' || *c == '*' { ':' } else { *c })
-            .collect();
+        let symbols: BTreeSet<_> =
+            l.iter().map(|c| if *c == '?' || *c == '*' { ':' } else { *c }).collect();
 
         let mut builder = Dfa::new(symbols.clone());
         let mut prior = 0;
 
         builder.entry = CompoundId::from([prior]);
+        builder.add_state(&builder.entry.clone(), State::InverseInclude(m.clone()));
 
         let positives = &symbols - &BTreeSet::from([':']);
         let negative_star = Element::NotTokenSet(&symbols | &BTreeSet::from([':']));
@@ -147,11 +130,16 @@ where
                 '?' => {
                     // transition via all symbols from prior to current
                     for c in &positives {
-                        builder.add_transition(&prior, &Element::token(*c), &current);
+                        builder.add_transition_with_state(
+                            &prior,
+                            &Element::token(*c),
+                            &current,
+                            &s,
+                        );
                     }
 
-                    builder.add_transition(&prior, &negative_star, &current);
-                    builder.add_state(&CompoundId::from([prior]), s);
+                    builder.add_transition_with_state(&prior, &negative_star, &current, &s);
+                    // builder.add_state(&CompoundId::from([prior]), s);
                 }
                 '*' => {
                     // self loop/advance
@@ -161,28 +149,38 @@ where
                     // unioned id goes on the stack to expand...
                     stack.push(target.clone());
 
-                    builder.add_state(&source, State::InverseInclude(m.clone()));
-                    builder.add_state(&target, s);
-
+                    // builder.add_state(&source, State::InverseInclude(m.clone()));
+                    // builder.add_state(&target, s);
+                    builder.add_state(&CompoundId::from([current]), State::Include(m.clone()));
                     for c in &positives {
-                        builder.add_transitions(&source, &Element::token(*c), &target);
+                        builder.add_transition2_with_states(
+                            &source,
+                            &Element::token(*c),
+                            &target,
+                            &BTreeSet::from([s.clone()]),
+                        );
                     }
                     // builder.add_transitions(&source, &positive_star, &target);
                     // println!("yo1  transitions ({i}, {c}) : {:?}... tried to add: {source:?} {positives:?} {target:?}", builder.transitions);
-                    builder.add_transitions(&source, &negative_star, &target);
+                    builder.add_transition2_with_states(
+                        &source,
+                        &negative_star,
+                        &target,
+                        &BTreeSet::from([s.clone()]),
+                    );
                     // println!("yo2  transitions ({i}, {c}) : {:?}", builder.transitions);
                 }
                 c => {
                     // transition from prior to current via c
-                    builder.add_transition(&prior, &c.into(), &current);
-                    builder.add_state(&CompoundId::from([prior]), s);
+                    builder.add_transition_with_state(&prior, &c.into(), &current, &s);
+                    // builder.add_state(&CompoundId::from([prior]), s);
                 }
             }
             // println!("transitions ({i}, {c}) : {:?}", builder.transitions);
             prior = current;
         }
 
-        builder.add_state(&CompoundId::from([prior]), State::Include(m.clone()));
+        // builder.add_state(&CompoundId::from([prior]), State::Include(m.clone()));
         // convert the NFA to a DFA
         builder.powerset_construction(stack);
         builder
@@ -199,26 +197,40 @@ where
     // TODO: Should return M
     #[tracing::instrument(skip(self))]
     pub fn includes_path(&self, path: &[Element]) -> bool {
-        self.accepting_path(path, &mut |state| match state {
-            State::Include(_m) => true,
-            State::InverseExclude(_) | State::InverseInclude(_) | State::Exclude(_) => false,
+        self.accepting_path(path, &mut |states| {
+            for state in states {
+                match state {
+                    State::Include(_m) => return true,
+                    State::InverseExclude(_) | State::InverseInclude(_) | State::Exclude(_) => {
+                        continue;
+                    }
+                }
+            }
+            false
         })
     }
 
     // TODO: Should return M
     #[tracing::instrument(skip(self))]
     pub fn excludes_path(&self, path: &[Element]) -> bool {
-        self.accepting_path(path, &mut |state| match state {
-            State::Exclude(_m) => true,
-            State::InverseExclude(_) | State::InverseInclude(_) | State::Include(_) => false,
+        self.accepting_path(path, &mut |states| {
+            for state in states {
+                match state {
+                    State::Exclude(_m) => return true,
+                    State::InverseExclude(_) | State::InverseInclude(_) | State::Include(_) => {
+                        continue;
+                    }
+                }
+            }
+            false
         })
     }
 
-    #[tracing::instrument(skip(self, check_state))]
+    #[tracing::instrument(skip(self, check_states))]
     pub fn accepting_path(
         &self,
         path: &[Element],
-        check_state: &mut impl Fn(&State<M>) -> bool,
+        check_states: &mut impl Fn(&BTreeSet<State<M>>) -> bool,
     ) -> bool {
         let edges = self.get_edges().0;
         let mut stack = vec![(0, self.entry.clone())];
@@ -231,17 +243,13 @@ where
                     // did not find an accepting state on this path within the scope of the input
                     None => continue,
                     Some(s) => {
-                        for state in s {
-                            if check_state(state) {
-                                return true;
-                            } else {
-                                // did not find an accepting state on this path within the scope of the input
-                                continue;
-                            }
+                        if check_states(&s) {
+                            return true;
                         }
+                        // did not find an accepting state on this path within the scope of the input
+                        continue;
                     }
                 }
-                continue;
             }
             match edges.get(&current) {
                 Some(edges) => {
@@ -301,15 +309,19 @@ where
         b.offset_self(offset);
 
         // Combining the accepting states requires that any offset must already have occurred
+        // a and b must already contain states for every extant NodeId
         let mut accepting_states = a.states.clone();
         accepting_states.extend(b.states.clone().into_iter());
+        
+        let mut transitions = a.transitions.clone();
+        transitions.extend(b.transitions.clone().into_iter());
 
         let mut product = Self {
             symbols,
             elements,
             states: accepting_states,
             entry: &a.entry | &b.entry,
-            transitions: Default::default(),
+            transitions: transitions,
         };
 
         let mut stack: Vec<BTreeSet<NodeId>> = Default::default();
@@ -320,10 +332,12 @@ where
 
             match (a_transitions, b_transitions) {
                 (None, None) => println!("nothing with symbol {e}...probably fine"),
-                (Some(t), None) | (None, Some(t)) => t.iter().for_each(|(from, toos)| {
-                    toos.iter()
-                        .for_each(|to| product.add_transitions(from, e, to))
-                }),
+                (Some(_t), None) | (None, Some(_t)) => {},
+                    // t.iter().for_each(|(from, toos)| {
+                    //     #[allow(deprecated)]
+                    //     // the states were already added above - see `accepting_states`
+                    //     toos.iter().for_each(|to| product.add_transition2(from, e, to))
+                // }),
                 (Some(a_t), Some(b_t)) => {
                     a_t.iter().for_each(|(a_from, a_toos)| {
                         b_t.iter().for_each(|(b_from, b_toos)| {
@@ -332,22 +346,20 @@ where
                             // of the source NodeIds
                             let compound_id = a_from | b_from;
                             stack.push(compound_id.clone());
-                            let states =
-                                a.states.get(a_from).unwrap() | b.states.get(b_from).unwrap();
-                            product.add_states(&compound_id, states);
-                            let mut to: CompoundId = Default::default();
-                            a_toos
-                                .iter()
-                                .chain(b_toos.iter())
-                                .for_each(|s| to.extend(s));
 
-                            product.add_transitions(&compound_id, &e.clone(), &to);
+                            let states = a.states.get(a_from).unwrap() | b.states.get(b_from).unwrap();
+                            let to = (a_toos | b_toos).into_iter().flatten().collect();
+
+                            product.add_transition2_with_states(&compound_id, &e.clone(), &to, &states);
+
                             a_toos
                                 .iter()
-                                .for_each(|to| product.add_transitions(a_from, &e.clone(), to));
+                                .for_each(|to| product.add_transition2_with_states(a_from, &e.clone(), to, &states));
+
                             b_toos
                                 .iter()
-                                .for_each(|to| product.add_transitions(b_from, &e.clone(), to));
+                                .for_each(|to| product.add_transition2_with_states(b_from, &e.clone(), to, &states));
+
                         });
                     });
                 }
@@ -393,11 +405,7 @@ where
             .map(|(id, states)| {
                 (
                     id.clone(),
-                    states
-                        .iter()
-                        .filter(|s| s.accepting())
-                        .cloned()
-                        .collect::<BTreeSet<_>>(),
+                    states.iter().filter(|s| s.accepting()).cloned().collect::<BTreeSet<_>>(),
                 )
             })
             .filter(|(_, v)| !v.is_empty())
@@ -409,11 +417,7 @@ where
             .map(|(id, states)| {
                 (
                     id.clone(),
-                    states
-                        .iter()
-                        .filter(|s| s.accepting())
-                        .cloned()
-                        .collect::<BTreeSet<_>>(),
+                    states.iter().filter(|s| s.accepting()).cloned().collect::<BTreeSet<_>>(),
                 )
             })
             .filter(|(_, v)| !v.is_empty())
@@ -451,21 +455,6 @@ where
         product
     }
 
-    // needed?
-    #[deprecated]
-    pub fn build(&mut self) -> Self {
-        let d = self.build_dfa();
-        d.graphviz_file("dfa.dot", "dfa");
-        d
-    }
-
-    // needed?
-    #[deprecated]
-    fn build_dfa(&self) -> Self {
-        let mut dfa = self.clone();
-        dfa.simplify();
-        dfa
-    }
 
     // number of rows/nodes = number of chars in input + 1
     // number of columns: number of symbols in input
@@ -508,8 +497,6 @@ where
                 if unioned_transitions.is_empty() {
                     continue;
                 }
-                self.add_transitions(&compound_state, &element, &unioned_transitions.clone());
-
                 let mut states = Default::default();
                 for id in &unioned_transitions {
                     let s = self
@@ -519,8 +506,7 @@ where
 
                     states = &states | s;
                 }
-                self.add_states(&unioned_transitions, states);
-
+                self.add_transition2_with_states(&compound_state, &element, &unioned_transitions.clone(), &states);
                 stack.push(unioned_transitions);
             }
         }
@@ -651,7 +637,7 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    pub(super) fn add_transitions(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
+    pub(super) fn add_transition2(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
         // let mut no_e = true;
         // println!("before: {:?}", self.transitions);
         for element in &self.elements {
@@ -672,10 +658,30 @@ where
         // }
     }
 
-    /// This function assumes a CompoundId of only {from} and {to} respectively!
+    pub fn add_transition2_with_states(
+        &mut self,
+        from: &CompoundId,
+        e: &Element,
+        to: &CompoundId,
+        to_state: &BTreeSet<State<M>>,
+    ) {
+        #[allow(deprecated)]
+        self.add_transition2(from, e, to);
+        self.add_states(to, to_state.clone());
+    }
+
     #[tracing::instrument(skip(self))]
-    pub fn add_transition(&mut self, from: &NodeId, e: &Element, to: &NodeId) {
-        self.add_transitions(&BTreeSet::from([*from]), e, &BTreeSet::from([*to]));
+    pub fn add_transition_with_state(
+        &mut self,
+        from: &NodeId,
+        e: &Element,
+        to: &NodeId,
+        to_state: &State<M>,
+    ) {
+        let to = &BTreeSet::from([*to]);
+        #[allow(deprecated)]
+        self.add_transition2(&BTreeSet::from([*from]), e, to);
+        self.add_states(to, BTreeSet::from([to_state.clone()]));
     }
 
     /// Return true if there are no overlapping edges out of a given node
@@ -717,15 +723,10 @@ where
             transitions.insert(element.clone(), Default::default());
             for (from, to) in v {
                 let from: CompoundId = from.iter().map(|id| *id + offset).collect();
-                let to: BTreeSet<CompoundId> = to
-                    .iter()
-                    .map(|vec| vec.iter().map(|id| *id + offset).collect())
-                    .collect();
+                let to: BTreeSet<CompoundId> =
+                    to.iter().map(|vec| vec.iter().map(|id| *id + offset).collect()).collect();
 
-                transitions
-                    .get_mut(&element.clone())
-                    .unwrap()
-                    .insert(from.clone(), to.clone());
+                transitions.get_mut(&element.clone()).unwrap().insert(from.clone(), to.clone());
             }
         }
         self.transitions = transitions;
