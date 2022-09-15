@@ -3,6 +3,7 @@ use super::*;
 #[test]
 fn test_relation() {
     let mut inputs = [
+        ("*", "", Relation::Disjoint),
         ("*b", "*", Relation::Subset),
         ("*", "*", Relation::Equality),
         ("f*", "*", Relation::Subset),
@@ -10,11 +11,9 @@ fn test_relation() {
         ("a", "a*", Relation::Disjoint),
         ("**", "*?*", Relation::Superset),
         ("**", "*f", Relation::Superset), // nb
-        ("*?*", "***", Relation::Subset),
         ("aab", "a?", Relation::Disjoint),
         ("?", "*", Relation::Subset),
         ("??", "*", Relation::Subset),
-        ("*", "", Relation::Disjoint),
         ("*", "f*", Relation::Superset),
         ("**", "*f*", Relation::Superset),
         ("a", "*", Relation::Subset),
@@ -31,8 +30,9 @@ fn test_relation() {
         ("*f*", "*f*", Relation::Equality),
         ("*f*", "f*f*", Relation::Superset),
         ("f*f*", "*f*", Relation::Subset),
-        ("asdf*f*", "*&f*", Relation::Subset),
         ("asdf*f**", "*f*", Relation::Subset),
+        ("*?*", "***", Relation::Equality),
+        ("asdf*f*", "*&f*", Relation::Subset),
     ];
 
     inputs.reverse();

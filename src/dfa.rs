@@ -214,12 +214,12 @@ where
     }
 
     pub fn includes_path(&self, path: &[Element]) -> bool {
-        let edges = self.get_edges();
-        let path_index = 0;
-        let mut stack = vec![(path_index, self.entry.clone())];
+        let edges = self.get_edges().0;
+        let mut stack = vec![(0, self.entry.clone())];
 
         while let Some((path_index, current)) = stack.pop() {
-            if path.len() >= path_index {
+            // println!("{} {:?} {:?}", path_index, current, path[path_index]);
+            if path.len() == path_index {
                 // check if current is an Include?
                 match self.states.get(&current) {
                     // did not find an accepting state on this path within the scope of the input
@@ -238,7 +238,7 @@ where
                 }
                 continue;
             }
-            match edges.0.get(&current) {
+            match edges.get(&current) {
                 Some(edges) => {
                     for (element, targets) in edges {
                         if element.accepts(&path[path_index]) {
