@@ -1,4 +1,5 @@
 #[cfg(test)]
+use crate::Dfa;
 use super::*;
 
 #[test]
@@ -111,18 +112,36 @@ fn test_complement() {
     assert!(d.includes_string("Pffffft"));
 }
 
+#[cfg(test)]
+fn assert_includes(dfa: &Dfa, paths: &[&str]) {
+    for s in paths {
+        if !dfa.includes_string(s) {
+           dfa.graphviz_file("failed_test.dot", &format!("no accept {s}"));
+           assert!(false, "dfa does not accept {s} - see failed_test.dot");
+        }    
+    }
+    
+}
+
+#[cfg(test)]
+fn assert_not_includes(dfa: &Dfa, paths: &[&str]) {
+    for s in paths {
+        if dfa.includes_string(s) {
+           dfa.graphviz_file("failed_test.dot", &format!("¿accepts {s}?"));
+           assert!(false, "dfa accepts {s} - see failed_test.dot");
+        }    
+    }
+}
+
 #[test]
-fn test_simpler_intersection() {
+fn test_union() {
     let a = Classifier::Literal("*b".to_string(), None);
     let b = Classifier::Literal("*a".to_string(), None);
     let c = Classifier::Or(BTreeSet::from_iter([a, b]));
     let d: Dfa = c.compile(&None);
-    assert!(d.includes_string("bb"));
-    assert!(!d.includes_string("b"));
-    assert!(d.includes_string("aa"));
-    assert!(!d.includes_string("a"));
-    assert!(d.includes_string("ab"));
-    assert!(!d.includes_string("bq"));
+
+    assert_includes(&d, &["bb", "aa", "ab"]);
+    assert_not_includes(&d, &["b", "a", "bq"]);
 }
 
 #[test]
