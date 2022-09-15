@@ -135,6 +135,20 @@ impl<M> Dfa<M>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
+    /// Calling this method requires setting accepting states externally
+    pub fn new(symbols: BTreeSet<char>) -> Self {
+        let mut elements: BTreeSet<Element> = symbols.iter().map(|s| s.into()).collect();
+        elements.insert(Element::NotTokenSet(symbols.clone()));
+
+        Self {
+            symbols,
+            elements,
+            entry: Default::default(),
+            transitions: Default::default(),
+            states: Default::default(),
+        }
+    }
+
     pub(crate) fn from_language(l: Vec<char>, m: &Option<M>) -> Self {
         let symbols: BTreeSet<_> = l
             .iter()
@@ -204,29 +218,27 @@ where
         builder
     }
 
-    pub fn accepting_states(&self) -> BTreeMap<CompoundId, BTreeSet<State<M>>> {
-        self.states
-            .clone()
-            .into_iter()
-            .filter(|(_id, states)| states.iter().any(|s| s.accepting()))
-            .collect::<BTreeMap<_, _>>()
-    }
-
-    /// Calling this method requires setting accepting states externally
-    pub fn new(symbols: BTreeSet<char>) -> Self {
-        let mut elements: BTreeSet<Element> = symbols.iter().map(|s| s.into()).collect();
-        elements.insert(Element::NotTokenSet(symbols.clone()));
-
-        Self {
-            symbols,
-            elements,
-            entry: Default::default(),
-            transitions: Default::default(),
-            states: Default::default(),
-        }
-    }
-
+    // TODO: Should return M
     pub fn includes_path(&self, path: &[Element]) -> bool {
+        self.accepting_path(path, &mut |state| match state {
+            State::Include(_m) => true,
+            State::InverseExclude(_) | State::InverseInclude(_) | State::Exclude(_) => false,
+        })
+    }
+
+    // TODO: Should return M
+    pub fn excludes_path(&self, path: &[Element]) -> bool {
+        self.accepting_path(path, &mut |state| match state {
+            State::Exclude(_m) => true,
+            State::InverseExclude(_) | State::InverseInclude(_) | State::Include(_) => false,
+        })
+    }
+
+    pub fn accepting_path(
+        &self,
+        path: &[Element],
+        check_state: &mut impl Fn(&State<M>) -> bool,
+    ) -> bool {
         let edges = self.get_edges().0;
         let mut stack = vec![(0, self.entry.clone())];
 
@@ -239,12 +251,11 @@ where
                     None => continue,
                     Some(s) => {
                         for state in s {
-                            match state {
-                                State::Include(_) => return true,
+                            if check_state(state) {
+                                return true;
+                            } else {
                                 // did not find an accepting state on this path within the scope of the input
-                                State::InverseExclude(_)
-                                | State::InverseInclude(_)
-                                | State::Exclude(_) => continue,
+                                continue;
                             }
                         }
                     }
@@ -266,10 +277,6 @@ where
         }
         false
     }
-
-    // pub fn excludes_path() -> bool {
-
-    // }
 
     fn write_into_language(&mut self, language: &BTreeSet<Element>) {
         // !a!:, !b!:, -> !a!b!:
@@ -468,6 +475,14 @@ where
         d
     }
 
+    // needed?
+    #[deprecated]
+    fn build_dfa(&self) -> Self {
+        let mut dfa = self.clone();
+        dfa.simplify();
+        dfa
+    }
+
     /// Walk the transitions table for a stack of rows to create product states
     /// and rationalize transitions into a DFA
     /// see eg https://en.wikipedia.org/wiki/Powerset_construction
@@ -510,6 +525,92 @@ where
         }
     }
 
+    /// Returns a map of node ids to their associated accepting states
+    pub fn accepting_states(&self) -> BTreeMap<CompoundId, BTreeSet<State<M>>> {
+        self.states
+            .clone()
+            .into_iter()
+            .filter(|(_id, states)| states.iter().any(|s| s.accepting()))
+            .collect::<BTreeMap<_, _>>()
+    }
+
+    /// Removes any node or edge which is not reachable from self.entry or is not
+    /// in the path from self.entry to an accepting state
+    pub(crate) fn shake(&mut self) {
+        let alive = self.get_edges().accepting_branches(self);
+        println!("shake: alive: {alive:?}");
+
+        let mut dead_elements = vec![];
+        for (element, edges) in self.transitions.iter_mut() {
+            edges.retain(|k, _| alive.contains(k));
+            for (_, targets) in edges.iter_mut() {
+                targets.retain(|t| alive.contains(t));
+            }
+            edges.retain(|_, v| !v.is_empty());
+            if edges.is_empty() {
+                dead_elements.push(element.clone());
+            }
+        }
+
+        for e in dead_elements {
+            self.transitions.remove(&e);
+        }
+
+        self.states.retain(|k, _v| alive.contains(k));
+    }
+
+    /// Removes and simplifies unnecessary nodes and edges
+    pub(crate) fn simplify(&mut self) {
+        // TODO: simplify should re-map all ids to be non-compound (len 1)
+        // TODO: simplify can remove any empty TokenSet edge
+        self.shake();
+
+        let by_edge = self.get_edges().0;
+        self.transitions = Default::default();
+
+        for (source, edges) in &by_edge {
+            let mut targets_to_edges: BTreeMap<CompoundId, Vec<&Element>> = Default::default();
+
+            for (element, targets) in edges {
+                for t in targets {
+                    targets_to_edges
+                        .entry(t.clone())
+                        .and_modify(|v| v.push(element))
+                        .or_insert_with(|| vec![element]);
+                }
+            }
+
+            for (target, elements) in targets_to_edges {
+                // source -> target -> element
+                let mut positives = BTreeSet::new();
+                let mut negatives = BTreeSet::new();
+                for element in elements {
+                    match element {
+                        Element::TokenSet(ref s) => {
+                            positives = &positives | s;
+                        }
+                        Element::NotTokenSet(ref s) => {
+                            negatives = &negatives | s;
+                        }
+                    }
+                }
+                let overlapping = match (!negatives.is_empty(), !positives.is_empty()) {
+                    (true, true) => Element::NotTokenSet(&negatives - &positives),
+                    (true, false) => Element::NotTokenSet(negatives),
+                    (false, true) => Element::TokenSet(positives),
+                    (false, false) => continue,
+                };
+
+                self.transitions
+                    .entry(overlapping)
+                    .or_default()
+                    .entry(source.clone())
+                    .or_default()
+                    .insert(target);
+            }
+        }
+    }
+
     pub(super) fn ids(&self) -> HashSet<CompoundId> {
         let mut ids: HashSet<CompoundId> = Default::default();
 
@@ -522,14 +623,6 @@ where
             }
         }
         ids
-    }
-
-    // needed?
-    #[deprecated]
-    fn build_dfa(&self) -> Self {
-        let mut dfa = self.clone();
-        dfa.simplify();
-        dfa
     }
 
     pub fn add_state(&mut self, node: &CompoundId, state: State<M>) {
@@ -582,6 +675,35 @@ where
         self.add_transitions(&BTreeSet::from([*from]), e, &BTreeSet::from([*to]));
     }
 
+    /// Return true if there are no overlapping edges out of a given node
+    #[cfg(test)]
+    pub fn is_consistent(&self) -> bool {
+        for (s, edges) in self.get_edges().0 {
+            for (i1, (e1, _)) in edges.clone().iter().enumerate() {
+                for (i2, (e2, _)) in edges.clone().iter().enumerate() {
+                    if i1 >= i2 {
+                        continue;
+                    }
+                    if e1.accepts(e2) || e2.accepts(e1) {
+                        print!("{s:?} {e1:?} {e2:?} {i1} v {i2}");
+                        return false;
+                    }
+                }
+            }
+        }
+
+        // TODO: assert also that every node id in a transition is also represented in self.states
+        for id in self.ids() {
+            if self.states.get(&id).is_none() {
+                print!("missing state for id: {id:?} {self:#?}");
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Applies an offset to every ID in self, so self remains consistent
+    /// while being shifted into an ID range hopefully distinct from another
     pub(crate) fn offset_self(&mut self, offset: u32) {
         let mut transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>> =
             Default::default();
@@ -610,29 +732,6 @@ where
             .collect();
     }
 
-    pub(crate) fn shake(&mut self) {
-        let alive = self.get_edges().accepting_branches(self);
-        println!("shake: alive: {alive:?}");
-
-        let mut dead_elements = vec![];
-        for (element, edges) in self.transitions.iter_mut() {
-            edges.retain(|k, _| alive.contains(k));
-            for (_, targets) in edges.iter_mut() {
-                targets.retain(|t| alive.contains(t));
-            }
-            edges.retain(|_, v| !v.is_empty());
-            if edges.is_empty() {
-                dead_elements.push(element.clone());
-            }
-        }
-
-        for e in dead_elements {
-            self.transitions.remove(&e);
-        }
-
-        self.states.retain(|k, _v| alive.contains(k));
-    }
-
     pub(super) fn get_edges(&self) -> EdgeIndex {
         // Build a convenient map of edges indexed differently
         let mut map: BTreeMap<CompoundId, BTreeMap<Element, BTreeSet<CompoundId>>> =
@@ -647,84 +746,6 @@ where
             }
         }
         EdgeIndex(map)
-    }
-
-    pub(crate) fn simplify(&mut self) {
-        // TODO: simplify should re-map all ids to be non-compound (len 1)
-        // TODO: simplify can remove any empty TokenSet edge
-        self.shake();
-
-        let by_edge = self.get_edges().0;
-        self.transitions = Default::default();
-
-        for (source, edges) in &by_edge {
-            let mut targets_to_edges: BTreeMap<CompoundId, Vec<&Element>> = Default::default();
-
-            for (element, targets) in edges {
-                for t in targets {
-                    targets_to_edges
-                        .entry(t.clone())
-                        .and_modify(|v| v.push(element))
-                        .or_insert_with(|| vec![element]);
-                }
-            }
-
-            for (target, elements) in targets_to_edges {
-                // source -> target -> element
-                let mut positives = BTreeSet::new();
-                let mut negatives = BTreeSet::new();
-                for element in elements {
-                    match element {
-                        Element::TokenSet(ref s) => {
-                            positives = &positives | s;
-                        }
-                        Element::NotTokenSet(ref s) => {
-                            negatives = &negatives | s;
-                        }
-                    }
-                }
-                let overlapping = match (!negatives.is_empty(), !positives.is_empty()) {
-                    (true, true) => Element::NotTokenSet(&negatives - &positives),
-                    (true, false) => Element::NotTokenSet(negatives),
-                    (false, true) => Element::TokenSet(positives),
-                    (false, false) => continue,
-                };
-
-                self.transitions
-                    .entry(overlapping)
-                    .or_default()
-                    .entry(source.clone())
-                    .or_default()
-                    .insert(target);
-            }
-        }
-    }
-
-    /// Return true if there are no overlapping edges out of a given node
-    #[cfg(test)]
-    pub fn is_consistent(&self) -> bool {
-        for (s, edges) in self.get_edges().0 {
-            for (i1, (e1, _)) in edges.clone().iter().enumerate() {
-                for (i2, (e2, _)) in edges.clone().iter().enumerate() {
-                    if i1 >= i2 {
-                        continue;
-                    }
-                    if e1.accepts(e2) || e2.accepts(e1) {
-                        print!("{s:?} {e1:?} {e2:?} {i1} v {i2}");
-                        return false;
-                    }
-                }
-            }
-        }
-
-        // TODO: assert also that every node id in a transition is also represented in self.states
-        for id in self.ids() {
-            if self.states.get(&id).is_none() {
-                print!("missing state for id: {id:?} {self:#?}");
-                return false;
-            }
-        }
-        true
     }
 }
 

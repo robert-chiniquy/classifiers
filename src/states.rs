@@ -17,7 +17,8 @@ impl<M> State<M>
 where
     M: std::fmt::Debug + Clone,
 {
-    pub fn negate(&self) -> Self {
+    /// Flips states between themselves and their inverses
+    pub fn complement(&self) -> Self {
         match self {
             State::InverseInclude(m) => State::Include(m.clone()),
             State::InverseExclude(m) => State::Exclude(m.clone()),
@@ -26,6 +27,17 @@ where
         }
     }
 
+    /// Flips states between themselves and their opposites
+    pub fn negate(&self) -> Self {
+        match self {
+            State::InverseInclude(m) => State::InverseExclude(m.clone()),
+            State::InverseExclude(m) => State::InverseInclude(m.clone()),
+            State::Include(m) => State::Exclude(m.clone()),
+            State::Exclude(m) => State::Include(m.clone()),
+        }
+    }
+
+    /// Returns true if self is an 'accepting' state in the DFA
     pub fn accepting(&self) -> bool {
         match self {
             State::InverseInclude(_) => false,
@@ -42,8 +54,8 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            State::InverseInclude(m) => f.write_str(&format!("vin: {m:?}")),
-            State::InverseExclude(m) => f.write_str(&format!("vex: {m:?}")),
+            State::InverseInclude(m) => f.write_str(&format!("v-in: {m:?}")),
+            State::InverseExclude(m) => f.write_str(&format!("v-ex: {m:?}")),
             Self::Include(m) => f.write_str(&format!("In: {m:?}")),
             Self::Exclude(m) => f.write_str(&format!("Ex: {m:?}")),
         }

@@ -73,52 +73,6 @@ impl ElementalLanguage<Element> for Element {
     }
 }
 
-impl From<char> for Element {
-    fn from(c: char) -> Self {
-        Element::token(c)
-    }
-}
-
-impl From<&char> for Element {
-    fn from(c: &char) -> Self {
-        Element::token(*c)
-    }
-}
-
-impl Accepts<Element> for Element {
-    #[tracing::instrument(ret)]
-    fn accepts(&self, l: &Element) -> bool {
-        use Element::*;
-        match (self, &l) {
-            (x, y) if x == *y => true,
-            // Are all other ASCII characters specified in the not token set?
-            (TokenSet(x), NotTokenSet(y)) => {
-                x.len() + y.len() == ASCII_TOTAL_CHARS && x.is_disjoint(y)
-            }
-            (NotTokenSet(x), TokenSet(y)) => x.is_disjoint(y),
-            (NotTokenSet(x), NotTokenSet(y)) => x.is_subset(y),
-            _ => false,
-        }
-    }
-}
-
-impl Accepts<&char> for Element {
-    #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: &&char) -> bool {
-        match self {
-            Element::NotTokenSet(v) => !v.iter().any(|c| *c == **l),
-            Element::TokenSet(v) => v.iter().any(|c| *c == **l),
-        }
-    }
-}
-
-impl Accepts<char> for Element {
-    #[tracing::instrument(skip_all, ret)]
-    fn accepts(&self, l: &char) -> bool {
-        self.accepts(&l)
-    }
-}
-
 impl std::iter::Sum for Element {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Element::TokenSet(Default::default()), |acc, cur| {
@@ -163,6 +117,52 @@ impl Add for Element {
                 }
             }
         }
+    }
+}
+
+impl Accepts<Element> for Element {
+    #[tracing::instrument(ret)]
+    fn accepts(&self, l: &Element) -> bool {
+        use Element::*;
+        match (self, &l) {
+            (x, y) if x == *y => true,
+            // Are all other ASCII characters specified in the not token set?
+            (TokenSet(x), NotTokenSet(y)) => {
+                x.len() + y.len() == ASCII_TOTAL_CHARS && x.is_disjoint(y)
+            }
+            (NotTokenSet(x), TokenSet(y)) => x.is_disjoint(y),
+            (NotTokenSet(x), NotTokenSet(y)) => x.is_subset(y),
+            _ => false,
+        }
+    }
+}
+
+impl Accepts<&char> for Element {
+    #[tracing::instrument(skip_all, ret)]
+    fn accepts(&self, l: &&char) -> bool {
+        match self {
+            Element::NotTokenSet(v) => !v.iter().any(|c| *c == **l),
+            Element::TokenSet(v) => v.iter().any(|c| *c == **l),
+        }
+    }
+}
+
+impl Accepts<char> for Element {
+    #[tracing::instrument(skip_all, ret)]
+    fn accepts(&self, l: &char) -> bool {
+        self.accepts(&l)
+    }
+}
+
+impl From<char> for Element {
+    fn from(c: char) -> Self {
+        Element::token(c)
+    }
+}
+
+impl From<&char> for Element {
+    fn from(c: &char) -> Self {
+        Element::token(*c)
     }
 }
 

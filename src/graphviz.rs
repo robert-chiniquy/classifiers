@@ -6,10 +6,13 @@ where
 {
     #[tracing::instrument(skip_all)]
     pub fn graphviz_file(&self, filename: &str, label: &str) {
-        use std::io::Write;
-        let g = graphviz_wrap(self.graphviz(), label);
-        let mut output = std::fs::File::create(filename).unwrap();
-        assert!(output.write_all(g.as_bytes()).is_ok());
+        #[cfg(feature = "graphs")]
+        {
+            use std::io::Write;
+            let g = graphviz_wrap(self.graphviz(), label);
+            let mut output = std::fs::File::create(filename).unwrap();
+            assert!(output.write_all(g.as_bytes()).is_ok());
+        }
     }
 
     #[tracing::instrument(skip_all)]

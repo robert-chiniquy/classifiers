@@ -193,7 +193,7 @@ where
         dfa.states = dfa
             .states
             .into_iter()
-            .map(|(id, states)| (id, states.iter().map(|s| s.negate()).collect()))
+            .map(|(id, states)| (id, states.iter().map(|s| s.complement()).collect()))
             .collect();
         dfa
     }
