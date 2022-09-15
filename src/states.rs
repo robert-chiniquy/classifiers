@@ -19,11 +19,12 @@ where
 {
     /// Flips states between themselves and their inverses
     pub fn complement(&self) -> Self {
+        use State::*;
         match self {
-            State::InverseInclude(m) => State::Include(m.clone()),
-            State::InverseExclude(m) => State::Exclude(m.clone()),
-            State::Include(m) => State::InverseInclude(m.clone()),
-            State::Exclude(m) => State::Exclude(m.clone()),
+            Include(m) => InverseInclude(m.clone()),
+            Exclude(m) => InverseExclude(m.clone()),
+            InverseInclude(m) => Include(m.clone()),
+            InverseExclude(m) => Exclude(m.clone()),
         }
     }
 
@@ -33,11 +34,12 @@ where
 
     /// Returns true if self is an 'accepting' state in the DFA
     pub fn accepting(&self) -> bool {
+        use State::*;
         match self {
-            State::InverseInclude(_) => false,
-            State::InverseExclude(_) => false,
-            State::Include(_) => true,
-            State::Exclude(_) => true,
+            Include(_) => true,
+            Exclude(_) => true,
+            InverseInclude(_) => false,
+            InverseExclude(_) => false,
         }
     }
 }
@@ -47,11 +49,12 @@ where
     M: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use State::*;
         match self {
-            State::InverseInclude(_) => f.write_str(&format!("_")),
-            State::InverseExclude(_) => f.write_str(&format!("_e")),
-            Self::Include(_) => f.write_str(&format!("A")),
-            Self::Exclude(_) => f.write_str(&format!("Ae")),
+            Include(_) => f.write_str(&format!("A")),
+            Exclude(_) => f.write_str(&format!("Ae")),
+            InverseInclude(_) => f.write_str(&format!("_")),
+            InverseExclude(_) => f.write_str(&format!("_e")),
         }
     }
 }

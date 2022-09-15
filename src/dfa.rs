@@ -9,7 +9,7 @@ type NodeId = u32;
 // for use in powerset construction
 pub type UnionedId = BTreeSet<NodeId>;
 
-#[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
+#[derive(PartialOrd, Ord, PartialEq, Eq, Clone)]
 pub struct Dfa<M = ()>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
@@ -26,6 +26,14 @@ where
     // in one copy, you change the Include(M) to a Exclude(M),
     // and then you intersect them, you would get both an Include and a Exclude in this set
     pub(super) states: BTreeMap<UnionedId, BTreeSet<State<M>>>,
+}
+
+impl <M> std::fmt::Debug for Dfa<M> where
+    M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("\n=========\nentry:\n{:?}\n---------\nstates:\n{:?}\n---------\ntransitions:\n{:?}\n=========\n", self.entry, self.states, self.transitions))
+    }
 }
 
 impl<M> Dfa<M>
@@ -686,7 +694,7 @@ where
 
         for id in self.ids() {
             if self.states.get(&id).is_none() {
-                print!("missing state for id: {id:?} {self:?}");
+                print!("\n\n🌮🌮🌮🌮\nmissing state for id: {id:?} {self:?}\n🌮🌮🌮🌮\n\n");
                 return false;
             }
         }

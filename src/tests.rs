@@ -108,10 +108,10 @@ fn test_complement_simple() {
     // - rejects P
     let c: Classifier = Classifier::Literal("P".to_string(), None);
     let mut d: Dfa = c.compile(&None);
-    d.graphviz_file("complement1.dot", "complement1.dot");
+    d.graphviz_file("complement1.dot", "P");
     d = d.complement(&None);
     d.simplify();
-    d.graphviz_file("complement2.dot", "complement2.dot");
+    d.graphviz_file("complement2.dot", "!P");
     assert!(!d.includes_string("P"));
     assert!(d.includes_string("Pffffft"));
 }
@@ -220,16 +220,24 @@ fn test_complement1() {
 
 #[test]
 fn test_intersection_of_heterogenous_states() {
-    let combo = Classifier::or(&[
-        Classifier::not(Classifier::literal("tacos")),
-        Classifier::literal("*"),
-        Classifier::and(&[
-            Classifier::literal("t*"),
-            Classifier::not(Classifier::literal("*q")),
-        ]),
+    let inner = Classifier::and(&[
+        Classifier::literal("tb"),
+        Classifier::not(Classifier::literal("x")),
     ]);
 
-    let d: Dfa = Classifier::compile(&combo, &None);
+    let mut d = inner.compile(&None);
+    println!("\n\ninner:\n{d:?}\n");
+
+    d.graphviz_file("test_intersection_of_heterogenous_states1.dot", "tb & !x");
+
+    let combo = Classifier::or(&[
+        // Classifier::not(Classifier::literal("tacos")),
+        Classifier::literal("a"),
+        inner,
+    ]);
+
+    d = Classifier::compile(&combo, &None);
+    d.graphviz_file("test_intersection_of_heterogenous_states2.dot", "(!tacos, a, (tb & x))");
 
     assert_includes(&d, &["tacos", "A", "tZZZZq"]);
 }
