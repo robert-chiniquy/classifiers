@@ -257,28 +257,40 @@ where
         // Combining the accepting states requires that any offset must already have occurred
         // a and b must already contain states for every extant NodeId
         let mut accepting_states = a.states.clone();
-        accepting_states.extend(b.states.clone().into_iter());
+        for (id, states) in &b.states {
+            accepting_states
+                .entry(id.clone())
+                .or_default()
+                .extend(states.clone());
+        }
 
         let mut transitions = a.transitions.clone();
-        transitions.extend(b.transitions.clone().into_iter());
-        // println!(
-        //     "a states: {:?}\nb states: {:?}\nboth: {:?}",
-        //     a.states,
-        //     b.states,
-        //     accepting_states.clone()
-        // );
-        // println!(
-        //     "a transitions: {:?}\nb transitions: {:?}\nboth: {:?}",
-        //     a.transitions,
-        //     b.transitions,
-        //     transitions.clone()
-        // );
-        // println!(
-        //     "a entry: {:?}\nb entry: {:?}\nboth: {:?}",
-        //     a.entry,
-        //     b.entry,
-        //     (&a.entry | &b.entry).clone()
-        // );
+        for (e, targets) in &b.transitions {
+            let thing = transitions.entry(e.clone()).or_default();
+
+            for (k, v) in targets {
+                thing.entry(k.clone()).or_default().extend(v.clone());
+            }
+        }
+
+        println!(
+            "a states: {:?}\nb states: {:?}\nboth: {:?}",
+            a.states,
+            b.states,
+            accepting_states.clone()
+        );
+        println!(
+            "a transitions: {:?}\nb transitions: {:?}\nboth: {:?}",
+            a.transitions,
+            b.transitions,
+            transitions.clone()
+        );
+        println!(
+            "a entry: {:?}\nb entry: {:?}\nboth: {:?}",
+            a.entry,
+            b.entry,
+            (&a.entry | &b.entry).clone()
+        );
 
         let mut product = Self {
             symbols,
@@ -295,59 +307,40 @@ where
             let b_transitions = b.transitions.get(e);
 
             match (a_transitions, b_transitions) {
-                (None, None) => {},
+                (None, None) => {}
                 (Some(a_t), Some(b_t)) => {
                     a_t.iter().for_each(|(a_from, a_toos)| {
                         b_t.iter().for_each(|(b_from, b_toos)| {
+
                             let compound_id = a_from | b_from;
                             stack.push(compound_id.clone());
-                            let states =
-                                a.states.get(a_from).unwrap() | b.states.get(b_from).unwrap();
+                            
+                            let states = a.states.get(a_from).unwrap() | b.states.get(b_from).unwrap();
                             let to = (a_toos | b_toos).into_iter().flatten().collect();
-                            product.add_transition2_with_states(
-                                &compound_id,
-                                &e.clone(),
-                                &to,
-                                &states,
-                            );
-                            a_toos.iter().for_each(|to| {
-                                product.add_transition2_with_states(a_from, &e.clone(), to, &states)
-                            });
-                            b_toos.iter().for_each(|to| {
-                                product.add_transition2_with_states(b_from, &e.clone(), to, &states)
-                            });
+                            
+                            product.add_transition2_with_states(&compound_id, &e.clone(), &to, &states);
                         });
                     });
                 }
                 // NOTE:
-                //  we must seed the transitions out of the product entry here and below because 
+                //  we must seed the transitions out of the product entry here and below because
                 //  the double for loop misses it above...
-                (None, Some(b_t)) => {
-                    if let Some(targets) = b_t.get(&b.entry) {
-                        for t in targets {
-                            let state = b.states.get(&t).unwrap();
-                            product.add_transition2_with_states(
-                                &product.entry.clone(),
-                                &e.clone(),
-                                &t,
-                                state,
-                            );
-                        }
-                    }
-                },
                 (Some(a_t), None) => {
                     if let Some(targets) = a_t.get(&a.entry) {
                         for t in targets {
                             let state = a.states.get(&t).unwrap();
-                            product.add_transition2_with_states(
-                                &product.entry.clone(),
-                                &e.clone(),
-                                &t,
-                                state,
-                            );
+                            product.add_transition2_with_states(&product.entry.clone(), &e.clone(), &t, state);
                         }
                     }
-                },
+                }
+                (None, Some(b_t)) => {
+                    if let Some(targets) = b_t.get(&b.entry) {
+                        for t in targets {
+                            let state = b.states.get(&t).unwrap();
+                            product.add_transition2_with_states(&product.entry.clone(), &e.clone(), &t, state);
+                        }
+                    }
+                }
             }
         }
 

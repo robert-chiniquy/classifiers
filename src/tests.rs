@@ -139,9 +139,10 @@ fn test_union() {
     let b = Classifier::Literal("*a".to_string(), None);
     let c = Classifier::Or(BTreeSet::from_iter([a, b]));
     let d: Dfa = c.compile(&None);
+    d.graphviz_file("dfa.dot", "dfa.dot");
 
-    assert_includes(&d, &["bb", "aa", "ab"]);
-    assert_not_includes(&d, &["b", "a", "bq"]);
+    assert_includes(&d, &["_b", "_a", "_b"]);
+    assert_not_includes(&d, &["b", "a", "q"]);
 }
 
 #[test]
