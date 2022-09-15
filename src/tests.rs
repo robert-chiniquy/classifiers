@@ -276,3 +276,50 @@ fn test_accepts() {
     assert!(a.accepts(&b));
     assert!(!b.accepts(&a));
 }
+
+
+#[test]
+fn test_from_language_simple() {
+    let mut star_amp = Dfa::<()>::from_language("*&f".to_string().chars().collect(), &None);
+    star_amp.simplify();
+    star_amp.graphviz_file("star_amp.dot", "*&f");
+
+    assert!(star_amp.is_consistent());
+
+    assert!(star_amp.includes_path(&[
+        Element::token('&'),
+        Element::token('&'),
+        Element::token('&'),
+        Element::token('f'),
+    ]));
+
+    let mut starb = Dfa::<()>::from_language("*B".to_string().chars().collect(), &None);
+    starb.simplify();
+    starb.graphviz_file("starB.dot", "*B");
+
+    assert!(starb.is_consistent());
+    assert!(!starb.includes_path(&[Element::token('B')]));
+    assert!(
+        starb.includes_path(&[Element::token('B'), Element::token('B')]),
+        "bad starb :( {starb:#?}"
+    );
+
+
+    let mut astar = Dfa::<()>::from_language("a*".to_string().chars().collect(), &None);
+    astar.simplify();
+    astar.graphviz_file("astar.dot", "a*");
+    assert!(astar.is_consistent());
+    assert!(!astar.includes_path(&[Element::token('a')]));
+    assert!(astar.includes_path(&[Element::token('a'), Element::token('a')]));
+
+    let mut fstarfstar = Dfa::<()>::from_language("f*f*".to_string().chars().collect(), &None);
+    fstarfstar.simplify();
+    fstarfstar.graphviz_file("fstarfstar.dot", "f*f*");
+    assert!(fstarfstar.is_consistent());
+
+    let mut abcdefg = Dfa::<()>::from_language("a*abcdefg&&".to_string().chars().collect(), &None);
+    abcdefg.simplify();
+    abcdefg.graphviz_file("abcdefg.dot", "a*abcdefg&&");
+    assert!(abcdefg.is_consistent());
+
+}
