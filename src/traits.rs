@@ -33,24 +33,15 @@ pub trait ElementalLanguage<E>:
     + std::fmt::Display
     + std::hash::Hash
     + Accepts<E>
-    + Subtraction<E>
-    + Add
     + std::ops::Add<Output = E>
-    + Universal
 where
     E: Eq + std::hash::Hash + PartialEq,
 {
+    fn difference(a: &E, b: &E) -> E;
+    fn universal() -> Self;
 }
 
 /// E: Accepts<L> implies a C: Into<E> and L: IntoIterator<Item = C>
 pub trait Accepts<E> {
     fn accepts(&self, l: &E) -> bool;
-}
-
-pub trait Subtraction<E> {
-    fn difference(a: &E, b: &E) -> E;
-}
-
-pub trait Universal {
-    fn universal() -> Self;
 }

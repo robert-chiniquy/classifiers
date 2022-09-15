@@ -28,11 +28,48 @@ impl Element {
     }
 }
 
-impl ElementalLanguage<Element> for Element {}
-
-impl Universal for Element {
+impl ElementalLanguage<Element> for Element {
     fn universal() -> Self {
         Element::NotTokenSet(Default::default())
+    }
+
+    fn difference(a: &Element, b: &Element) -> Element {
+        use Element::*;
+
+        match (a, b) {
+            (TokenSet(x), TokenSet(y)) => {
+                // ab - bc = a
+                TokenSet(x - y)
+            }
+            (TokenSet(x), NotTokenSet(y)) => {
+                // remove from x any value which is not in y
+                TokenSet(x & y)
+                // let mut x = x.clone();
+                // x.retain(|c| y.contains(c));
+                // TokenSet(x).simplify()
+            }
+            (NotTokenSet(x), TokenSet(y)) => {
+                // !a!b abc
+                // !a!b!c
+                NotTokenSet(x | y)
+            }
+
+            (NotTokenSet(x), NotTokenSet(y)) => {
+                // things on right not on the left
+                // let everything = a,b,c
+                // !a = b,c
+                // !c = a,b
+                // !a - !c = b,c - a,b = c
+                // !a + !c = b,c + a,b = a,b,c
+                // !a + !c = ? - !c =
+
+                //  !a - !c = c (b,c,d... - a,b,d.. = c)
+                TokenSet(y - x)
+                // let mut x = x.clone();
+                // x.retain(|c| !y.contains(c));
+                // NotTokenSet(x).simplify()
+            }
+        }
     }
 }
 
@@ -124,47 +161,6 @@ impl Add for Element {
                 } else {
                     Self::universal()
                 }
-            }
-        }
-    }
-}
-
-impl Subtraction<Element> for Element {
-    fn difference(a: &Element, b: &Element) -> Element {
-        use Element::*;
-
-        match (a, b) {
-            (TokenSet(x), TokenSet(y)) => {
-                // ab - bc = a
-                TokenSet(x - y)
-            }
-            (TokenSet(x), NotTokenSet(y)) => {
-                // remove from x any value which is not in y
-                TokenSet(x & y)
-                // let mut x = x.clone();
-                // x.retain(|c| y.contains(c));
-                // TokenSet(x).simplify()
-            }
-            (NotTokenSet(x), TokenSet(y)) => {
-                // !a!b abc
-                // !a!b!c
-                NotTokenSet(x | y)
-            }
-
-            (NotTokenSet(x), NotTokenSet(y)) => {
-                // things on right not on the left
-                // let everything = a,b,c
-                // !a = b,c
-                // !c = a,b
-                // !a - !c = b,c - a,b = c
-                // !a + !c = b,c + a,b = a,b,c
-                // !a + !c = ? - !c =
-
-                //  !a - !c = c (b,c,d... - a,b,d.. = c)
-                TokenSet(y - x)
-                // let mut x = x.clone();
-                // x.retain(|c| !y.contains(c));
-                // NotTokenSet(x).simplify()
             }
         }
     }
