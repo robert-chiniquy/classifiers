@@ -45,8 +45,8 @@ fn test_from_language_simple() {
     assert!(star_amp.includes_path(&[
         Element::token('&'),
         Element::token('&'),
+        Element::token('&'),
         Element::token('f'),
-        // Element::token('&')
     ]));
 
     let mut starb = Dfa::<()>::from_language("*B".to_string().chars().collect(), &None);
@@ -168,9 +168,9 @@ where
                         builder.add_transitions(&source, &Element::token(*c), &target);
                     }
                     // builder.add_transitions(&source, &positive_star, &target);
-                    println!("yo1  transitions ({i}, {c}) : {:?}... tried to add: {source:?} {positives:?} {target:?}", builder.transitions);
+                    // println!("yo1  transitions ({i}, {c}) : {:?}... tried to add: {source:?} {positives:?} {target:?}", builder.transitions);
                     builder.add_transitions(&source, &negative_star, &target);
-                    println!("yo2  transitions ({i}, {c}) : {:?}", builder.transitions);
+                    // println!("yo2  transitions ({i}, {c}) : {:?}", builder.transitions);
                 }
                 c => {
                     // transition from prior to current via c
@@ -652,30 +652,24 @@ where
 
     #[tracing::instrument(skip(self))]
     pub(super) fn add_transitions(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
-        let mut no_e = true;
-        println!("before: {:?}", self.transitions);
+        // let mut no_e = true;
+        // println!("before: {:?}", self.transitions);
         for element in &self.elements {
             if !e.accepts(element) {
                 continue;
             }
-            no_e = false;
+            // no_e = false;
 
-            if self.transitions.get(&element.clone()).is_none() {
-                self.transitions.insert(element.clone(), Default::default());
-            }
-
-            let e = self.transitions.get_mut(&element.clone()).unwrap();
-            if e.get(&from.clone()).is_none() {
-                e.insert(from.clone(), Default::default());
-            }
-
-            e.get_mut(from).unwrap().insert(to.clone());
-            // ee.insert(to.clone());
+            self.transitions
+                .entry(element.clone())
+                .or_default()
+                .entry(from.clone())
+                .or_default()
+                .insert(to.clone());
         }
-        if no_e {
-            println!("did not add a transition for {from:?} -{e:?}-> {to:?}\n\n{self:?}")
-        }
-        println!("after: {:?}", self.transitions);
+        // if no_e {
+        //     println!("did not add a transition for {from:?} -{e:?}-> {to:?}\n\n{self:?}")
+        // }
     }
 
     /// This function assumes a CompoundId of only {from} and {to} respectively!
