@@ -25,12 +25,30 @@ fn test_complement() {
 
 #[test]
 fn test_simpler_intersection() {
-    let a = Classifier::<Dfa>::Literal("*b".to_string(), None);
+    let a = Classifier::Literal("*b".to_string(), None);
     let b = Classifier::Literal("*a".to_string(), None);
     let c = Classifier::Any(BTreeSet::from_iter([a, b]));
-    let _d = c.compile(&None);
+    let d: Dfa = c.compile(&None);
+    assert!(d.includes_string("bb"));
+    assert!(!d.includes_string("b"));
+    assert!(d.includes_string("aa"));
+    assert!(!d.includes_string("a"));
+    assert!(d.includes_string("ab"));
+    assert!(!d.includes_string("bq"));
+}
 
-    // todo!()
+#[test]
+fn test_dfa_intersect() {
+    let a = Dfa::<()>::from_language("a*".to_string().chars().collect(), &None);
+    let b = Dfa::from_language("*a".to_string().chars().collect(), &None);
+
+    let mut i = Dfa::intersect(&a, &b);
+    let dfa = i.build();
+
+    assert!(dfa.includes_string("aa"));
+    assert!(dfa.includes_string("aaa"));
+    assert!(!dfa.includes_string("aab"));
+    assert!(!dfa.includes_string("a"));
 }
 
 #[test]
@@ -44,6 +62,10 @@ fn test_intersection() {
     let d = i.compile(&None);
     assert!(!d.transitions.is_empty());
     assert!(!d.states.is_empty());
+    assert!(d.includes_string("BA"));
+    assert!(!d.includes_string("AA"));
+    assert!(d.includes_string("BAA"));
+    assert!(d.includes_string("BqA"));
 }
 
 #[test]
@@ -58,12 +80,12 @@ fn test_negate1() {
     d = d.complement(&None);
     d.simplify();
     d.graphviz_file("negation2.dot", "!A*");
-    // assert!(d.includes_path(&['A'.into()]));
+    assert!(d.includes_string("A"));
 
     d = d.complement(&None);
     d.simplify();
     d.graphviz_file("negation3.dot", "!!A*");
-    assert!(!d.includes_path(&['A'.into()]));
+    assert!(!d.includes_string("A"));
 }
 
 #[test]
@@ -77,108 +99,27 @@ fn test_negate4() {
     let mut d = c.compile(&None);
     d.simplify();
     d.graphviz_file("negate4.dot", "negate4.dot");
-    let t = Element::token;
-    assert!(!d.includes_path(&[t('A'), t('A')]));
-    assert!(!d.includes_path(&[t('A'), t('A'), t('A')]));
+
+    assert!(!d.includes_string("A"));
+    assert!(!d.includes_string("AA"));
 }
 
 #[test]
 fn test_intersection_of_heterogenous_states() {
-    // #![allow(unused)]
-    // let everything_but_tacos = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal("tacos"))),
-    //     Classifier::Literal("*")),
-    // ]));
+    let combo = Classifier::any(&[
+        Classifier::not(Classifier::literal("tacos")),
+        Classifier::literal("*"),
+        Classifier::and(&[
+            Classifier::literal("t*"),
+            Classifier::not(Classifier::literal("*q")),
+        ]),
+    ]);
 
-    // let all_ts_but_tacos = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::Literal("t*")),
-    //     Classifier::not(Classifier::Literal("tacos"))),
-    // ]));
-
-    // let all_ts_but_q = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::Literal("t*")),
-    //     Classifier::not(Classifier::Literal("*q"))),
-    // ]));
-
-    // let combo = Classifier::Any(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal("tacos"))),
-    //     Classifier::Literal("*")),
-    //     Classifier::And(BTreeSet::from_iter([
-    //         Classifier::Literal("t*")),
-    //         Classifier::not(Classifier::Literal("*q"))),
-    //     ])),
-    // ]));
-
-    // let c = Classifier::compile(&everything_but_tacos, ());
-}
-
-#[test]
-fn test_terminal_on() {
-    // let zzz = Classifier::Any(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal("AB"))),
-    //     Classifier::Literal("AB")),
-    // ]));
-    // Matt is suggesting a Element::NotToken, doesn't need to be a public interface
-    // let zzz = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal("A*"))),
-    //     Classifier::Literal("*B")),
-    // ]));
-
-    // // only 1 char
-    // let _ = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal("**"))),
-    //     Classifier::Literal("*")),
-    // ]));
-
-    // let c = Classifier::compile(&zzz, ());
-    // write_graph(c.graphviz(), "terminal_on_zzz1.dot");
-    // how do we ask c if it accepts any state which is not AB
-    // (c could also accept AB in addition to some other state)
-    // - c minus an NFA which accepts AB
-    // the method to call to do this (like ... .accepts_inverse()) should:
-    // - 1. c.union(nfa which accepts AB)
-    // - 2. look for paths on the left but not on the right
-    // or
-    // walk c taking any edge which is not A and look for an accept
-    // walk c taking any edge which is not AB and look for an accept
-    //
-}
-
-#[test]
-fn test_rejection() {
-    // 2 NFAs, with all rejecting states, having 1 edge in common
-
-    // let lhs = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal("AB"))),
-    //     Classifier::not(Classifier::Literal("XY"))),
-    // ]));
-
-    // let rhs = Classifier::And(BTreeSet::from_iter([
-    //     Classifier::not(Classifier::Literal("AB"))),
-    //     Classifier::not(Classifier::Literal("CD"))),
-    // ]));
-
-    todo!()
-
-    // let c1: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile(&lhs, ());
-    // let c2: Nfa<NfaNode<()>, NfaEdge<Element>> = Classifier::compile(&rhs, ());
-
-    // c1.graphviz_file("test_rejection.1.dot", "![ab] X ![xy]");
-    // let i = c1.intersection(&c2);
-    // let u = c1.product(&c2);
-
-    // i.graphviz_file("test_rejection.dot", "![ab],![xy] X ![ab],![cd]");
-    // // assert that i has 1 edge
-    // assert_eq!(i.edges.len(), 1);
-
-    // use std::io::Write;
-
-    // let g = graphviz_wrap(u.graphviz(), "u");
-    // let mut output = std::fs::File::create("./union.dot").unwrap();
-    // assert!(output.write_all(g.as_bytes()).is_ok());
-
-    // assert that u has 3 edges
-    // assert_eq!(u.edges.len(), 3);
+    let d: Dfa = Classifier::compile(&combo, &None);
+    assert!(!d.includes_string("tacos"));
+    assert!(d.excludes_string("tacos"));
+    assert!(d.includes_string("A"));
+    assert!(d.includes_string("tZZZZq"));
 }
 
 #[test]

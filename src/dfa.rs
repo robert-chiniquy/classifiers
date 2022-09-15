@@ -27,24 +27,6 @@ where
 }
 
 #[test]
-fn test_product() {
-    // let a = DfaBuilder::from_language("ab".to_string().chars().collect());
-    // let b = DfaBuilder::from_language("ac".to_string().chars().collect());
-    // let _ = DfaBuilder::product(&a, &b);
-
-    let a = Dfa::<()>::from_language("a*".to_string().chars().collect(), &None);
-    let b = Dfa::from_language("*a".to_string().chars().collect(), &None);
-
-    let mut i = Dfa::intersect(&a, &b);
-    let _dfa = i.build();
-
-    // assert!(dfa.accepts(&vec!['a', 'a']).unwrap());
-    // assert!(dfa.accepts(&vec!['a', 'a', 'a']).unwrap());
-    // assert!(!dfa.accepts(&vec!['a', 'a', 'b']).unwrap());
-    // assert!(!dfa.accepts(&vec!['a']).unwrap());
-}
-
-#[test]
 fn test_from_language_simple() {
     let mut star_amp = Dfa::<()>::from_language("*&f".to_string().chars().collect(), &None);
     star_amp.simplify();

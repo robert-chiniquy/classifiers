@@ -57,6 +57,20 @@ where
     pub fn and(items: &[Self]) -> Self {
         Classifier::And(BTreeSet::from_iter(items.iter().cloned()))
     }
+
+    #[tracing::instrument(skip_all)]
+    pub fn any(items: &[Self]) -> Self {
+        Classifier::Any(BTreeSet::from_iter(items.iter().cloned()))
+    }
+}
+
+impl<M> Classifier<Dfa<M>>
+where
+    M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
+{
+    pub fn literal(s: &str) -> Self {
+        Classifier::Literal(s.to_string(), None)
+    }
 }
 
 impl<R> Classifier<R>
@@ -68,7 +82,7 @@ where
         match self {
             Classifier::Universal => R::universal(m),
             Classifier::Literal(l, m) => R::from_language(l, m),
-            Classifier::Not(c) => Classifier::compile(c, m).complement(m),
+            Classifier::Not(c) => Classifier::compile(c, m).negate(),
             Classifier::Any(v) => {
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {

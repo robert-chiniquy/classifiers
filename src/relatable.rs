@@ -46,9 +46,9 @@ fn test_relation() {
         da.simplify();
         db.simplify();
 
-        // println!("\n\n🐥🐥🐥🐥🐥🐥🐥 {a} {b}\n\n");
-        // assert!(da.is_consistent(), "failed on: {a}");
-        // assert!(db.is_consistent(), "failed on: {b}");
+        println!("\n\n🐥🐥🐥🐥🐥🐥🐥 {a} {b}\n\n");
+        assert!(da.is_consistent(), "failed on: {a}");
+        assert!(db.is_consistent(), "failed on: {b}");
 
         let (dr, dp, l, r) = da.relation(&db);
         results.push((da, db, a, b, outcome, dr, dp, l, r));
@@ -200,6 +200,15 @@ where
             .map(|(id, states)| (id, states.iter().map(|s| s.complement()).collect()))
             .collect();
         dfa
+    }
+
+    /// Return a DFA with all states negated, that is, flipped to their opposite Include/Exclude state
+    fn negate(&self) -> Self {
+        let mut ret = self.clone();
+        ret.states.iter_mut().for_each(|(_id, states)| {
+            *states = states.iter().map(|state| state.negate()).collect();
+        });
+        ret
     }
 
     #[tracing::instrument(skip_all)]
