@@ -32,7 +32,7 @@ fn test_relation() {
         ("f*f*", "*f*", Relation::Subset),
         ("asdf*f**", "*f*", Relation::Subset),
         ("*?*", "***", Relation::Equality),
-        ("asdf*f*", "*&f*", Relation::Subset),
+        ("asdf*f*", "*&f*", Relation::Intersection), // asdfafa
     ];
 
     inputs.reverse();
