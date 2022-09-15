@@ -84,7 +84,7 @@ where
     }
 
     #[tracing::instrument(skip_all)]
-    pub fn any(items: &[Self]) -> Self {
+    pub fn or(items: &[Self]) -> Self {
         Classifier::Or(BTreeSet::from_iter(items.iter().cloned()))
     }
 }

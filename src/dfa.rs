@@ -686,7 +686,7 @@ where
 
         for id in self.ids() {
             if self.states.get(&id).is_none() {
-                print!("missing state for id: {id:?} {self:#?}");
+                print!("missing state for id: {id:?} {self:?}");
                 return false;
             }
         }

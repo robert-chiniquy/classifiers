@@ -18,7 +18,6 @@ where
     M: std::fmt::Debug + Clone,
 {
     /// Flips states between themselves and their inverses
-    #[tracing::instrument(ret)]
     pub fn complement(&self) -> Self {
         match self {
             State::InverseInclude(m) => State::Include(m.clone()),
@@ -28,15 +27,8 @@ where
         }
     }
 
-    /// Flips states between themselves and their opposites;
-    #[tracing::instrument(ret)]
     pub fn negate(&self) -> Self {
-        match self {
-            State::InverseInclude(m) => State::InverseExclude(m.clone()),
-            State::InverseExclude(m) => State::InverseInclude(m.clone()),
-            State::Include(m) => State::Exclude(m.clone()),
-            State::Exclude(m) => State::Include(m.clone()),
-        }
+        self.complement()
     }
 
     /// Returns true if self is an 'accepting' state in the DFA
@@ -56,10 +48,10 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            State::InverseInclude(m) => f.write_str(&format!("_")),
-            State::InverseExclude(m) => f.write_str(&format!("_e")),
-            Self::Include(m) => f.write_str(&format!("A")),
-            Self::Exclude(m) => f.write_str(&format!("Ae")),
+            State::InverseInclude(_) => f.write_str(&format!("_")),
+            State::InverseExclude(_) => f.write_str(&format!("_e")),
+            Self::Include(_) => f.write_str(&format!("A")),
+            Self::Exclude(_) => f.write_str(&format!("Ae")),
         }
     }
 }

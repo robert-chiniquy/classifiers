@@ -216,7 +216,7 @@ fn test_negate() {
 
 #[test]
 fn test_intersection_of_heterogenous_states() {
-    let combo = Classifier::any(&[
+    let combo = Classifier::or(&[
         Classifier::not(Classifier::literal("tacos")),
         Classifier::literal("*"),
         Classifier::and(&[
@@ -226,10 +226,8 @@ fn test_intersection_of_heterogenous_states() {
     ]);
 
     let d: Dfa = Classifier::compile(&combo, &None);
-    assert!(!d.includes_string("tacos"));
-    assert!(d.excludes_string("tacos"));
-    assert!(d.includes_string("A"));
-    assert!(d.includes_string("tZZZZq"));
+
+    assert_includes(&d, &["tacos", "A", "tZZZZq"]);
 }
 
 #[test]
