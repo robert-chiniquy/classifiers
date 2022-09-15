@@ -17,7 +17,7 @@ where
     fn relation(
         &self,
         other: &Self,
-    ) -> (Relation, Self, BTreeSet<CompoundId>, BTreeSet<CompoundId>) {
+    ) -> (Relation, Self, BTreeSet<UnionedId>, BTreeSet<UnionedId>) {
         let mut left_ids: BTreeSet<_> = Default::default();
         let mut right_ids: BTreeSet<_> = Default::default();
 
@@ -52,7 +52,7 @@ where
     #[tracing::instrument]
     fn universal(m: &Option<Self::Metadata>) -> Self {
         // empty symbols
-        let entry = CompoundId::from([1]);
+        let entry = UnionedId::from([1]);
         let mut dfa = Dfa::<Self::Metadata> {
             symbols: BTreeSet::new(),
             elements: BTreeSet::new(),
@@ -61,14 +61,14 @@ where
             states: Default::default(),
         };
         // add a self-loop with a NotTokenSet of nothing
-        dfa.add_transition_with_state(&1, &Element::NotTokenSet(BTreeSet::new()), &1, &State::Include(m.clone()));
+        dfa.add_transition_with_state(&1, &Element::not_tokens(&[]), &1, &State::Include(m.clone()));
         dfa
     }
 
     #[tracing::instrument]
     fn none(m: &Option<Self::Metadata>) -> Self {
         // empty symbols
-        let entry = CompoundId::from([1]);
+        let entry = UnionedId::from([1]);
         let mut dfa = Dfa::<Self::Metadata> {
             symbols: BTreeSet::new(),
             elements: BTreeSet::new(),
@@ -76,7 +76,7 @@ where
             transitions: Default::default(),
             states: Default::default(),
         };
-        dfa.add_state(&entry, State::InverseInclude(m.clone()));
+        dfa.add_transition_with_state(&1, &Element::tokens(&[]), &1, &State::InverseInclude(m.clone()));
         dfa
     }
 
@@ -95,7 +95,7 @@ where
         for (source, edges) in self.get_edges().0 {
             if edges.is_empty() {
                 #[allow(deprecated)]
-                dfa.add_transition2(&source, &Element::universal(), &CompoundId::from([vortex]));
+                dfa.add_transition2(&source, &Element::universal(), &UnionedId::from([vortex]));
                 continue;
             }
             let sum: Element = edges.iter().map(|(element, _)| element).cloned().sum();
@@ -107,12 +107,12 @@ where
                 Element::TokenSet(s) => {
                     if !s.is_empty() {
                         #[allow(deprecated)]
-                        dfa.add_transition2(&source, &d, &CompoundId::from([vortex]));
+                        dfa.add_transition2(&source, &d, &UnionedId::from([vortex]));
                     }
                 }
                 Element::NotTokenSet(_) => {
                     #[allow(deprecated)]
-                    dfa.add_transition2(&source, &d, &CompoundId::from([vortex]));
+                    dfa.add_transition2(&source, &d, &UnionedId::from([vortex]));
                 }
             }
         }

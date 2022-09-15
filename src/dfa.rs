@@ -5,25 +5,26 @@ use std::collections::{BTreeMap, HashSet};
 use super::*;
 
 type NodeId = u32;
-pub type CompoundId = BTreeSet<NodeId>;
+// for use in powerset construction
+pub type UnionedId = BTreeSet<NodeId>;
 
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
 pub struct Dfa<M = ()>
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
-    pub(super) entry: CompoundId,
+    pub(super) entry: UnionedId,
     pub(super) elements: BTreeSet<Element>,
     pub(super) symbols: BTreeSet<char>,
     // FIXME: for a given element and source, there is only one outbound edge to a target
     // the BTreeSet is here to collect NodeIds during construction
-    pub(super) transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>>,
+    pub(super) transitions: BTreeMap<Element, BTreeMap<UnionedId, BTreeSet<UnionedId>>>,
     // Any compound / product node may have several associated accepting states
     // propagated from the source graphs
     // example: if you have the same DFA with the same M, you have 2 copies,
     // in one copy, you change the Include(M) to a Exclude(M),
     // and then you intersect them, you would get both an Include and a Exclude in this set
-    pub(super) states: BTreeMap<CompoundId, BTreeSet<State<M>>>,
+    pub(super) states: BTreeMap<UnionedId, BTreeSet<State<M>>>,
 }
 
 #[test]
@@ -113,20 +114,24 @@ where
 
     #[tracing::instrument]
     pub(crate) fn from_language(l: Vec<char>, m: &Option<M>) -> Self {
+        if l.is_empty() {
+            println!("\n\nnones");
+            return Self::none(m);
+        }
+
         let symbols: BTreeSet<_> =
             l.iter().map(|c| if *c == '?' || *c == '*' { ':' } else { *c }).collect();
 
         let mut builder = Dfa::new(symbols.clone());
         let mut prior = 0;
 
-        builder.entry = CompoundId::from([prior]);
+        builder.entry = UnionedId::from([prior]);
         builder.add_state(&builder.entry.clone(), State::InverseInclude(m.clone()));
 
         let positives = &symbols - &BTreeSet::from([':']);
         let negative_star = Element::NotTokenSet(&symbols | &BTreeSet::from([':']));
 
-        // println!("positive_star: {positive_star:?}, negative_star: {negative_star:?}");
-        let mut stack: Vec<CompoundId> = Default::default();
+        let mut stack: Vec<UnionedId> = Default::default();
         // construct an NFA (with or without epsilons is the same)
         for (i, c) in l.iter().enumerate() {
             let current = prior + 1;
@@ -148,19 +153,18 @@ where
                     }
 
                     builder.add_transition_with_state(&prior, &negative_star, &current, &s);
-                    // builder.add_state(&CompoundId::from([prior]), s);
                 }
                 '*' => {
                     // self loop/advance
-                    let source = CompoundId::from([prior]);
-                    let target = CompoundId::from([prior, current]);
+                    let source = UnionedId::from([prior]);
+                    let target = UnionedId::from([prior, current]);
 
                     // unioned id goes on the stack to expand...
                     stack.push(target.clone());
 
                     // builder.add_state(&source, State::InverseInclude(m.clone()));
                     // builder.add_state(&target, s);
-                    builder.add_state(&CompoundId::from([current]), s.clone());
+                    builder.add_state(&UnionedId::from([current]), s.clone());
                     for c in &positives {
                         builder.add_transition2_with_states(
                             &source,
@@ -169,28 +173,23 @@ where
                             &BTreeSet::from([s.clone()]),
                         );
                     }
-                    // builder.add_transitions(&source, &positive_star, &target);
-                    // println!("yo1  transitions ({i}, {c}) : {:?}... tried to add: {source:?} {positives:?} {target:?}", builder.transitions);
                     builder.add_transition2_with_states(
                         &source,
                         &negative_star,
                         &target,
                         &BTreeSet::from([s.clone()]),
                     );
-                    // println!("yo2  transitions ({i}, {c}) : {:?}", builder.transitions);
                 }
                 c => {
-                    // transition from prior to current via c
                     builder.add_transition_with_state(&prior, &c.into(), &current, &s);
-                    // builder.add_state(&CompoundId::from([prior]), s);
                 }
             }
-            // println!("transitions ({i}, {c}) : {:?}", builder.transitions);
             prior = current;
         }
 
         println!("states: {:?}", builder.states);
-        builder.add_state(&CompoundId::from([prior]), State::Include(m.clone()));
+        builder.add_state(&UnionedId::from([prior]), State::Include(m.clone()));
+
         // convert the NFA to a DFA
         builder.powerset_construction(stack);
         builder
@@ -280,7 +279,7 @@ where
     #[tracing::instrument(skip(self))]
     fn write_into_language(&mut self, language: &BTreeSet<Element>) {
         // !a!:, !b!:, -> !a!b!:
-        let mut new_transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>> =
+        let mut new_transitions: BTreeMap<Element, BTreeMap<UnionedId, BTreeSet<UnionedId>>> =
             Default::default();
 
         for word in language {
@@ -329,6 +328,9 @@ where
         let mut transitions = a.transitions.clone();
         transitions.extend(b.transitions.clone().into_iter());
         println!("a states: {:?}\nb states: {:?}\nboth: {:?}", a.states, b.states, accepting_states.clone());
+        println!("a transitions: {:?}\nb transitions: {:?}\nboth: {:?}", a.transitions, b.transitions, transitions.clone());
+        println!("a entry: {:?}\nb entry: {:?}\nboth: {:?}", a.entry, b.entry, (&a.entry | &b.entry).clone());
+
         let mut product = Self {
             symbols,
             elements,
@@ -344,13 +346,6 @@ where
             let b_transitions = b.transitions.get(e);
 
             match (a_transitions, b_transitions) {
-                (None, None) => println!("nothing with symbol {e}...probably fine"),
-                (Some(_t), None) | (None, Some(_t)) => {},
-                    // t.iter().for_each(|(from, toos)| {
-                    //     #[allow(deprecated)]
-                    //     // the states were already added above - see `accepting_states`
-                    //     toos.iter().for_each(|to| product.add_transition2(from, e, to))
-                // }),
                 (Some(a_t), Some(b_t)) => {
                     a_t.iter().for_each(|(a_from, a_toos)| {
                         b_t.iter().for_each(|(b_from, b_toos)| {
@@ -376,6 +371,7 @@ where
                         });
                     });
                 }
+                _ => println!("nothing with symbol {e}...probably fine"),
             }
         }
 
@@ -402,7 +398,7 @@ where
         a: &Self,
         b: &Self,
         painter: &mut impl FnMut(
-            &CompoundId,
+            &UnionedId,
             BTreeSet<State<M>>,
             BTreeSet<State<M>>,
         ) -> BTreeSet<State<M>>,
@@ -422,7 +418,7 @@ where
                 )
             })
             .filter(|(_, v)| !v.is_empty())
-            .collect::<BTreeMap<CompoundId, BTreeSet<State<M>>>>();
+            .collect::<BTreeMap<UnionedId, BTreeSet<State<M>>>>();
 
         let accepting_right = b
             .states
@@ -434,7 +430,7 @@ where
                 )
             })
             .filter(|(_, v)| !v.is_empty())
-            .collect::<BTreeMap<CompoundId, BTreeSet<State<M>>>>();
+            .collect::<BTreeMap<UnionedId, BTreeSet<State<M>>>>();
 
         // println!("a accepts:\n{:?}\nal: {:?}", a.states, accepting_left);
         // println!("b accepts:\n{:?}\nar: {:?}", b.states, accepting_right);
@@ -450,7 +446,7 @@ where
             }
 
             for c_id in id {
-                let c_id = CompoundId::from([*c_id]);
+                let c_id = UnionedId::from([*c_id]);
                 if let Some(states) = accepting_left.get(&c_id) {
                     left.extend(states.iter().filter(|s| s.accepting()).cloned());
                 } else if let Some(states) = accepting_right.get(&c_id) {
@@ -463,34 +459,31 @@ where
             }
             product.add_states(id, all_states);
         }
-
-        // println!("intersecting states: {:?}", product.states);
         product
     }
-
-
-    // number of rows/nodes = number of chars in input + 1
-    // number of columns: number of symbols in input
-    // the presence of * implies the complemement of all symbols
-    // 2,3 is added to the table as there is a transition that goes to 2 and 3 ... ?
-    //       | a   | b     | !a!b |
-    // 1     | 2   | Ø     | Ø    |
-    // 2     | 2,3 | 2,3   | 2,3  |
-    // 3     | Ø   | 4     | Ø    |
-    // 4     | Ø   | Ø     | Ø    |
-    // 2,3   | 2,3 | 2,3,4 | 2,3  |
-    // 2,3,4 | 2,3 | 2,3   | 2,3  |
-    // where ever you have columns such as b and ab,
-    // a transition of ab from a node counts as a transition of b as well
-    // for the purpose of unioning the resulting transitions
 
     /// Walk the transitions table for a stack of rows to create product states
     /// and rationalize transitions into a DFA
     /// see eg https://en.wikipedia.org/wiki/Powerset_construction
+    ///      
+    /// number of rows/nodes = number of chars in input + 1
+    /// number of columns: number of symbols in input
+    /// the presence of * implies the complemement of all symbols
+    /// 2,3 is added to the table as there is a transition that goes to 2 and 3
+    ///       | a   | b     | !a!b |
+    /// 1     | 2   | Ø     | Ø    |
+    /// 2     | 2,3 | 2,3   | 2,3  |
+    /// 3     | Ø   | 4     | Ø    |
+    /// 4     | Ø   | Ø     | Ø    |
+    /// 2,3   | 2,3 | 2,3,4 | 2,3  |
+    /// 2,3,4 | 2,3 | 2,3   | 2,3  |
+    /// where ever you have columns such as b and ab,
+    /// a transition of ab from a node counts as a transition of b as well
+    /// for the purpose of unioning the resulting transitions
     #[tracing::instrument(skip(self))]
-    fn powerset_construction(&mut self, mut stack: Vec<CompoundId>) {
-        let mut visited: HashSet<CompoundId> = Default::default();
-
+    fn powerset_construction(&mut self, mut stack: Vec<UnionedId>) {
+        println!("🌮🌮🌮🌮🌮\nstack: {stack:?}\nt: {:?}", self.transitions);
+        let mut visited: HashSet<UnionedId> = Default::default();
         while let Some(compound_state) = stack.pop() {
             if visited.contains(&compound_state) {
                 continue;
@@ -498,11 +491,9 @@ where
             visited.insert(compound_state.clone());
 
             for (element, transitions) in self.transitions.clone() {
-                let mut unioned_transitions: CompoundId = Default::default();
+                let mut unioned_transitions: UnionedId = Default::default();
                 for c in compound_state.clone() {
-                    // println!("looking for {c}");
                     if let Some(toos) = transitions.get(&BTreeSet::from([c])) {
-                        // println!("🌮🌮🌮🌮🌮 element: {element:?} c: {c:} toos: {toos:?}");
                         unioned_transitions.extend(toos.iter().flatten());
                     }
                 }
@@ -514,7 +505,7 @@ where
                 for id in &unioned_transitions {
                     let s = self
                         .states
-                        .get(&CompoundId::from([*id]))
+                        .get(&UnionedId::from([*id]))
                         .unwrap_or_else(|| panic!("missing state: {:?}\n{:?}", id, self.states));
 
                     states = &states | s;
@@ -527,7 +518,7 @@ where
 
     /// Returns a map of node ids to their associated accepting states
     #[tracing::instrument(skip(self))]
-    pub fn accepting_states(&self) -> BTreeMap<CompoundId, BTreeSet<State<M>>> {
+    pub fn accepting_states(&self) -> BTreeMap<UnionedId, BTreeSet<State<M>>> {
         self.states
             .clone()
             .into_iter()
@@ -560,7 +551,8 @@ where
 
         let flat_ids = self.ids().into_iter().flatten().collect::<BTreeSet<NodeId>>();
 
-        // removing states may invalidate future operations on this dfa
+        // removing states may invalidate future operations on this dfa:
+        //  states are tracked in the single but used in the plural
         self.states.retain(|k, _v| alive.contains(k) || (k & &flat_ids).len() > 0);
     }
 
@@ -575,7 +567,7 @@ where
         self.transitions = Default::default();
 
         for (source, edges) in &by_edge {
-            let mut targets_to_edges: BTreeMap<CompoundId, Vec<&Element>> = Default::default();
+            let mut targets_to_edges: BTreeMap<UnionedId, Vec<&Element>> = Default::default();
 
             for (element, targets) in edges {
                 for t in targets {
@@ -618,8 +610,8 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    pub(super) fn ids(&self) -> HashSet<CompoundId> {
-        let mut ids: HashSet<CompoundId> = Default::default();
+    pub(super) fn ids(&self) -> HashSet<UnionedId> {
+        let mut ids: HashSet<UnionedId> = Default::default();
 
         for (_, transitions) in self.transitions.clone() {
             for (from, to) in transitions {
@@ -633,7 +625,7 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn add_state(&mut self, node: &CompoundId, state: State<M>) {
+    pub fn add_state(&mut self, node: &UnionedId, state: State<M>) {
         self.states
             .entry(node.to_owned())
             .and_modify(|t| {
@@ -643,7 +635,7 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn add_states(&mut self, node: &CompoundId, states: BTreeSet<State<M>>) {
+    pub fn add_states(&mut self, node: &UnionedId, states: BTreeSet<State<M>>) {
         self.states
             .entry(node.to_owned())
             .and_modify(|t| {
@@ -653,7 +645,7 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    pub(super) fn add_transition2(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
+    pub(super) fn add_transition2(&mut self, from: &UnionedId, e: &Element, to: &UnionedId) {
         // let mut no_e = true;
         // println!("before: {:?}", self.transitions);
         for element in &self.elements {
@@ -676,9 +668,9 @@ where
 
     pub fn add_transition2_with_states(
         &mut self,
-        from: &CompoundId,
+        from: &UnionedId,
         e: &Element,
-        to: &CompoundId,
+        to: &UnionedId,
         to_state: &BTreeSet<State<M>>,
     ) {
         #[allow(deprecated)]
@@ -731,14 +723,14 @@ where
     /// while being shifted into an ID range hopefully distinct from another
     #[tracing::instrument(skip(self))]
     pub(crate) fn offset_self(&mut self, offset: u32) {
-        let mut transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>> =
+        let mut transitions: BTreeMap<Element, BTreeMap<UnionedId, BTreeSet<UnionedId>>> =
             Default::default();
 
         for (element, v) in &self.transitions {
             transitions.insert(element.clone(), Default::default());
             for (from, to) in v {
-                let from: CompoundId = from.iter().map(|id| *id + offset).collect();
-                let to: BTreeSet<CompoundId> =
+                let from: UnionedId = from.iter().map(|id| *id + offset).collect();
+                let to: BTreeSet<UnionedId> =
                     to.iter().map(|vec| vec.iter().map(|id| *id + offset).collect()).collect();
 
                 transitions.get_mut(&element.clone()).unwrap().insert(from.clone(), to.clone());
@@ -756,7 +748,7 @@ where
     #[tracing::instrument(skip(self))]
     pub(super) fn get_edges(&self) -> EdgeIndex {
         // Build a convenient map of edges indexed differently
-        let mut map: BTreeMap<CompoundId, BTreeMap<Element, BTreeSet<CompoundId>>> =
+        let mut map: BTreeMap<UnionedId, BTreeMap<Element, BTreeSet<UnionedId>>> =
             Default::default();
         for (element, edges) in &self.transitions {
             for (from, to) in edges {
@@ -772,18 +764,18 @@ where
 }
 
 pub(super) struct EdgeIndex(
-    pub(crate) BTreeMap<CompoundId, BTreeMap<Element, BTreeSet<CompoundId>>>,
+    pub(crate) BTreeMap<UnionedId, BTreeMap<Element, BTreeSet<UnionedId>>>,
 );
 
 impl EdgeIndex {
     /// Return all CompoundIds which are in an accepting path
     #[tracing::instrument(skip_all, ret)]
-    pub fn accepting_branches<M>(&self, dfa: &Dfa<M>) -> HashSet<CompoundId>
+    pub fn accepting_branches<M>(&self, dfa: &Dfa<M>) -> HashSet<UnionedId>
     where
         M: std::fmt::Debug + PartialOrd + Ord + Clone,
     {
-        let mut visited: HashSet<CompoundId> = Default::default();
-        let mut alive: HashSet<CompoundId> = Default::default();
+        let mut visited: HashSet<UnionedId> = Default::default();
+        let mut alive: HashSet<UnionedId> = Default::default();
         self._accepting_branch(&dfa.entry, &mut visited, &mut alive, dfa);
         alive
     }
@@ -792,9 +784,9 @@ impl EdgeIndex {
     #[tracing::instrument(skip_all, ret)]
     fn _accepting_branch<M>(
         &self,
-        id: &CompoundId,
-        visited: &mut HashSet<CompoundId>,
-        alive: &mut HashSet<CompoundId>,
+        id: &UnionedId,
+        visited: &mut HashSet<UnionedId>,
+        alive: &mut HashSet<UnionedId>,
         dfa: &Dfa<M>,
     ) -> bool
     where

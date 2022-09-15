@@ -15,7 +15,7 @@ pub trait Relatable: std::fmt::Debug + Clone + PartialOrd + Ord {
     fn relation(
         &self,
         other: &Self,
-    ) -> (Relation, Self, BTreeSet<CompoundId>, BTreeSet<CompoundId>);
+    ) -> (Relation, Self, BTreeSet<UnionedId>, BTreeSet<UnionedId>);
 
     fn union(&self, other: &Self) -> Self;
     fn intersection(&self, other: &Self) -> Self;

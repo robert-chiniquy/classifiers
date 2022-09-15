@@ -59,7 +59,7 @@ where
     }
 }
 
-fn nodename(i: &CompoundId) -> String {
+fn nodename(i: &UnionedId) -> String {
     format!(
         "node_{}",
         i.iter()
