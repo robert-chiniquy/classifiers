@@ -115,7 +115,7 @@ fn test_complement() {
 fn test_simpler_intersection() {
     let a = Classifier::Literal("*b".to_string(), None);
     let b = Classifier::Literal("*a".to_string(), None);
-    let c = Classifier::Any(BTreeSet::from_iter([a, b]));
+    let c = Classifier::Or(BTreeSet::from_iter([a, b]));
     let d: Dfa = c.compile(&None);
     assert!(d.includes_string("bb"));
     assert!(!d.includes_string("b"));

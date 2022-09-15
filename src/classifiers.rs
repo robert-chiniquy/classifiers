@@ -21,8 +21,7 @@ where
     /// Explicitly does not include anything included by a classifier
     Not(Box<Classifier<R>>),
     /// Union
-    // TODO: rename to Or() ?
-    Any(BTreeSet<Classifier<R>>),
+    Or(BTreeSet<Classifier<R>>),
     /// Intersection
     And(BTreeSet<Classifier<R>>),
 }
@@ -40,7 +39,7 @@ where
             // (Complementation can be expressed with purely Includes,
             // and remains as a possible semantics for Not)
             Classifier::Not(c) => Classifier::compile(c, m).negate(),
-            Classifier::Any(v) => {
+            Classifier::Or(v) => {
                 let mut items = v.iter();
                 if let Some(acc) = items.next() {
                     items.fold(Classifier::compile(acc, m), |acc, cur| {
@@ -74,7 +73,6 @@ where
     }
 
     // TODO: simplify()
-
     #[tracing::instrument(skip_all)]
     pub fn not(c: Self) -> Self {
         Classifier::Not(Box::new(c))
@@ -87,7 +85,7 @@ where
 
     #[tracing::instrument(skip_all)]
     pub fn any(items: &[Self]) -> Self {
-        Classifier::Any(BTreeSet::from_iter(items.iter().cloned()))
+        Classifier::Or(BTreeSet::from_iter(items.iter().cloned()))
     }
 }
 
