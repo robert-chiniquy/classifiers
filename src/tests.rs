@@ -2,6 +2,17 @@
 use super::*;
 
 #[test]
+fn test_basic_classifier() {
+    let c1 = Classifier::<Dfa>::Literal("a*".to_string(), None);
+    let c2 = Classifier::Literal("*a".to_string(), None);
+    let c3 = Classifier::and(&[c1.clone(), c2.clone()]);
+    let mut d = c3.compile(&None);
+    d.simplify();
+    d.graphviz_file("new-test.dot", "a* & *a");
+    assert_eq!(c1.relation(&c2), Relation::Intersection);
+}
+
+#[test]
 fn test_literal() {
     test_setup();
     // the set of P

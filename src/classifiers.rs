@@ -1,16 +1,5 @@
 use super::*;
 
-#[test]
-fn test_basic_classifier() {
-    let c1 = Classifier::<Dfa>::Literal("a*".to_string(), None);
-    let c2 = Classifier::Literal("*a".to_string(), None);
-    let c3 = Classifier::and(&[c1.clone(), c2.clone()]);
-    let mut d = c3.compile(&None);
-    d.simplify();
-    d.graphviz_file("new-test.dot", "a* & *a");
-    assert_eq!(c1.relation(&c2), Relation::Intersection);
-}
-
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum Relation {
     Disjoint,
@@ -36,44 +25,6 @@ where
     Any(BTreeSet<Classifier<R>>),
     /// Intersection
     And(BTreeSet<Classifier<R>>),
-}
-
-impl<R> Classifier<R>
-where
-    R: Relatable,
-{
-    #[tracing::instrument(skip_all)]
-    pub fn relation(&self, other: &Self) -> Relation {
-        let s: R = Classifier::compile(self, &None);
-        let o = Classifier::compile(other, &None);
-
-        let (relation, _work, _, _) = s.relation(&o);
-        relation
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub fn not(c: Self) -> Self {
-        Classifier::Not(Box::new(c))
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub fn and(items: &[Self]) -> Self {
-        Classifier::And(BTreeSet::from_iter(items.iter().cloned()))
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub fn any(items: &[Self]) -> Self {
-        Classifier::Any(BTreeSet::from_iter(items.iter().cloned()))
-    }
-}
-
-impl<M> Classifier<Dfa<M>>
-where
-    M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
-{
-    pub fn literal(s: &str) -> Self {
-        Classifier::Literal(s.to_string(), None)
-    }
 }
 
 impl<R> Classifier<R>
@@ -110,6 +61,39 @@ where
                 }
             }
         }
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub fn relation(&self, other: &Self) -> Relation {
+        let s: R = Classifier::compile(self, &None);
+        let o = Classifier::compile(other, &None);
+
+        let (relation, _work, _, _) = s.relation(&o);
+        relation
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub fn not(c: Self) -> Self {
+        Classifier::Not(Box::new(c))
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub fn and(items: &[Self]) -> Self {
+        Classifier::And(BTreeSet::from_iter(items.iter().cloned()))
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub fn any(items: &[Self]) -> Self {
+        Classifier::Any(BTreeSet::from_iter(items.iter().cloned()))
+    }
+}
+
+impl<M> Classifier<Dfa<M>>
+where
+    M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
+{
+    pub fn literal(s: &str) -> Self {
+        Classifier::Literal(s.to_string(), None)
     }
 }
 
