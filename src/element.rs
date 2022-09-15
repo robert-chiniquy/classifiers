@@ -29,10 +29,12 @@ impl Element {
 }
 
 impl ElementalLanguage<Element> for Element {
+    #[tracing::instrument]
     fn universal() -> Self {
         Element::NotTokenSet(Default::default())
     }
 
+    #[tracing::instrument]
     fn difference(a: &Element, b: &Element) -> Element {
         use Element::*;
 
@@ -92,6 +94,7 @@ impl<'a> std::iter::Sum<&'a Element> for Element {
 impl Add for Element {
     type Output = Element;
 
+    #[tracing::instrument]
     fn add(self, rhs: Self) -> Self::Output {
         use Element::*;
         match (&self, &rhs) {

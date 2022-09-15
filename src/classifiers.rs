@@ -53,7 +53,7 @@ where
         Classifier::Not(Box::new(c))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     pub fn and(items: &[Self]) -> Self {
         Classifier::And(BTreeSet::from_iter(items.iter().cloned()))
     }
@@ -63,7 +63,7 @@ impl<R> Classifier<R>
 where
     R: Relatable,
 {
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip(self))]
     pub fn compile(&self, m: &Option<R::Metadata>) -> R {
         match self {
             Classifier::Universal => R::universal(m),

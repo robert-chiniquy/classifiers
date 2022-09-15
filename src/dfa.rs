@@ -4,21 +4,6 @@ use std::collections::{BTreeMap, HashSet};
 
 use super::*;
 
-// number of rows/nodes = number of chars in input + 1
-// number of columns: number of symbols in input
-// the presence of * implies the complemement of all symbols
-// 2,3 is added to the table as there is a transition that goes to 2 and 3 ... ?
-//       | a   | b     | !a!b |
-// 1     | 2   | Ø     | Ø    |
-// 2     | 2,3 | 2,3   | 2,3  |
-// 3     | Ø   | 4     | Ø    |
-// 4     | Ø   | Ø     | Ø    |
-// 2,3   | 2,3 | 2,3,4 | 2,3  |
-// 2,3,4 | 2,3 | 2,3   | 2,3  |
-// where ever you have columns such as b and ab,
-// a transition of ab from a node counts as a transition of b as well
-// for the purpose of unioning the resulting transitions
-
 type NodeId = u32;
 pub type CompoundId = BTreeSet<NodeId>;
 
@@ -30,16 +15,14 @@ where
     pub(super) entry: CompoundId,
     pub(super) elements: BTreeSet<Element>,
     pub(super) symbols: BTreeSet<char>,
-    // FIXME:
-    // for a given element and source, there is only one outbound edge to a target
+    // FIXME: for a given element and source, there is only one outbound edge to a target
     // the BTreeSet is here to collect NodeIds during construction
     pub(super) transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>>,
     // Any compound / product node may have several associated accepting states
     // propagated from the source graphs
     // example: if you have the same DFA with the same M, you have 2 copies,
-    // in one copy, you change the Accept(M) to a Reject(M),
-    // and then you intersect them,
-    // you would get both an Accept and a Reject in this set
+    // in one copy, you change the Include(M) to a Exclude(M),
+    // and then you intersect them, you would get both an Include and a Exclude in this set
     pub(super) states: BTreeMap<CompoundId, BTreeSet<State<M>>>,
 }
 
@@ -136,6 +119,7 @@ where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
     /// Calling this method requires setting accepting states externally
+    #[tracing::instrument]
     pub fn new(symbols: BTreeSet<char>) -> Self {
         let mut elements: BTreeSet<Element> = symbols.iter().map(|s| s.into()).collect();
         elements.insert(Element::NotTokenSet(symbols.clone()));
@@ -149,6 +133,7 @@ where
         }
     }
 
+    #[tracing::instrument]
     pub(crate) fn from_language(l: Vec<char>, m: &Option<M>) -> Self {
         let symbols: BTreeSet<_> = l
             .iter()
@@ -219,6 +204,7 @@ where
     }
 
     // TODO: Should return M
+    #[tracing::instrument(skip(self))]
     pub fn includes_path(&self, path: &[Element]) -> bool {
         self.accepting_path(path, &mut |state| match state {
             State::Include(_m) => true,
@@ -227,6 +213,7 @@ where
     }
 
     // TODO: Should return M
+    #[tracing::instrument(skip(self))]
     pub fn excludes_path(&self, path: &[Element]) -> bool {
         self.accepting_path(path, &mut |state| match state {
             State::Exclude(_m) => true,
@@ -234,6 +221,7 @@ where
         })
     }
 
+    #[tracing::instrument(skip(self, check_state))]
     pub fn accepting_path(
         &self,
         path: &[Element],
@@ -278,6 +266,7 @@ where
         false
     }
 
+    #[tracing::instrument(skip(self))]
     fn write_into_language(&mut self, language: &BTreeSet<Element>) {
         // !a!:, !b!:, -> !a!b!:
         let mut new_transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>> =
@@ -304,6 +293,7 @@ where
 
     // FIXME: why make b mutable?
     /// Sets an entry as the product of entries
+    #[tracing::instrument(skip_all)]
     pub(crate) fn construct_product(a: &Self, b: &mut Self) -> Self {
         let symbols: BTreeSet<_> = &a.symbols | &b.symbols;
 
@@ -313,7 +303,6 @@ where
         let mut a = a.clone();
         a.write_into_language(&elements);
         b.write_into_language(&elements);
-        // let a = a.rewrite_with_symbols(symbols);
 
         let offset = a.ids().iter().flatten().max().unwrap_or(&1) + 10;
         b.offset_self(offset);
@@ -376,6 +365,7 @@ where
         product
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn intersect(a: &Self, b: &Self) -> Self {
         Self::painting_product(a, b, &mut |_, a_states, b_states| {
             // the intersection requires that accepting states only be propagated
@@ -389,6 +379,7 @@ where
 
     // Require that a and b both have accepting states
     /// Receives a closure which can optionally paint all states, paint only intersecting states, or whatever
+    #[tracing::instrument(skip_all)]
     pub(super) fn painting_product(
         a: &Self,
         b: &Self,
@@ -483,9 +474,25 @@ where
         dfa
     }
 
+    // number of rows/nodes = number of chars in input + 1
+    // number of columns: number of symbols in input
+    // the presence of * implies the complemement of all symbols
+    // 2,3 is added to the table as there is a transition that goes to 2 and 3 ... ?
+    //       | a   | b     | !a!b |
+    // 1     | 2   | Ø     | Ø    |
+    // 2     | 2,3 | 2,3   | 2,3  |
+    // 3     | Ø   | 4     | Ø    |
+    // 4     | Ø   | Ø     | Ø    |
+    // 2,3   | 2,3 | 2,3,4 | 2,3  |
+    // 2,3,4 | 2,3 | 2,3   | 2,3  |
+    // where ever you have columns such as b and ab,
+    // a transition of ab from a node counts as a transition of b as well
+    // for the purpose of unioning the resulting transitions
+
     /// Walk the transitions table for a stack of rows to create product states
     /// and rationalize transitions into a DFA
     /// see eg https://en.wikipedia.org/wiki/Powerset_construction
+    #[tracing::instrument(skip(self))]
     fn powerset_construction(&mut self, mut stack: Vec<CompoundId>) {
         let mut visited: HashSet<CompoundId> = Default::default();
 
@@ -526,6 +533,7 @@ where
     }
 
     /// Returns a map of node ids to their associated accepting states
+    #[tracing::instrument(skip(self))]
     pub fn accepting_states(&self) -> BTreeMap<CompoundId, BTreeSet<State<M>>> {
         self.states
             .clone()
@@ -536,9 +544,10 @@ where
 
     /// Removes any node or edge which is not reachable from self.entry or is not
     /// in the path from self.entry to an accepting state
+    #[tracing::instrument(skip(self))]
     pub(crate) fn shake(&mut self) {
         let alive = self.get_edges().accepting_branches(self);
-        println!("shake: alive: {alive:?}");
+        // println!("shake: alive: {alive:?}");
 
         let mut dead_elements = vec![];
         for (element, edges) in self.transitions.iter_mut() {
@@ -560,6 +569,7 @@ where
     }
 
     /// Removes and simplifies unnecessary nodes and edges
+    #[tracing::instrument(skip(self))]
     pub(crate) fn simplify(&mut self) {
         // TODO: simplify should re-map all ids to be non-compound (len 1)
         // TODO: simplify can remove any empty TokenSet edge
@@ -611,6 +621,7 @@ where
         }
     }
 
+    #[tracing::instrument(skip(self))]
     pub(super) fn ids(&self) -> HashSet<CompoundId> {
         let mut ids: HashSet<CompoundId> = Default::default();
 
@@ -625,6 +636,7 @@ where
         ids
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn add_state(&mut self, node: &CompoundId, state: State<M>) {
         self.states
             .entry(node.to_owned())
@@ -634,6 +646,7 @@ where
             .or_insert_with(|| BTreeSet::from([state.clone()]));
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn add_states(&mut self, node: &CompoundId, states: BTreeSet<State<M>>) {
         self.states
             .entry(node.to_owned())
@@ -643,6 +656,7 @@ where
             .or_insert_with(|| states);
     }
 
+    #[tracing::instrument(skip(self))]
     pub(super) fn add_transitions(&mut self, from: &CompoundId, e: &Element, to: &CompoundId) {
         let mut no_e = true;
         println!("before: {:?}", self.transitions);
@@ -671,12 +685,14 @@ where
     }
 
     /// This function assumes a CompoundId of only {from} and {to} respectively!
+    #[tracing::instrument(skip(self))]
     pub fn add_transition(&mut self, from: &NodeId, e: &Element, to: &NodeId) {
         self.add_transitions(&BTreeSet::from([*from]), e, &BTreeSet::from([*to]));
     }
 
     /// Return true if there are no overlapping edges out of a given node
     #[cfg(test)]
+    #[tracing::instrument(skip(self))]
     pub fn is_consistent(&self) -> bool {
         for (s, edges) in self.get_edges().0 {
             for (i1, (e1, _)) in edges.clone().iter().enumerate() {
@@ -704,6 +720,7 @@ where
 
     /// Applies an offset to every ID in self, so self remains consistent
     /// while being shifted into an ID range hopefully distinct from another
+    #[tracing::instrument(skip(self))]
     pub(crate) fn offset_self(&mut self, offset: u32) {
         let mut transitions: BTreeMap<Element, BTreeMap<CompoundId, BTreeSet<CompoundId>>> =
             Default::default();
@@ -732,6 +749,7 @@ where
             .collect();
     }
 
+    #[tracing::instrument(skip(self))]
     pub(super) fn get_edges(&self) -> EdgeIndex {
         // Build a convenient map of edges indexed differently
         let mut map: BTreeMap<CompoundId, BTreeMap<Element, BTreeSet<CompoundId>>> =
@@ -755,6 +773,7 @@ pub(super) struct EdgeIndex(
 
 impl EdgeIndex {
     /// Return all CompoundIds which are in an accepting path
+    #[tracing::instrument(skip_all, ret)]
     pub fn accepting_branches<M>(&self, dfa: &Dfa<M>) -> HashSet<CompoundId>
     where
         M: std::fmt::Debug + PartialOrd + Ord + Clone,
@@ -766,6 +785,7 @@ impl EdgeIndex {
     }
 
     /// Find all accepting branches under a subtree
+    #[tracing::instrument(skip_all, ret)]
     fn _accepting_branch<M>(
         &self,
         id: &CompoundId,

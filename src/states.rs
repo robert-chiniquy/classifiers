@@ -18,6 +18,7 @@ where
     M: std::fmt::Debug + Clone,
 {
     /// Flips states between themselves and their inverses
+    #[tracing::instrument(ret)]
     pub fn complement(&self) -> Self {
         match self {
             State::InverseInclude(m) => State::Include(m.clone()),
@@ -27,7 +28,8 @@ where
         }
     }
 
-    /// Flips states between themselves and their opposites
+    /// Flips states between themselves and their opposites;
+    #[tracing::instrument(ret)]
     pub fn negate(&self) -> Self {
         match self {
             State::InverseInclude(m) => State::InverseExclude(m.clone()),

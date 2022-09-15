@@ -88,6 +88,7 @@ where
         dfa
     }
 
+    #[tracing::instrument(skip_all)]
     fn relation(
         &self,
         other: &Self,
@@ -123,6 +124,7 @@ where
         )
     }
 
+    #[tracing::instrument]
     fn universal(m: &Option<Self::Metadata>) -> Self {
         // empty symbols
         let entry = CompoundId::from([1]);
@@ -139,6 +141,7 @@ where
         dfa
     }
 
+    #[tracing::instrument]
     fn none(m: &Option<Self::Metadata>) -> Self {
         // empty symbols
         let entry = CompoundId::from([1]);
@@ -153,8 +156,10 @@ where
         dfa
     }
 
+    // TODO: rename to complement()
     /// Return a "completed DFA": a DFA with a complement of all states
     /// and universally accepting self-loop edges out of any non-universally-accepting state
+    #[tracing::instrument(skip(self))]
     fn negate(&self, m: &Option<Self::Metadata>) -> Self {
         // Start with all IDs and remove any found to have an outbound edge
         let mut dfa = self.clone();
@@ -198,12 +203,14 @@ where
         dfa
     }
 
+    #[tracing::instrument(skip_all)]
     fn union(&self, other: &Self) -> Self {
         let mut p = Dfa::construct_product(self, &mut other.clone());
         p.simplify();
         p
     }
 
+    #[tracing::instrument(skip_all)]
     fn intersection(&self, other: &Self) -> Self {
         let mut p = Dfa::intersect(self, other);
         p.simplify();
