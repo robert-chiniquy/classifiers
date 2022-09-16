@@ -105,7 +105,7 @@ where
             let sum: Element = edges.iter().map(|(element, _)| element).cloned().sum();
             let d = Element::difference(&Element::universal(), &sum);
 
-            println!("Universal - {sum:?} = {d:?}");
+            // println!("Universal - {sum:?} = {d:?}");
 
             match &d {
                 Element::TokenSet(s) => {
@@ -154,7 +154,7 @@ where
         let mut p = Dfa::intersect(self, other);
         p.simplify();
         p.graphviz_file("intersection.dot", "intersection");
-        println!("p: {:?}", p);
+        // println!("p: {:?}", p);
         p
     }
 }

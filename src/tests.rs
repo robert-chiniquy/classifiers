@@ -60,7 +60,7 @@ fn test_relation() {
         da.simplify();
         db.simplify();
 
-        println!("\n\n🐥🐥🐥🐥🐥🐥🐥 {a} {b}\n\n");
+        // println!("\n\n🐥🐥🐥🐥🐥🐥🐥 {a} {b}\n\n");
         assert!(da.is_consistent(), "failed on: {a}");
         assert!(db.is_consistent(), "failed on: {b}");
 
@@ -226,7 +226,7 @@ fn test_intersection_of_heterogenous_states() {
     ]);
 
     let mut d = inner.compile(&None);
-    println!("\n\ninner:\n{d:?}\n");
+    // println!("\n\ninner:\n{d:?}\n");
 
     d.graphviz_file("test_intersection_of_heterogenous_states1.dot", "tb & !x");
 
