@@ -22,13 +22,13 @@ where
         let mut right_ids: BTreeSet<_> = Default::default();
 
         let by_product = Dfa::painting_product(self, other, &mut |id, l, r| {
-            if !l.is_empty() {
+            if l.iter().any(|s|s.accepting()) {
                 left_ids.insert(id.clone());
             }
-            if !r.is_empty() {
+            if r.iter().any(|s|s.accepting()) {
                 right_ids.insert(id.clone());
             }
-            &l | &r
+            l | r
         });
 
         (

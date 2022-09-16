@@ -18,7 +18,9 @@ where
     Universal,
     /// Includes a single thing in the domain
     Literal(R::Language, Option<R::Metadata>),
-    /// Explicitly does not include anything included by a classifier
+    /// Explicitly excludes anything included by a classifier
+    // Exclude(Box<Classifier<R>>),
+    /// Includes every item not included by a classifier
     Not(Box<Classifier<R>>),
     /// Union
     Or(BTreeSet<Classifier<R>>),
@@ -36,8 +38,6 @@ where
             Classifier::Universal => R::universal(m),
             Classifier::Literal(l, m) => R::from_language(l, m),
             // TODO: prove out negation for exclusion rather than just as complementation
-            // (Complementation can be expressed with purely Includes,
-            // and remains as a possible semantics for Not)
             Classifier::Not(c) => Classifier::compile(c, m).complement(m),
             Classifier::Or(v) => {
                 let mut items = v.iter();
@@ -73,6 +73,8 @@ where
     }
 
     // TODO: simplify()
+    // pub fn simplify(&mut self) {}
+
     #[tracing::instrument(skip_all)]
     pub fn not(c: Self) -> Self {
         Classifier::Not(Box::new(c))

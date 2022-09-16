@@ -364,10 +364,20 @@ where
         Self::painting_product(a, b, &mut |_, a_states, b_states| {
             // the intersection requires that accepting states only be propagated
             // when the states are accepting on both sides
-            if a_states.is_empty() || b_states.is_empty() {
-                return Default::default();
+
+            let (a_accepting, a_other)= a_states.iter().cloned().partition::<BTreeSet<_>, _>(|s| s.accepting());
+            let (b_accepting, b_other)= b_states.iter().cloned().partition::<BTreeSet<_>, _>(|s| s.accepting());
+
+            match (!a_accepting.is_empty(), !b_accepting.is_empty()) {
+                (true, true) |
+                (false, false) => a_states | b_states,
+                (true, false) => {
+                    &(&a_other | &b_states) | &a_accepting.iter().map(|s|s.complement()).collect::<BTreeSet<_>>()
+                },
+                (false, true) => {
+                    &(&b_other | &a_states) | &b_accepting.iter().map(|s|s.complement()).collect::<BTreeSet<_>>()
+                }
             }
-            &a_states | &b_states
         })
     }
 
@@ -379,82 +389,50 @@ where
         b: &Self,
         painter: &mut impl FnMut(
             &UnionedId,
-            BTreeSet<State<M>>,
-            BTreeSet<State<M>>,
+            &BTreeSet<State<M>>,
+            &BTreeSet<State<M>>,
         ) -> BTreeSet<State<M>>,
     ) -> Self {
         let mut b = b.clone();
         let mut product = Self::product(a, &mut b);
+
         product.simplify();
         product.states = Default::default();
-
-        let accepting_left = a
-            .states
-            .iter()
-            .map(|(id, states)| {
-                (
-                    id.clone(),
-                    states.iter().filter(|s| s.accepting()).cloned().collect::<BTreeSet<_>>(),
-                )
-            })
-            .filter(|(_, v)| !v.is_empty())
-            .collect::<BTreeMap<UnionedId, BTreeSet<State<M>>>>();
-
-        let accepting_right = b
-            .states
-            .iter()
-            .map(|(id, states)| {
-                (
-                    id.clone(),
-                    states.iter().filter(|s| s.accepting()).cloned().collect::<BTreeSet<_>>(),
-                )
-            })
-            .filter(|(_, v)| !v.is_empty())
-            .collect::<BTreeMap<UnionedId, BTreeSet<State<M>>>>();
-
-        // println!("a accepts:\n{:?}\nal: {:?}", a.states, accepting_left);
-        // println!("b accepts:\n{:?}\nar: {:?}", b.states, accepting_right);
 
         for id in &product.ids() {
             let mut left: BTreeSet<State<M>> = Default::default();
             let mut right: BTreeSet<State<M>> = Default::default();
 
-            if let Some(states) = accepting_left.get(id) {
-                left.extend(states.iter().filter(|s| s.accepting()).cloned());
-            } else if let Some(states) = accepting_right.get(id) {
-                right.extend(states.iter().filter(|s| s.accepting()).cloned());
-            }
-
             for c_id in id {
                 let c_id = UnionedId::from([*c_id]);
-                if let Some(states) = accepting_left.get(&c_id) {
-                    left.extend(states.iter().filter(|s| s.accepting()).cloned());
-                } else if let Some(states) = accepting_right.get(&c_id) {
-                    right.extend(states.iter().filter(|s| s.accepting()).cloned());
+                if let Some(states) = a.states.get(&c_id) {
+                    left.extend(states.iter().cloned());
+                }
+                if let Some(states) = b.states.get(&c_id) {
+                    right.extend(states.iter().cloned());
                 }
             }
-            let all_states = painter(id, left, right);
-            if all_states.is_empty() {
-                continue;
-            }
+
+            let all_states = painter(id, &left, &right);
+            debug_assert!(!all_states.is_empty());
             product.add_states(id, all_states);
         }
         product
     }
 
-    /// Walk the transitions table for a stack of rows to create product states
-    /// see eg https://en.wikipedia.org/wiki/Powerset_construction
-    ///  
-    ///  (1) -a-> (2) -*-> (3) -b-> ((4))
-    ///           (2) -*-> (2)
-    ///
-    ///       | a   | b     | !a!b |
-    /// 1     | 2   | Ø     | Ø    |
-    /// 2     | 2,3 | 2,3   | 2,3  |
-    /// 3     | Ø   | 4     | Ø    |
-    /// 4     | Ø   | Ø     | Ø    |
-    /// 2,3   | 2,3 | 2,3,4 | 2,3  |
-    /// 2,3,4 | 2,3 | 2,3   | 2,3  |
+    // Walk the transitions table for a stack of rows to create product states
+    // see eg https://en.wikipedia.org/wiki/Powerset_construction
+    //  
+    //  (1) -a-> (2) -*-> (3) -b-> ((4))
+    //           (2) -*-> (2)
+    //
+    //         a     b       !a!b  
+    // 1       2     Ø       Ø     
+    // 2       2,3   2,3     2,3   
+    // 3       Ø     4       Ø     
+    // 4       Ø     Ø       Ø     
+    // 2,3     2,3   2,3,4   2,3   
+    // 2,3,4   2,3   2,3     2,3   
     #[tracing::instrument(skip(self))]
     fn powerset_construction(&mut self, mut stack: Vec<UnionedId>) {
         // println!("🌮🌮🌮🌮🌮\nstack: {stack:?}\nt: {:?}\ns:{:?}", self.transitions, self.states);
