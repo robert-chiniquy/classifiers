@@ -68,8 +68,7 @@ where
         let s: R = Classifier::compile(self, &None);
         let o = Classifier::compile(other, &None);
 
-        let (relation, _work, _, _) = s.relation(&o);
-        relation
+        s.relation(&o)
     }
 
     // TODO: simplify()

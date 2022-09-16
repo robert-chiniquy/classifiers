@@ -1,20 +1,13 @@
 use super::*;
 
-impl<M> Relatable for Dfa<M>
+
+impl<M> Dfa<M> 
 where
     M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
 {
-    type Language = String;
-    type Element = Element;
-    type Metadata = M;
-
-    fn from_language(l: &Self::Language, m: &Option<Self::Metadata>) -> Self {
-        let dfa = Dfa::from_language(l.chars().collect(), m);
-        dfa
-    }
 
     #[tracing::instrument(skip_all)]
-    fn relation(
+    pub(crate) fn compute_relation(
         &self,
         other: &Self,
     ) -> (Relation, Self, BTreeSet<UnionedId>, BTreeSet<UnionedId>) {
@@ -48,6 +41,27 @@ where
             right_ids,
         )
     }
+
+
+}
+
+impl<M> Relatable for Dfa<M>
+where
+    M: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone,
+{
+    type Language = String;
+    type Element = Element;
+    type Metadata = M;
+
+    fn from_language(l: &Self::Language, m: &Option<Self::Metadata>) -> Self {
+        let dfa = Dfa::from_language(l.chars().collect(), m);
+        dfa
+    }
+
+    fn relation(&self, other: &Self) -> Relation {
+        let (relation, _, _, _) = self.compute_relation(other);
+        relation
+    }   
 
     #[tracing::instrument]
     fn universal(m: &Option<Self::Metadata>) -> Self {

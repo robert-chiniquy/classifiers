@@ -8,14 +8,7 @@ pub trait Relatable: std::fmt::Debug + Clone + PartialOrd + Ord {
 
     fn from_language(l: &Self::Language, m: &Option<Self::Metadata>) -> Self;
 
-    // TODO(soon): Determine if/how to re-use the data computed in relation()
-    // FIXME: CompoundId doesn't belong in this trait
-    /// Produces a Relation describing self v other
-    /// as well as a re-usable Relatable capturing the relationship
-    fn relation(
-        &self,
-        other: &Self,
-    ) -> (Relation, Self, BTreeSet<UnionedId>, BTreeSet<UnionedId>);
+    fn relation(&self, other: &Self) -> Relation;
 
     fn union(&self, other: &Self) -> Self;
     fn intersection(&self, other: &Self) -> Self;

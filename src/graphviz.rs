@@ -5,6 +5,7 @@ where
     M: std::fmt::Debug + Clone + PartialOrd + Ord,
 {
     #[tracing::instrument(skip_all)]
+    #[allow(unused)]
     pub fn graphviz_file(&self, filename: &str, label: &str) {
         #[cfg(feature = "graphs")]
         {
@@ -69,6 +70,7 @@ fn nodename(i: &UnionedId) -> String {
     )
 }
 
+#[allow(dead_code)]
 pub(crate) fn graphviz_wrap(s: String, label: &str) -> String {
     format!(
         r##"

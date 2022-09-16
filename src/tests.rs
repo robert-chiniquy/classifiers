@@ -1,5 +1,6 @@
 #[cfg(test)]
 use crate::Dfa;
+#[allow(unused_imports)]
 use super::*;
 
 #[test]
@@ -64,7 +65,7 @@ fn test_relation() {
         assert!(da.is_consistent(), "failed on: {a}");
         assert!(db.is_consistent(), "failed on: {b}");
 
-        let (dr, dp, l, r) = da.relation(&db);
+        let (dr, dp, l, r) = da.compute_relation(&db);
         results.push((da, db, a, b, outcome, dr, dp, l, r));
     }
 
@@ -186,6 +187,7 @@ fn test_complement1() {
 
     let c = Classifier::<Dfa>::Literal("A*".to_string(), None);
     let mut d = c.compile(&None);
+    let initial_d = d.clone();
     d.simplify();
     d.graphviz_file("complement1.dot", "A*");
 
@@ -198,6 +200,8 @@ fn test_complement1() {
     d.simplify();
     d.graphviz_file("complement3.dot", "!!A*");
     assert!(!d.includes_string("A"));
+
+    assert_eq!(d.relation(&initial_d), Relation::Equality);
 }
 
 // #[test]
@@ -217,6 +221,7 @@ fn test_complement1() {
 //     assert!(!d.excludes_string("A"));
 //     assert!(d.excludes_string("AA"));
 // }
+
 
 #[test]
 fn test_intersection_of_heterogenous_states() {
